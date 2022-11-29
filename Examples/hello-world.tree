@@ -1,0 +1,4 @@
+i32 main(string[] argv) {
+    stdout.write("Hello, World!"); // Prints hello world
+    return 0;
+}

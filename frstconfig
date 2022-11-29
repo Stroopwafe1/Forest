@@ -1,0 +1,8 @@
+#[convention]:
+functions=camelCase
+
+#[scripts]:
+build=forest build .
+install=forest plant <tree name>(package)
+uninstall=forest harvest <tree name>
+publish=forest ship .

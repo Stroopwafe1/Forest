@@ -1,0 +1,32 @@
+use std::collections::stack;
+
+// You have to declare stuff before you can use it
+
+// Fibonacci
+i64 fibonacci(ui8 n) {
+	if (n <= 1) return 1;
+	return fibonacci(n - 2) + fibonacci(n - 1);
+}
+
+i64 fibo = fibonacci(10); // should give 89
+#assert(fibo == 89) // Test case, should pass (throws error in debug mode if not true). # is a macro
+stdout.writeln(fibo); // Should print 89 to the console
+
+stack<i8> test = {};
+test.push(3);
+test.push(29);
+test.push(-128);
+stdout.writeln(test.pop()); // should print -128 to the console
+
+namespace example;
+class Example {
+	string blep = "blepping";
+
+	i32 getLength(ref<string> input) {
+		return input.length();
+	}
+}
+
+Example e;
+e.getLength(\e.blep); // Should give 8
+// example::Example is redundant because of the 'use namespace example'

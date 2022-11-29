@@ -1,0 +1,41 @@
+Compiled language that is focused on game dev (idk), would be nice if it can be used on its own but I don't mind if it is only a scripting language inside my game engine.
+Operators+methods can be overloaded, types can be extended, and has a built-in linter that forces a convention (method names are resolved as snake_case->camelCase->PascalCase if no convention is specified) (i8 var = 8; var.toChar() == var.to_char() == var.ToChar()) (it gives an error if convention is specified and not following the convention.
+Primitive types: 
+- Integers: i8, i16, i32, i64, ui8, ui16, ui32, ui64
+- Floats: f8, f16, f32, f64
+- Boolean: bool
+- Char: utf-8 character char
+- Pointer/Reference ref<T>
+- Enum: enum
+Non-primitives
+- String: null-byte separated character array string
+<included in std::math>
+- Vectors: vec2_[if][8-64], vec3_[if][8-64], vec4_[if][8-64] (so vec3_i8 is a 3D vector of 8 byte integers
+- Matrices: mat[2-4]x[2-4]_[if][8-64] (so all dimensions from 2x2 to 4x4, with all primitive numbers)
+- Lines: line (similar to vec3_f32, but has other methods such as checking for intersections, in the format of ax + by + c)
+<included in std::collections>
+- queue<T>, tree<T>, linkedlist<T>, array<T>, stack<T>, set<T>, graph<T>
+
+Control characters
+- Conditionals: if (), else if (), else
+- Loops: loop, until (condition), loop <variable>, begin..end (loop i, 0..10 = for (ui8 i = 0; i < 10; i++), type of i is inferred to most-memory friendly option) 
+- Statements: skip, break, return (skip = continue)
+
+Operators
+- Assignment: =
+- Comparison: == (everything compared by value, for reference checking -> get reference first)
+- Arithmetic: +, -, /, *, %, ^ (power of) (arithmetic and assignment can be combined)
+- Boolean logic: |, ||, &, &&, ~ (xor), ! (not), >, <, <=, >=
+- References: \ (get address), @ (dereference)
+- Calling operator: .
+
+Other
+- Functions: <returntype> <name>(params) {} (i8 add(i8 a, i8 b) { return a+b; })
+- OOP design: class, interface, namespace, struct
+- Inheritance: :
+- Comments: //single line, /*multi line*/
+- Import statements: use namespace::package::function/type (function/type is optional)
+
+I/O
+- Console: stdout.write(text), i8[] stdin.read()
+- Filesystem: fs.write(path, bytes), i8[] fs.read(path)

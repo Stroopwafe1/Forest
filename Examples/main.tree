@@ -1,0 +1,23 @@
+i32 main(string[] argv) {
+    return 0;
+}
+
+
+/*
+Token identifier, value=i32
+Token identifier, value=main
+Token left_parantheses, value=(
+Token identifier, value=ui8
+Token identifier, value=argc
+Token comma, value=,
+Token identifier, value=string
+Token left_bracket, value=[
+Token right_bracket, value=]
+Token identifier, value=argv
+Token right_parantheses, value=)
+Token left_brace, value={
+Token identifier, value=return;
+Token number, value=0
+Token semi_colon, value=;
+Token right_brace, value=}
+*/

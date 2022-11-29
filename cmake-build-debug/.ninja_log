@@ -1,0 +1,5 @@
+# ninja log v5
+326	416	6815091344454962	Own_Programming_Language.exe	b367773954758275
+0	242	1664303834773788822	CMakeFiles/Own_Programming_Language.dir/Source/main.cpp.o	a8c414b436d0203e
+0	260	1664303834791788822	CMakeFiles/Own_Programming_Language.dir/Source/Tokeniser.cpp.o	caf6ba0bc5b3ecb0
+260	299	1664303834829788822	Own_Programming_Language	fb70e8ce394a6504
