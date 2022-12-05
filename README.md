@@ -119,6 +119,7 @@ The syntax of the language itself
 - Filesystem: 
     - Writing: `fs.write(path, bytes)`
     - Reading: `ui8[] fs.read(path)`
+    - Step reading: `ui32 fd = fs.open(path); f32 fs.readLE<f32>(fd)`
 
 #### Note: 
 UTF-8 encodes characters as they're needed with multiple bytes. The common ASCII characters only take 1 byte each, but the rest of the international alphabets needs more than 1 byte. Because I wanna support international files and code, I want this language to also allow for that.
