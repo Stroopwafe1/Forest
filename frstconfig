@@ -1,5 +1,7 @@
 #[convention]:
 functions=camelCase
+constants_case=SCREAMING_SNAKE_CASE
+constants_prefix=c_
 
 #[scripts]:
 build=forest build .

@@ -100,8 +100,8 @@ The syntax of the language itself
 ### Operators
 - Assignment: `=`
 - Comparison: `==` (everything compared by value, for reference checking you have get reference first: `\string1 == \string2`)
-- Arithmetic: `+, -, /, *, %, ^ (power of)` (arithmetic and assignment can be combined)
-- Boolean logic: `|, ||, &, &&, ~ (xor), ! (not), >, <, <=, >=`
+- Arithmetic: `+, -, /, *, %, ** (power of)` (arithmetic and assignment can be combined)
+- Boolean logic: `|, ||, &, &&, ^ (xor), ! (not), >, <, <=, >=`
 - References: `\ (get address), @ (dereference)`
 - Calling operator: `.`
 
