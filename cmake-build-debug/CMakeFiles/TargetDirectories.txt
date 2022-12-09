@@ -1,3 +1,0 @@
-/home/lilith/Documents/Code/Own Programming Language/cmake-build-debug/CMakeFiles/Own_Programming_Language.dir
-/home/lilith/Documents/Code/Own Programming Language/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/lilith/Documents/Code/Own Programming Language/cmake-build-debug/CMakeFiles/rebuild_cache.dir
