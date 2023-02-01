@@ -1,6 +1,3 @@
-//
-// Created by Lilith Littlewood on 05/08/2022.
-//
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -9,7 +6,7 @@
 
 #include "Tokeniser.h"
 
-using namespace simpleparser;
+using namespace forest::parser;
 
 int main(int argc, char** argv) {
 	const char* fileName = argc == 1 ? "../Examples/hello-world.tree" : argv[1];

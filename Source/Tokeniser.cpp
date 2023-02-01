@@ -1,12 +1,8 @@
-//
-// Created by Lilith Littlewood on 05/08/2022.
-//
-
 #include <stdexcept>
 #include <iostream>
 #include "Tokeniser.h"
 
-namespace simpleparser {
+namespace forest::parser {
 	std::vector<Token> Tokeniser::parse(const std::string &inProgram) {
 		std::vector<Token> tokens;
 		Token currentToken;
@@ -249,4 +245,4 @@ namespace simpleparser {
 		<< ", \"" << mText << "\" " << mLineNumber << ":" << mStartOffset << "-" << mEndOffset << ")"
 		<< std::endl;
 	}
-} // simpleparser
+} // forest

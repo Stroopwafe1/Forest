@@ -1,14 +1,10 @@
-//
-// Created by Lilith Littlewood on 05/08/2022.
-//
-
-#ifndef OWN_PROGRAMMING_LANGUAGE_TOKENISER_H
-#define OWN_PROGRAMMING_LANGUAGE_TOKENISER_H
+#ifndef FOREST_TOKENISER_H
+#define FOREST_TOKENISER_H
 
 #include <vector>
 #include <string>
 
-namespace simpleparser {
+namespace forest::parser {
 
 	enum TokenType {
 		NOTHING = 0,
@@ -75,6 +71,6 @@ namespace simpleparser {
 		void endToken(Token& token, std::vector<Token>& tokens);
 	};
 
-} // simpleparser
+} // forest
 
-#endif //OWN_PROGRAMMING_LANGUAGE_TOKENISER_H
+#endif //FOREST_TOKENISER_H
