@@ -1,5 +1,5 @@
 # Forest programming language
-## NOTE: This language is still very much in the fetus stages of development
+## NOTE: This language is still very much in the sapling stages of development
 
 Forest is a programming language that is greatly inspired by both C++ and Rust. It is designed to use very little RAM as it contains types that are very memory efficient as well as offering utility to calculate complex mathematics with the help of the `std::math` library. 
 
