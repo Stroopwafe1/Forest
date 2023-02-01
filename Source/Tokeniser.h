@@ -13,7 +13,8 @@ namespace forest::parser {
 		OPERATOR,
 		STRING_ESCAPE_SEQUENCE,
 		POTENTIAL_COMMENT,
-		COMMENT
+		COMMENT,
+		SEMICOLON
 	};
 
 	enum TokenSubType {
@@ -23,6 +24,8 @@ namespace forest::parser {
 		STRING_LITERAL,
 
 		// Maybe operator subtypes too
+		DOT,
+		RANGE,
 
 		// Keyword Identifiers
 		RETURN,
@@ -38,7 +41,8 @@ namespace forest::parser {
 		"OPERATOR",
 		"STRING_ESCAPE_SEQUENCE",
 		"POTENTIAL_COMMENT",
-		"COMMENT"
+		"COMMENT",
+		"SEMICOLON"
 	};
 
 	static const char* TokenSubTypes[] = {
@@ -46,6 +50,8 @@ namespace forest::parser {
 		"INTEGER_LITERAL",
 		"FLOAT_LITERAL",
 		"STRING_LITERAL",
+		"DOT",
+		"RANGE",
 		"RETURN",
 		"BREAK",
 		"SKIP",
@@ -60,15 +66,16 @@ namespace forest::parser {
 		size_t mStartOffset{0};
 		size_t mEndOffset{0};
 		size_t mLineNumber{1};
+		std::string file;
 
 		void debugPrint() const;
 	};
 
 	class Tokeniser {
 	public:
-		std::vector<Token> parse(const std::string& inProgram);
+		static std::vector<Token> parse(const std::string& inProgram, const std::string& fileName);
 
-		void endToken(Token& token, std::vector<Token>& tokens);
+		static void endToken(Token& token, std::vector<Token>& tokens);
 	};
 
 } // forest

@@ -27,8 +27,7 @@ int main(int argc, char** argv) {
 
 	std::cout << "============================================" << std::endl;
 
-	Tokeniser tokeniser;
-	std::vector<Token> tokens = tokeniser.parse(code);
+	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, fileName);
 
 	for (const Token& token : tokens) {
 		token.debugPrint();
