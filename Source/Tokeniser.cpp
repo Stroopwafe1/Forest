@@ -73,8 +73,19 @@ namespace simpleparser {
 						currentToken.mStartOffset = currentToken.mEndOffset = x;
 						currentToken.mText.append(1, currChar);
 						endToken(currentToken, tokens);
-					} else if (currentToken.mSubType == FLOAT_LITERAL) {// A *second* decimal point
-						// TODO: Change this to RANGE operator
+					} else if (currentToken.mSubType == FLOAT_LITERAL) {// A *second* decimal point -> range operator
+						// Split into 2 tokens, integer literal and range op
+						currentToken.mText.erase(currentToken.mText.size() - 1);
+						currentToken.mSubType = INTEGER_LITERAL;
+						currentToken.mEndOffset = x - 2;
+						endToken(currentToken, tokens);
+
+
+						currentToken.mType = OPERATOR;
+						currentToken.mSubType = NONE;
+						currentToken.mStartOffset = x - 1;
+						currentToken.mEndOffset = x;
+						currentToken.mText.append(2, currChar);
 						endToken(currentToken, tokens);
 						// Already taken care of by the endToken function
 					} else if (currentToken.mSubType == INTEGER_LITERAL) {// Integers can't contain dots, so this must be a decimal number.

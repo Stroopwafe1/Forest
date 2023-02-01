@@ -1,4 +1,8 @@
-.idea/
-build/
-cmake*
-CMakeFiles*
+.idea/**
+build/**
+cmake*/**
+CMakeFiles*/**
+Forest
+CMakeCache.txt
+*.cmake
+Makefile
