@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "Tokeniser.h"
+#include "Parser.hpp"
 
 using namespace forest::parser;
 
@@ -32,6 +33,11 @@ int main(int argc, char** argv) {
 	for (const Token& token : tokens) {
 		token.debugPrint();
 	}
+
+	std::cout << "============================================" << std::endl;
+
+	Parser parser;
+	parser.parse(tokens);
 
 	file.close();
 

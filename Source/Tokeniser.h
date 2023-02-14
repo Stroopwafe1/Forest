@@ -69,6 +69,8 @@ namespace forest::parser {
 		std::string file;
 
 		void debugPrint() const;
+		const char* getType() const;
+		friend std::ostream& operator<<(std::ostream&, const Token&);
 	};
 
 	class Tokeniser {
@@ -78,6 +80,7 @@ namespace forest::parser {
 		static void endToken(Token& token, std::vector<Token>& tokens);
 	};
 
+	std::ostream& operator<<(std::ostream&, const Token&);
 } // forest
 
 #endif //FOREST_TOKENISER_H

@@ -1,10 +1,12 @@
 #[convention]:
-functions=camelCase
-constants_case=SCREAMING_SNAKE_CASE
-constants_prefix=c_
+functions=$symbolName
+constants_case=c_$SYMBOL_NAME
 
 #[scripts]:
 build=forest build .
 install=forest plant <tree name>(package)
-uninstall=forest harvest <tree name>
+uninstall=forest chop <tree name>
+force-remove=forest harvest <tree name>
+update=forest water <tree name>
+update-all=forest rain .
 publish=forest ship .

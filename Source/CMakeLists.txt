@@ -6,4 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 add_executable(Forest
         main.cpp
         Tokeniser.cpp
-        Tokeniser.h)
+        Tokeniser.h
+        Parser.cpp
+        Parser.hpp
+)

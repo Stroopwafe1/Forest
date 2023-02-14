@@ -1,5 +1,6 @@
 #include <stdexcept>
 #include <iostream>
+#include <sstream>
 #include "Tokeniser.h"
 
 namespace forest::parser {
@@ -257,5 +258,14 @@ namespace forest::parser {
 		std::cout << "Token (" << TokenTypes[mType] << ", " << TokenSubTypes[mSubType]
 		<< ", \"" << mText << "\" " << file << ":" << mLineNumber << ":" << mStartOffset << "-" << mEndOffset << ")"
 		<< std::endl;
+	}
+
+	std::ostream& operator<<(std::ostream& os, const Token& t) {
+		os << t.file << ":" << t.mLineNumber << ":" << t.mStartOffset ;
+		return os;
+	}
+
+	const char* Token::getType() const {
+		return TokenTypes[mType];
 	}
 } // forest
