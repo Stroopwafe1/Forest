@@ -1,5 +1,5 @@
-#ifndef FOREST_TOKENISER_H
-#define FOREST_TOKENISER_H
+#ifndef FOREST_TOKENISER_HPP
+#define FOREST_TOKENISER_HPP
 
 #include <vector>
 #include <string>
@@ -14,7 +14,8 @@ namespace forest::parser {
 		STRING_ESCAPE_SEQUENCE,
 		POTENTIAL_COMMENT,
 		COMMENT,
-		SEMICOLON
+		SEMICOLON,
+		POTENTIAL_NEGATIVE_NUMBER
 	};
 
 	enum TokenSubType {
@@ -42,7 +43,8 @@ namespace forest::parser {
 		"STRING_ESCAPE_SEQUENCE",
 		"POTENTIAL_COMMENT",
 		"COMMENT",
-		"SEMICOLON"
+		"SEMICOLON",
+		"POTENTIAL_NEGATIVE_NUMBER"
 	};
 
 	static const char* TokenSubTypes[] = {
@@ -83,4 +85,4 @@ namespace forest::parser {
 	std::ostream& operator<<(std::ostream&, const Token&);
 } // forest
 
-#endif //FOREST_TOKENISER_H
+#endif //FOREST_TOKENISER_HPP

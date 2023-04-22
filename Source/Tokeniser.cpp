@@ -1,6 +1,7 @@
+#include <cctype>
 #include <stdexcept>
 #include <iostream>
-#include "Tokeniser.h"
+#include "Tokeniser.hpp"
 
 namespace forest::parser {
 	std::vector<Token> Tokeniser::parse(const std::string &inProgram, const std::string& fileName) {
@@ -46,6 +47,10 @@ namespace forest::parser {
 			} else if (currentToken.mType == COMMENT && currChar != '\n') {
 				currentToken.mText.append(1, currChar);
 				continue;
+			} else if (currentToken.mType == POTENTIAL_NEGATIVE_NUMBER && !isdigit(currChar)) {
+				currentToken.mType = OPERATOR;
+				currentToken.mSubType = NONE;
+				endToken(currentToken, tokens);
 			}
 
 			switch (currChar) {
@@ -65,6 +70,11 @@ namespace forest::parser {
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.erase();
+						currentToken.mText.append(1, currChar);
+					} else if (currentToken.mType == POTENTIAL_NEGATIVE_NUMBER) {
+						currentToken.mType = LITERAL;
+						currentToken.mSubType = INTEGER_LITERAL;
+						currentToken.mEndOffset = end + 1;
 						currentToken.mText.append(1, currChar);
 					} else {
 						currentToken.mEndOffset = end + 1;
@@ -130,6 +140,19 @@ namespace forest::parser {
 					}
 
 					break;
+				case '-':
+					if (currentToken.mSubType == STRING_LITERAL) {
+						currentToken.mText.append(1, currChar);
+						currentToken.mEndOffset = end + 1;
+					} else {
+						endToken(currentToken, tokens);
+						currentToken.mType = POTENTIAL_NEGATIVE_NUMBER;
+						currentToken.mSubType = NONE;
+						currentToken.mStartOffset = start;
+						currentToken.mEndOffset = end + 1;
+						currentToken.mText.append(1, currChar);
+					}
+					break;
 
 				case '{':
 				case '}':
@@ -141,7 +164,6 @@ namespace forest::parser {
 				case '>':
 				case '=':
 				case '+':
-				case '-':
 				case '*':
 				case ',':
 					if (currentToken.mSubType != STRING_LITERAL) {

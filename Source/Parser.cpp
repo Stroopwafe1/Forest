@@ -1,8 +1,10 @@
+#include <cstdint>
 #include <iostream>
 #include <optional>
 #include <sstream>
+#include <string>
 #include "Parser.hpp"
-#include "Tokeniser.h"
+#include "Tokeniser.hpp"
 
 namespace forest::parser {
 	Programme Parser::parse(std::vector<Token>& tokens) {
@@ -24,7 +26,7 @@ namespace forest::parser {
 				functions.push_back(f.value());
 			}
 		}
-		return Programme { functions, literals };
+		return Programme { functions, literals, requires_libs };
 	}
 
 	std::optional<Token> Parser::expectIdentifier(const std::string& name) {
@@ -157,19 +159,29 @@ namespace forest::parser {
 				std::optional<Token> value = expectLiteral();
 				statement.mType = Statement_Type::RETURN_CALL;
 				statement.content = value.value().mText;
+				std::optional<Token> semi = expectSemicolon();
+				if (!semi.has_value()) {
+					std::cerr << "Expected a closing ';' to end the statement at " << *(mCurrentToken - 1) << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				}
 			}
 
 			// TODO: This can cause a return statement to be overwritten. But I can't be bothered to fix it up right now
 			std::optional<Statement> stdlib_call = tryParseStdLibFunction();
 			if (stdlib_call.has_value()) {
 				statement = stdlib_call.value();
+				std::optional<Token> semi = expectSemicolon();
+				if (!semi.has_value()) {
+					std::cerr << "Expected a closing ';' to end the statement at " << *(mCurrentToken - 1) << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				}
 			}
 
-			std::optional<Token> semi = expectSemicolon();
-			if (!semi.has_value()) {
-				std::cerr << "Expected a closing ';' to end the statement at " << *mCurrentToken << std::endl;
-				mCurrentToken = saved;
-				return std::nullopt;
+			std::optional<Statement> loop = tryParseLoop();
+			if (loop.has_value()) {
+				statement = loop.value();
 			}
 			statements.push_back(statement);
 		}
@@ -204,14 +216,23 @@ namespace forest::parser {
 		// Arguments are more dynamic, but TODO: We only accept string literals
 		std::optional<Token> arg = expectLiteral();
 		if (!arg.has_value()) {
-			mCurrentToken = saved;
-			return std::nullopt;
+			arg = expectIdentifier();
+			if (!arg.has_value()) {
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+			fc.arg = arg.value();
+			requires_libs = true;
+		} else {
+			std::stringstream alias;
+			alias << "str" << literals.size();
+
+			literals.push_back(Literal { alias.str(), arg.value().mText, uint32_t(arg.value().mText.size()) });
+			returnValue.content = alias.str();
+			fc.arg = arg.value();
 		}
 
-		std::stringstream alias;
-		alias << "str" << literals.size();
 
-		literals.push_back(Literal { alias.str(), arg.value().mText, uint32_t(arg.value().mText.size()) });
 		std::optional<Token> closingParenthesis = expectOperator(")");
 		if (!closingParenthesis.has_value()) {
 			mCurrentToken = saved;
@@ -232,14 +253,66 @@ namespace forest::parser {
 			fc.mFunctionType = StdLib_Function_Type::WRITE;
 		} else if (functionName.value().mText == "writeln") {
 			fc.mFunctionType = StdLib_Function_Type::WRITELN;
-			literals.at(literals.size() - 1).mContent.append("\n");
-			literals.at(literals.size() - 1).mSize += 1;
+			if (literals.size() > 0) {
+				literals.at(literals.size() - 1).mContent.append("\n");
+				literals.at(literals.size() - 1).mSize += 1;
+			}
 		}
 
-		returnValue.content = alias.str();
 		returnValue.mType = Statement_Type::FUNC_CALL;
 		returnValue.funcCall = fc;
 		return returnValue;
+	}
+
+	std::optional<Statement> Parser::tryParseLoop() {
+		std::vector<Token>::iterator saved = mCurrentToken;
+		LoopStatement ls;
+		// Try parse from longest form to smallest
+		std::optional<Token> loop = expectIdentifier("loop");
+		if (!loop.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		std::optional<Token> iterator = expectIdentifier();
+		if (iterator.has_value()) {
+			std::optional<Token> comma = expectOperator(",");
+			if (!comma.has_value()) {
+				std::cerr << "Expected a ',' after the variable at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+			// Expect a range
+			// TODO: Allow for variables in range declaration
+			std::optional<Token> min = expectLiteral();
+			if (!min.has_value()) {
+				std::cerr << "Expected a beginning of a range declaration at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+			std::optional<Token> range = expectOperator("..");
+			if (!range.has_value()) {
+				std::cerr << "Expected a '..' in the range declaration at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+			std::optional<Token> max = expectLiteral();
+			if (!max.has_value()) {
+				std::cerr << "Expected an ending of the range declaration at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+			Range r = Range { std::stol(min.value().mText), std::stol(max.value().mText) };
+			ls.mRange = r;
+			ls.mIterator = Variable { getTypeFromRange(r), iterator.value().mText, iterator.value() };
+		}
+		std::optional<Block> body = expectBlock();
+		if (!body.has_value()) {
+			std::cerr << "Expected a code block for the loop at " << *mCurrentToken << std::endl;
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		ls.mBody = body.value();
+		return Statement { Statement_Type::LOOP, "loop", std::nullopt, ls};
 	}
 
 	Builtin_Type Parser::getTypeFromName(const std::string& name) {
@@ -259,6 +332,34 @@ namespace forest::parser {
 		if (name == "bool") return BOOL;
 		if (name == "void") return VOID;
 		return UNDEFINED;
+	}
+
+	Type Parser::getTypeFromRange(const Range& range) {
+		uint64_t min = range.mMinimum < range.mMaximum ? range.mMinimum : range.mMaximum;
+		uint64_t max = range.mMaximum > range.mMinimum ? range.mMaximum : range.mMinimum;
+
+		if (min < 0) {
+			// Has to be signed
+			if (min >= -128 && max <= 127) {
+				return Type { "i8", I8 };
+			} else if (min >= -32768 && max <= 32767) {
+				return Type { "i16", I16 };
+			} else if (min >= -2147483648 && max <= 2147483647) {
+				return Type { "i32", I32 };
+			} else {
+				return Type { "i64", I64 };
+			}
+		} else {
+			if (max <= 255) {
+				return Type { "ui8", UI8 };
+			} else if (max <= 65535) {
+				return Type { "ui16", UI16 };
+			} else if (max <= 4294967295) {
+				return Type { "ui32", UI32 };
+			} else {
+				return Type { "ui64", UI64 };
+			}
+		}
 	}
 
 	std::optional<Type> Parser::expectType(const std::string& name) {

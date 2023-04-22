@@ -1,10 +1,11 @@
 #ifndef FOREST_PARSER_HPP
 #define FOREST_PARSER_HPP
 
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <optional>
-#include "Tokeniser.h"
+#include "Tokeniser.hpp"
 
 namespace forest::parser {
 	enum Builtin_Type {
@@ -64,14 +65,33 @@ namespace forest::parser {
 		Token arg;
 	};
 
+	struct Variable {
+		Type mType;
+		std::string mName;
+		Token mValue;
+	};
+
+	struct Range {
+		int64_t mMinimum;
+		int64_t mMaximum;
+	};
+
+	struct Statement;
+	struct Block {
+		std::vector<Statement> statements;
+	};
+
+	struct LoopStatement {
+		std::optional<Variable> mIterator;
+		std::optional<Range> mRange;
+		Block mBody;
+	};
+
 	struct Statement {
 		Statement_Type mType;
 		std::string content; // TODO: Change this to proper parsing of expressions
 		std::optional<FuncCallStatement> funcCall;
-	};
-
-	struct Block {
-		std::vector<Statement> statements;
+		std::optional<LoopStatement> loopStatement;
 	};
 
 	struct Function {
@@ -90,6 +110,7 @@ namespace forest::parser {
 	struct Programme {
 		std::vector<Function> functions;
 		std::vector<Literal> literals;
+		bool requires_libs = false;
 
 		std::optional<Literal> findLiteral(const std::string& alias) {
 			for (std::vector<Literal>::iterator it = literals.begin(); it != literals.end(); it++) {
@@ -105,6 +126,7 @@ namespace forest::parser {
 
 	private:
 		static Builtin_Type getTypeFromName(const std::string& name);
+		Type getTypeFromRange(const Range& range);
 		std::optional<Token> expectIdentifier(const std::string& name = "");
 		std::optional<Token> expectOperator(const std::string& name = "");
 		std::optional<Token> expectLiteral(const std::string& name = "");
@@ -113,9 +135,11 @@ namespace forest::parser {
 		std::optional<Function> expectFunction();
 		std::optional<Block> expectBlock();
 		std::optional<Statement> tryParseStdLibFunction();
+		std::optional<Statement> tryParseLoop();
 
 		std::vector<Token>::iterator mCurrentToken;
 		std::vector<Literal> literals;
+		bool requires_libs = false;
 	};
 
 } // forest::parser
