@@ -9,7 +9,7 @@ My goal for this language is to be able to use it in my own small projects first
 Because I wanna have a go at making my own language, like every developer has wanted at some point in their life.
 
 ## Goals
-- [ ] Compiled language (Though interpreted is also fine for now)
+- [x] Compiled language (Though interpreted is also fine for now)
 - [ ] Turing complete
 - [ ] Statically typed
 - [ ] Self-hosted (Eventually)
