@@ -1,8 +1,12 @@
-#[convention]:
+[Conventions]:
+#public:
 functions=$symbolName
 constants_case=c_$SYMBOL_NAME
 
-#[scripts]:
+#private:
+functions=__$symbolName
+
+[Scripts]:
 build=forest build .
 install=forest plant <tree name>(package)
 uninstall=forest chop <tree name>

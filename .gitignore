@@ -6,3 +6,4 @@ Forest
 CMakeCache.txt
 *.cmake
 **/Makefile
+.cache/**

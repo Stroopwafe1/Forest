@@ -21,4 +21,5 @@ i32 main(string[] args) {
     // And of course we should close our files
     fs.close(fd);
     fs.close(write_fd);
+    return 0;
 }

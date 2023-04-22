@@ -1,6 +1,5 @@
 #include <stdexcept>
 #include <iostream>
-#include <sstream>
 #include "Tokeniser.h"
 
 namespace forest::parser {
@@ -44,6 +43,9 @@ namespace forest::parser {
 				currentToken.mType = OPERATOR;
 				currentToken.mSubType = NONE;
 				endToken(currentToken, tokens);
+			} else if (currentToken.mType == COMMENT && currChar != '\n') {
+				currentToken.mText.append(1, currChar);
+				continue;
 			}
 
 			switch (currChar) {

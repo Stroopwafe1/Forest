@@ -1,9 +1,13 @@
 #include <iostream>
+#include <optional>
+#include <sstream>
 #include "Parser.hpp"
+#include "Tokeniser.h"
 
 namespace forest::parser {
-	void Parser::parse(std::vector<Token>& tokens) {
+	Programme Parser::parse(std::vector<Token>& tokens) {
 		mCurrentToken = tokens.begin();
+		std::vector<Function> functions;
 		while (mCurrentToken != tokens.end()) {
 			/*std::optional<Token> id = expectIdentifier();
 			if (!id.has_value()) {
@@ -17,8 +21,10 @@ namespace forest::parser {
 				break;
 			} else {
 				std::cout << "Successfully parsed function " << f->mName << std::endl;
+				functions.push_back(f.value());
 			}
 		}
+		return Programme { functions, literals };
 	}
 
 	std::optional<Token> Parser::expectIdentifier(const std::string& name) {
@@ -33,6 +39,19 @@ namespace forest::parser {
 	std::optional<Token> Parser::expectOperator(const std::string& name) {
 		if (mCurrentToken->mType != OPERATOR) return std::nullopt;
 		if (!name.empty() && mCurrentToken->mText != name) return std::nullopt;
+
+		return *mCurrentToken++;
+	}
+
+	std::optional<Token> Parser::expectLiteral(const std::string& name) {
+		if (mCurrentToken->mType != TokenType::LITERAL) return std::nullopt;
+		if (!name.empty() && mCurrentToken->mText != name) return std::nullopt;
+
+		return *mCurrentToken++;
+	}
+
+	std::optional<Token> Parser::expectSemicolon() {
+		if (mCurrentToken->mType != TokenType::SEMICOLON) return std::nullopt;
 
 		return *mCurrentToken++;
 	}
@@ -87,13 +106,140 @@ namespace forest::parser {
 		}
 
 		// Parse function body, which is the same as parsing a scoped block.
-		// But we can't do that yet, so that is a todo
+		// We have a start, but it's nowhere near accurate
+		std::optional<Block> body = expectBlock();
+		if (!body.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		std::vector<Statement> statements = body.value().statements;
+
+		if (type.value().builtinType != Builtin_Type::VOID) {
+			bool found = false;
+			for (std::vector<Statement>::iterator it = statements.begin(); it != statements.end(); it++) {
+				if ((*it).mType == Statement_Type::RETURN_CALL) {
+					found = true;
+				}
+			}
+			if (!found) {
+				std::cerr << "Expected a return statement of type " << type.value().name << " in " << name.value().mText << "'s function body at " << *(mCurrentToken - 1) << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+		}
 
 		for (const auto& arg : args) {
 			std::cout << "FuncArg: " << arg.mName << ", " << arg.mType.name << std::endl;
 		}
 
-		return Function {type.value(), name->mText, args};
+		return Function {type.value(), name->mText, args, body.value()};
+	}
+
+	std::optional<Block> Parser::expectBlock() {
+		std::vector<Token>::iterator saved = mCurrentToken;
+
+		std::optional<Token> open_bracket = expectOperator("{");
+		if (!open_bracket.has_value()) {
+			std::cerr << "Expected a '{' while parsing a scoped block at " << *mCurrentToken << std::endl;
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+
+		std::vector<Statement> statements;
+
+		while(expectOperator("}") == std::nullopt) {
+			// Parse statements
+			Statement statement;
+
+			// We only allow return statements and a couple function calls for now
+
+			if (expectIdentifier("return").has_value()) {
+				std::optional<Token> value = expectLiteral();
+				statement.mType = Statement_Type::RETURN_CALL;
+				statement.content = value.value().mText;
+			}
+
+			// TODO: This can cause a return statement to be overwritten. But I can't be bothered to fix it up right now
+			std::optional<Statement> stdlib_call = tryParseStdLibFunction();
+			if (stdlib_call.has_value()) {
+				statement = stdlib_call.value();
+			}
+
+			std::optional<Token> semi = expectSemicolon();
+			if (!semi.has_value()) {
+				std::cerr << "Expected a closing ';' to end the statement at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+			statements.push_back(statement);
+		}
+
+		return Block { statements };
+	}
+
+	std::optional<Statement> Parser::tryParseStdLibFunction() {
+		std::vector<Token>::iterator saved = mCurrentToken;
+		Statement returnValue;
+		FuncCallStatement fc;
+		std::optional<Token> className = expectIdentifier();
+		if (!className.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		std::optional<Token> dot = expectOperator(".");
+		if (!dot.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		std::optional<Token> functionName = expectIdentifier();
+		if (!functionName.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		std::optional<Token> openingParenthesis = expectOperator("(");
+		if (!openingParenthesis.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		// Arguments are more dynamic, but TODO: We only accept string literals
+		std::optional<Token> arg = expectLiteral();
+		if (!arg.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+
+		std::stringstream alias;
+		alias << "str" << literals.size();
+
+		literals.push_back(Literal { alias.str(), arg.value().mText, uint32_t(arg.value().mText.size()) });
+		std::optional<Token> closingParenthesis = expectOperator(")");
+		if (!closingParenthesis.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+
+		if (className.value().mText == "stdin") {
+			fc.mClassType = StdLib_Class_Type::STDIN;
+		} else {
+			fc.mClassType = StdLib_Class_Type::STDOUT;
+		}
+
+		if (functionName.value().mText == "read") {
+			fc.mFunctionType = StdLib_Function_Type::READ;
+		} else if (functionName.value().mText == "readln") {
+			fc.mFunctionType = StdLib_Function_Type::READLN;
+		} else if (functionName.value().mText == "write") {
+			fc.mFunctionType = StdLib_Function_Type::WRITE;
+		} else if (functionName.value().mText == "writeln") {
+			fc.mFunctionType = StdLib_Function_Type::WRITELN;
+			literals.at(literals.size() - 1).mContent.append("\n");
+			literals.at(literals.size() - 1).mSize += 1;
+		}
+
+		returnValue.content = alias.str();
+		returnValue.mType = Statement_Type::FUNC_CALL;
+		returnValue.funcCall = fc;
+		return returnValue;
 	}
 
 	Builtin_Type Parser::getTypeFromName(const std::string& name) {
@@ -134,7 +280,7 @@ namespace forest::parser {
 			} else {
 				// Child element
 				std::optional<Type> childType = expectType();
-				// Do stuff with this
+				// TODO: Do stuff with this
 			}
 		} else {
 			std::optional<Token> closingBracket = expectOperator("]");
