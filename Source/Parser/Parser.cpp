@@ -1,4 +1,3 @@
-#include <cstdint>
 #include <iostream>
 #include <optional>
 #include <sstream>
@@ -22,7 +21,7 @@ namespace forest::parser {
 			if (!f.has_value()) {
 				break;
 			} else {
-				std::cout << "Successfully parsed function " << f->mName << std::endl;
+				//std::cout << "Successfully parsed function " << f->mName << std::endl;
 				functions.push_back(f.value());
 			}
 		}
@@ -130,9 +129,9 @@ namespace forest::parser {
 			}
 		}
 
-		for (const auto& arg : args) {
+		/*for (const auto& arg : args) {
 			std::cout << "FuncArg: " << arg.mName << ", " << arg.mType.name << std::endl;
-		}
+		}*/
 
 		return Function {type.value(), name->mText, args, body.value()};
 	}
@@ -335,8 +334,8 @@ namespace forest::parser {
 	}
 
 	Type Parser::getTypeFromRange(const Range& range) {
-		uint64_t min = range.mMinimum < range.mMaximum ? range.mMinimum : range.mMaximum;
-		uint64_t max = range.mMaximum > range.mMinimum ? range.mMaximum : range.mMinimum;
+		int64_t min = range.mMinimum < range.mMaximum ? range.mMinimum : range.mMaximum;
+		int64_t max = range.mMaximum > range.mMinimum ? range.mMaximum : range.mMinimum;
 
 		if (min < 0) {
 			// Has to be signed

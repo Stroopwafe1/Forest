@@ -27,17 +27,17 @@ int main(int argc, char** argv) {
 
 	std::string code = buffer.str();
 
-	std::cout << code << std::endl;
+	//std::cout << code << std::endl;
 
-	std::cout << "============================================" << std::endl;
+	//std::cout << "============================================" << std::endl;
 
 	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, filePath);
 
-	for (const Token& token : tokens) {
+	/*for (const Token& token : tokens) {
 		token.debugPrint();
-	}
+	}*/
 
-	std::cout << "============================================" << std::endl;
+	//std::cout << "============================================" << std::endl;
 
 	Parser parser;
 	Programme p = parser.parse(tokens);
@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
 		outfile << "\tpush rcx" << std::endl;
 		outfile << "\tmov rsi, rsp" << std::endl;
 		outfile << "\tsub rsp, 16" << std::endl;
-		outfile << "jmp toascii_digit" << std::endl;
+		outfile << "\tjmp toascii_digit" << std::endl;
 	}
 	outfile << std::endl << "_start:" << std::endl;
 	// TODO: Make this recursive
