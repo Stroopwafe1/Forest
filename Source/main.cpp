@@ -13,7 +13,7 @@ using namespace forest::parser;
 namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {
-	fs::path filePath = argc == 1 ? "../Examples/seq100.tree" : argv[1];
+	fs::path filePath = argc == 1 ? "../Examples/hello-world.tree" : argv[1];
 	fs::path fileName = filePath.stem();
 
 	if (argc >= 2) {

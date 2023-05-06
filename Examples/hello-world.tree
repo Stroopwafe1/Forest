@@ -2,5 +2,6 @@ i32 main(string[] argv) {
     stdout.write("Hello, ");
     stdout.writeln("World!");
     stdout.writeln("Hello, World!"); // Prints hello world
-    return 2;
+    stdout.writeln("Hello!" * 6);
+    return (5 * 8) + 1;
 }

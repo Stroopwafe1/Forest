@@ -44,7 +44,7 @@ TEST_F(ParserTests, ParserParseBareMainShouldParse) {
 	ASSERT_EQ(block.statements.size(), 1);
 	Statement statement = block.statements[0];
 	EXPECT_EQ(statement.mType, Statement_Type::RETURN_CALL);
-	EXPECT_STREQ(statement.content.c_str(), "0");
+	EXPECT_STREQ(statement.mContent->mValue.mText.c_str(), "0");
 	ASSERT_FALSE(statement.funcCall.has_value());
 	ASSERT_FALSE(statement.loopStatement.has_value());
 }
@@ -202,7 +202,7 @@ TEST_F(ParserTests, ParserTryParseExpression4Minus3Plus1) {
 
 	Statement s;
 	s.mType = Statement_Type::VAR_DECLARATION;
-	Expression* expression = parser.tryParseExpression(s);
+	Expression* expression = parser.expectExpression(s);
 	ASSERT_NE(expression, nullptr);
 
 	EXPECT_EQ(expression->mValue.mType, TokenType::OPERATOR);
@@ -238,7 +238,7 @@ TEST_F(ParserTests, ParserTryParseExpression4Minus3Plus1V2) {
 
 	Statement s;
 	s.mType = Statement_Type::VAR_DECLARATION;
-	Expression* expression = parser.tryParseExpression(s);
+	Expression* expression = parser.expectExpression(s);
 	ASSERT_NE(expression, nullptr);
 
 	EXPECT_EQ(expression->mValue.mType, TokenType::OPERATOR);
@@ -265,4 +265,159 @@ TEST_F(ParserTests, ParserTryParseExpression4Minus3Plus1V2) {
 
 	// Assert that it hasn't consumed the semicolon
 	ASSERT_EQ((*parser.mCurrentToken).mType, TokenType::SEMICOLON);
+}
+
+TEST_F(ParserTests, ParserExpressionCollapse4Minus1) {
+	std::vector<Token> tokens = Tokeniser::parse("4 - 1;", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	Statement s;
+	s.mType = Statement_Type::VAR_DECLARATION;
+	Expression* expression = parser.expectExpression(s);
+	ASSERT_NE(expression, nullptr);
+	expression->Collapse();
+
+	ASSERT_NE(expression, nullptr);
+	ASSERT_EQ(expression->mLeft, nullptr);
+	ASSERT_EQ(expression->mRight, nullptr);
+
+	EXPECT_EQ(expression->mValue.mType, TokenType::LITERAL);
+	EXPECT_EQ(expression->mValue.mSubType, TokenSubType::INTEGER_LITERAL);
+	EXPECT_STREQ(expression->mValue.mText.c_str(), "3");
+}
+
+TEST_F(ParserTests, ParserExpressionCollapse4Minus3Plus1) {
+	std::vector<Token> tokens = Tokeniser::parse("(4 * 3) + 1;", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	Statement s;
+	s.mType = Statement_Type::VAR_DECLARATION;
+	Expression* expression = parser.expectExpression(s);
+	ASSERT_NE(expression, nullptr);
+	expression->Collapse();
+
+	ASSERT_NE(expression, nullptr);
+	ASSERT_EQ(expression->mLeft, nullptr);
+	ASSERT_EQ(expression->mRight, nullptr);
+
+	EXPECT_EQ(expression->mValue.mType, TokenType::LITERAL);
+	EXPECT_EQ(expression->mValue.mSubType, TokenSubType::INTEGER_LITERAL);
+	EXPECT_STREQ(expression->mValue.mText.c_str(), "13");
+}
+
+TEST_F(ParserTests, ParserExpressionCollapse4Modulo3) {
+	std::vector<Token> tokens = Tokeniser::parse("4 % 3;", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	Statement s;
+	s.mType = Statement_Type::VAR_DECLARATION;
+	Expression* expression = parser.expectExpression(s);
+	ASSERT_NE(expression, nullptr);
+	expression->Collapse();
+
+	ASSERT_NE(expression, nullptr);
+	ASSERT_EQ(expression->mLeft, nullptr);
+	ASSERT_EQ(expression->mRight, nullptr);
+
+	EXPECT_EQ(expression->mValue.mType, TokenType::LITERAL);
+	EXPECT_EQ(expression->mValue.mSubType, TokenSubType::INTEGER_LITERAL);
+	EXPECT_STREQ(expression->mValue.mText.c_str(), "1");
+}
+
+TEST_F(ParserTests, ParserExpressionCollapse3TimesString) {
+	std::vector<Token> tokens = Tokeniser::parse("3 * \"Hello\";", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	Statement s;
+	s.mType = Statement_Type::VAR_DECLARATION;
+	Expression* expression = parser.expectExpression(s);
+	ASSERT_NE(expression, nullptr);
+	expression->Collapse();
+
+	ASSERT_NE(expression, nullptr);
+	ASSERT_EQ(expression->mLeft, nullptr);
+	ASSERT_EQ(expression->mRight, nullptr);
+
+	EXPECT_EQ(expression->mValue.mType, TokenType::LITERAL);
+	EXPECT_EQ(expression->mValue.mSubType, TokenSubType::STRING_LITERAL);
+	EXPECT_STREQ(expression->mValue.mText.c_str(), "HelloHelloHello");
+}
+
+TEST_F(ParserTests, ParserTryParseReturnStatement) {
+	std::vector<Token> tokens = Tokeniser::parse("return 0;", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::RETURN_CALL);
+	EXPECT_STREQ(statement.value().mContent->mValue.mText.c_str(), "0");
+	EXPECT_FALSE(statement.value().loopStatement.has_value());
+	EXPECT_FALSE(statement.value().funcCall.has_value());
+}
+
+TEST_F(ParserTests, ParserTryParseLoopStatement) {
+	std::vector<Token> tokens = Tokeniser::parse("loop i, 0..10 { stdout.write(i); }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::LOOP);
+	EXPECT_EQ(statement.value().mContent, nullptr);
+	ASSERT_TRUE(statement.value().loopStatement.has_value());
+	EXPECT_FALSE(statement.value().funcCall.has_value());
+
+	LoopStatement loop = statement.value().loopStatement.value();
+	ASSERT_TRUE(loop.mIterator.has_value());
+	ASSERT_TRUE(loop.mRange.has_value());
+
+	EXPECT_EQ(loop.mIterator.value().mType.builtinType, Builtin_Type::UI8);
+	EXPECT_STREQ(loop.mIterator.value().mName.c_str(), "i");
+
+	EXPECT_EQ(loop.mRange.value().mMinimum, 0);
+	EXPECT_EQ(loop.mRange.value().mMaximum, 10);
+}
+
+TEST_F(ParserTests, ParserTryParseFuncCallStatement) {
+	std::vector<Token> tokens = Tokeniser::parse("stdout.write(20);", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::FUNC_CALL);
+	EXPECT_FALSE(statement.value().loopStatement.has_value());
+	ASSERT_TRUE(statement.value().funcCall.has_value());
+
+	FuncCallStatement fc = statement.value().funcCall.value();
+	EXPECT_EQ(fc.mClassType, StdLib_Class_Type::STDOUT);
+	EXPECT_EQ(fc.mFunctionType, StdLib_Function_Type::WRITE);
+	ASSERT_EQ(fc.mArgs.size(), 1);
+
+	Expression* arg = fc.mArgs[0];
+	EXPECT_EQ(arg->mValue.mType, TokenType::LITERAL);
+	EXPECT_EQ(arg->mValue.mSubType, TokenSubType::INTEGER_LITERAL);
+	EXPECT_STREQ(arg->mValue.mText.c_str(), "20");
+}
+
+TEST_F(ParserTests, ParserTryParseVariableStatement) {
+	std::vector<Token> tokens = Tokeniser::parse("ui8 test = 100", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_ASSIGNMENT);
+	EXPECT_STREQ(statement.value().mContent->mValue.mText.c_str(), "100");
+	EXPECT_FALSE(statement.value().loopStatement.has_value());
+	EXPECT_FALSE(statement.value().funcCall.has_value());
 }

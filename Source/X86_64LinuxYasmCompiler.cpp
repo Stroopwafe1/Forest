@@ -65,24 +65,28 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 		if (statement.mType == Statement_Type::RETURN_CALL) {
 			outfile << "; =============== RETURN ===============" << std::endl;
 			outfile << "\tmov rax, 60" << std::endl;
-			outfile << "\tmov rdi, " << statement.content << std::endl;
+			outfile << "\tmov rdi, " << statement.mContent->mValue.mText << std::endl;
 			outfile << "\tsyscall" << std::endl;
 			outfile << "; =============== END RETURN ===============" << std::endl;
 		} else if (statement.mType == Statement_Type::FUNC_CALL) {
 			if (!statement.funcCall.has_value()) continue;
 			FuncCallStatement fc = statement.funcCall.value();
-			if (fc.arg.mType == TokenType::LITERAL && fc.arg.mSubType == TokenSubType::STRING_LITERAL) {
+			// TODO: We assume only one argument here
+			// TODO: We assume entire expression tree is collapsed
+			Expression* arg = fc.mArgs[0];
+			if (arg->mValue.mType == TokenType::LITERAL && arg->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+				Literal l = p.findLiteralByContent(arg->mValue.mText).value();
 				outfile << "; =============== FUNC CALL ===============" << std::endl;
 				outfile << "\tmov rax, " << (fc.mFunctionType == StdLib_Function_Type::READ ||
 											 fc.mFunctionType == StdLib_Function_Type::READLN ? 0 : 1) << std::endl;
 				outfile << "\tmov rdi, " << (fc.mClassType == StdLib_Class_Type::STDIN ? 0 : 1) << std::endl;
-				outfile << "\tmov rsi, " << statement.content << std::endl;
-				outfile << "\tmov rdx, " << p.findLiteral(statement.content).value().mSize << std::endl;
+				outfile << "\tmov rsi, " << l.mAlias << std::endl;
+				outfile << "\tmov rdx, " << l.mSize << std::endl;
 				outfile << "\tsyscall" << std::endl;
 				outfile << "; =============== END FUNC CALL ===============" << std::endl;
-			} else if (fc.arg.mType == TokenType::LITERAL && fc.arg.mSubType == TokenSubType::INTEGER_LITERAL) {
+			} else if (arg->mValue.mType == TokenType::LITERAL && arg->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 				outfile << "; =============== FUNC CALL ===============" << std::endl;
-				outfile << "\tmov edi, " << fc.arg.mText << std::endl;
+				outfile << "\tmov edi, " << arg->mValue.mText << std::endl;
 				if (fc.mFunctionType == StdLib_Function_Type::WRITE) {
 					outfile << "\tcall print_uint32" << std::endl;
 				} else if (fc.mFunctionType == StdLib_Function_Type::WRITELN) {
@@ -120,24 +124,27 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 			for (auto& lsit : ls.mBody.statements) {
 				if (!lsit.funcCall.has_value()) continue;
 				FuncCallStatement fc = lsit.funcCall.value();
-				if (fc.arg.mType == TokenType::LITERAL && fc.arg.mSubType == TokenSubType::STRING_LITERAL) {
+				// Again, we assume only one argument, and it being fully collapsed
+				Expression* arg = fc.mArgs[0];
+				if (arg->mValue.mType == TokenType::LITERAL && arg->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+					Literal l = p.findLiteralByContent(arg->mValue.mText).value();
 					outfile << "; =============== FUNC CALL ===============" << std::endl;
 					outfile << "\tmov rax, " << (fc.mFunctionType == StdLib_Function_Type::READ || fc.mFunctionType == StdLib_Function_Type::READLN ? 0 : 1) << std::endl;
 					outfile << "\tmov rdi, " << (fc.mClassType == StdLib_Class_Type::STDIN ? 0 : 1) << std::endl;
-					outfile << "\tmov rsi, " << lsit.content << std::endl;
-					outfile << "\tmov rdx, " << p.findLiteral(lsit.content).value().mSize << std::endl;
+					outfile << "\tmov rsi, " << l.mAlias << std::endl;
+					outfile << "\tmov rdx, " << l.mSize << std::endl;
 					outfile << "\tsyscall" << std::endl;
 					outfile << "; =============== END FUNC CALL ===============" << std::endl;
-				} else if (fc.arg.mType == TokenType::LITERAL && fc.arg.mSubType == TokenSubType::INTEGER_LITERAL) {
+				} else if (arg->mValue.mType == TokenType::LITERAL && arg->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 					outfile << "; =============== FUNC CALL ===============" << std::endl;
-					outfile << "\tmov edi, " << fc.arg.mText << std::endl;
+					outfile << "\tmov edi, " << arg->mValue.mText << std::endl;
 					if (fc.mFunctionType == StdLib_Function_Type::WRITE) {
 						outfile << "\tcall print_uint32" << std::endl;
 					} else if (fc.mFunctionType == StdLib_Function_Type::WRITELN) {
 						outfile << "\tcall print_uint32_newline" << std::endl;
 					}
 					outfile << "; =============== END FUNC CALL ===============" << std::endl;
-				} else if (fc.arg.mType == TokenType::IDENTIFIER) {
+				} else if (arg->mValue.mType == TokenType::IDENTIFIER) {
 					outfile << "; =============== FUNC CALL ===============" << std::endl;
 					outfile << "\tmovzx edi, " << r1 << std::endl;
 					if (fc.mFunctionType == StdLib_Function_Type::WRITE) {

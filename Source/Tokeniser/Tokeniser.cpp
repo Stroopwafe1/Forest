@@ -57,6 +57,7 @@ namespace forest::parser {
 				endToken(currentToken, tokens);
 			}
 
+			// TODO: We've forgotten completely about char literals
 			switch (currChar) {
 				case '0':
 				case '1':
@@ -145,17 +146,12 @@ namespace forest::parser {
 
 					break;
 				case '-':
-					if (currentToken.mSubType == TokenSubType::STRING_LITERAL) {
-						currentToken.mText.append(1, currChar);
-						currentToken.mEndOffset = end + 1;
-					} else {
-						endToken(currentToken, tokens);
-						currentToken.mType = TokenType::POTENTIAL_NEGATIVE_NUMBER;
-						currentToken.mSubType = TokenSubType::NOTHING;
-						currentToken.mStartOffset = start;
-						currentToken.mEndOffset = end + 1;
-						currentToken.mText.append(1, currChar);
-					}
+					endToken(currentToken, tokens);
+					currentToken.mType = TokenType::POTENTIAL_NEGATIVE_NUMBER;
+					currentToken.mSubType = TokenSubType::NOTHING;
+					currentToken.mStartOffset = start;
+					currentToken.mEndOffset = end + 1;
+					currentToken.mText.append(1, currChar);
 					break;
 
 				case '{':
@@ -169,20 +165,16 @@ namespace forest::parser {
 				case '=':
 				case '+':
 				case '*':
+				case '%':
 				case ',':
-					if (currentToken.mSubType != TokenSubType::STRING_LITERAL) {
-						endToken(currentToken, tokens);
-						currentToken.mType = TokenType::OPERATOR;
-						currentToken.mSubType = TokenSubType::NOTHING;
-						currentToken.mStartOffset = start;
-						currentToken.mEndOffset = end + 1;
-						currentToken.mText.erase();
-						currentToken.mText.append(1, currChar);
-						endToken(currentToken, tokens);
-					} else {
-						currentToken.mText.append(1, currChar);
-						currentToken.mEndOffset = end + 1;
-					}
+					endToken(currentToken, tokens);
+					currentToken.mType = TokenType::OPERATOR;
+					currentToken.mSubType = TokenSubType::NOTHING;
+					currentToken.mStartOffset = start;
+					currentToken.mEndOffset = end + 1;
+					currentToken.mText.erase();
+					currentToken.mText.append(1, currChar);
+					endToken(currentToken, tokens);
 					break;
 				case '"':
 					if (currentToken.mSubType == TokenSubType::STRING_LITERAL) {

@@ -31,7 +31,9 @@ namespace forest::parser {
 	};
 
 	enum class Statement_Type {
+		NOTHING,
 		VAR_DECLARATION,
+		VAR_ASSIGNMENT,
 		FUNC_CALL,
 		RETURN_CALL,
 		LOOP,
@@ -64,7 +66,7 @@ namespace forest::parser {
 	struct FuncCallStatement {
 		StdLib_Class_Type mClassType;
 		StdLib_Function_Type mFunctionType;
-		Token arg;
+		std::vector<Expression*> mArgs;
 	};
 
 	struct Variable {
@@ -90,10 +92,11 @@ namespace forest::parser {
 	};
 
 	struct Statement {
-		Statement_Type mType;
-		std::string content; // TODO: Change this to proper parsing of expressions
+		Statement_Type mType = Statement_Type::NOTHING;
+		Expression* mContent{};
 		std::optional<FuncCallStatement> funcCall;
 		std::optional<LoopStatement> loopStatement;
+		std::optional<Variable> variable;
 	};
 
 	struct Function {
@@ -114,9 +117,20 @@ namespace forest::parser {
 		std::vector<Literal> literals;
 		bool requires_libs = false;
 
-		std::optional<Literal> findLiteral(const std::string& alias) const {
-			for (std::vector<Literal>::const_iterator it = literals.begin(); it != literals.end(); it++) {
-				if ((*it).mAlias == alias) return (*it);
+		std::optional<Literal> findLiteralByAlias(const std::string& alias) const {
+			for (const auto& literal : literals) {
+				if (literal.mAlias == alias) return literal;
+			}
+			return std::nullopt;
+		}
+
+		std::optional<Literal> findLiteralByContent(const std::string& content) const {
+			for (const auto& literal : literals) {
+				std::string s = literal.mContent;
+				if (s.rfind('\n') != std::string::npos) {
+					s = s.substr(0, literal.mContent.find_last_of('\n'));
+				}
+				if (s == content) return literal;
 			}
 			return std::nullopt;
 		}
@@ -137,9 +151,12 @@ namespace forest::parser {
 		std::optional<Type> expectType(const std::string& name = "");
 		std::optional<Function> expectFunction();
 		std::optional<Block> expectBlock();
+		std::optional<Statement> expectStatement();
 		std::optional<Statement> tryParseStdLibFunction();
 		std::optional<Statement> tryParseLoop();
-		Expression* tryParseExpression(const Statement& statementContext);
+		std::optional<Statement> tryParseReturnCall();
+		std::optional<Statement> tryParseVariableDeclaration();
+		Expression* expectExpression(const Statement& statementContext, bool collapse = false);
 
 		std::vector<Token>::iterator mCurrentToken;
 		std::vector<Token>::iterator mTokensEnd;
