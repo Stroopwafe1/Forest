@@ -7,7 +7,7 @@ add_subdirectory(Parser)
 
 add_executable(Forest
         main.cpp
-)
+        X86_64LinuxYasmCompiler.cpp X86_64LinuxYasmCompiler.hpp)
 
 target_link_libraries(Forest PUBLIC ForestTokeniser ForestParser)
 target_include_directories(Forest PUBLIC

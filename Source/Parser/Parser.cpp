@@ -2,6 +2,8 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <stack>
+#include <map>
 #include "Parser.hpp"
 #include "Tokeniser.hpp"
 
@@ -9,6 +11,7 @@ namespace forest::parser {
 	Programme Parser::parse(std::vector<Token>& tokens) {
 		mCurrentToken = tokens.begin();
 		std::vector<Function> functions;
+		mTokensEnd = tokens.end();
 		while (mCurrentToken != tokens.end()) {
 			/*std::optional<Token> id = expectIdentifier();
 			if (!id.has_value()) {
@@ -28,8 +31,14 @@ namespace forest::parser {
 		return Programme { functions, literals, requires_libs };
 	}
 
+	std::optional<Token> Parser::peekNextToken() {
+		if (mCurrentToken + 1 == mTokensEnd) return std::nullopt;
+
+		return *(mCurrentToken + 1);
+	}
+
 	std::optional<Token> Parser::expectIdentifier(const std::string& name) {
-		if (mCurrentToken->mType != IDENTIFIER) return std::nullopt;
+		if (mCurrentToken->mType != TokenType::IDENTIFIER) return std::nullopt;
 		if (!name.empty() && mCurrentToken->mText != name) return std::nullopt;
 
 		// TODO: Also allow for namespace::type identifiers
@@ -38,7 +47,7 @@ namespace forest::parser {
 	}
 
 	std::optional<Token> Parser::expectOperator(const std::string& name) {
-		if (mCurrentToken->mType != OPERATOR) return std::nullopt;
+		if (mCurrentToken->mType != TokenType::OPERATOR) return std::nullopt;
 		if (!name.empty() && mCurrentToken->mText != name) return std::nullopt;
 
 		return *mCurrentToken++;
@@ -223,12 +232,20 @@ namespace forest::parser {
 			fc.arg = arg.value();
 			requires_libs = true;
 		} else {
-			std::stringstream alias;
-			alias << "str" << literals.size();
+			if (arg.value().mSubType == TokenSubType::STRING_LITERAL) {
+				std::stringstream alias;
+				alias << "str" << literals.size();
 
-			literals.push_back(Literal { alias.str(), arg.value().mText, uint32_t(arg.value().mText.size()) });
-			returnValue.content = alias.str();
-			fc.arg = arg.value();
+				literals.push_back(Literal{alias.str(), arg.value().mText, uint32_t(arg.value().mText.size())});
+				returnValue.content = alias.str();
+				fc.arg = arg.value();
+			} else if (arg.value().mSubType == TokenSubType::INTEGER_LITERAL) {
+				returnValue.content = arg.value().mText;
+				fc.arg = arg.value();
+				int num = std::stoi(arg.value().mText);
+				if (num > 0 && num <= 2147483647)
+					requires_libs = true;
+			}
 		}
 
 
@@ -315,22 +332,22 @@ namespace forest::parser {
 	}
 
 	Builtin_Type Parser::getTypeFromName(const std::string& name) {
-		if (name == "ui8") return UI8;
-		if (name == "ui16") return UI16;
-		if (name == "ui32") return UI32;
-		if (name == "ui64") return UI64;
-		if (name == "i8") return I8;
-		if (name == "i16") return I16;
-		if (name == "i32") return I32;
-		if (name == "i64") return I64;
-		if (name == "f8") return F8;
-		if (name == "f16") return F16;
-		if (name == "f32") return F32;
-		if (name == "f64") return F64;
-		if (name == "char") return CHAR;
-		if (name == "bool") return BOOL;
-		if (name == "void") return VOID;
-		return UNDEFINED;
+		if (name == "ui8") return Builtin_Type::UI8;
+		if (name == "ui16") return Builtin_Type::UI16;
+		if (name == "ui32") return Builtin_Type::UI32;
+		if (name == "ui64") return Builtin_Type::UI64;
+		if (name == "i8") return Builtin_Type::I8;
+		if (name == "i16") return Builtin_Type::I16;
+		if (name == "i32") return Builtin_Type::I32;
+		if (name == "i64") return Builtin_Type::I64;
+		if (name == "f8") return Builtin_Type::F8;
+		if (name == "f16") return Builtin_Type::F16;
+		if (name == "f32") return Builtin_Type::F32;
+		if (name == "f64") return Builtin_Type::F64;
+		if (name == "char") return Builtin_Type::CHAR;
+		if (name == "bool") return Builtin_Type::BOOL;
+		if (name == "void") return Builtin_Type::VOID;
+		return Builtin_Type::UNDEFINED;
 	}
 
 	Type Parser::getTypeFromRange(const Range& range) {
@@ -340,23 +357,23 @@ namespace forest::parser {
 		if (min < 0) {
 			// Has to be signed
 			if (min >= -128 && max <= 127) {
-				return Type { "i8", I8 };
+				return Type { "i8", Builtin_Type::I8 };
 			} else if (min >= -32768 && max <= 32767) {
-				return Type { "i16", I16 };
+				return Type { "i16", Builtin_Type::I16 };
 			} else if (min >= -2147483648 && max <= 2147483647) {
-				return Type { "i32", I32 };
+				return Type { "i32", Builtin_Type::I32 };
 			} else {
-				return Type { "i64", I64 };
+				return Type { "i64", Builtin_Type::I64 };
 			}
 		} else {
 			if (max <= 255) {
-				return Type { "ui8", UI8 };
+				return Type { "ui8", Builtin_Type::UI8 };
 			} else if (max <= 65535) {
-				return Type { "ui16", UI16 };
+				return Type { "ui16", Builtin_Type::UI16 };
 			} else if (max <= 4294967295) {
-				return Type { "ui32", UI32 };
+				return Type { "ui32", Builtin_Type::UI32 };
 			} else {
-				return Type { "ui64", UI64 };
+				return Type { "ui64", Builtin_Type::UI64 };
 			}
 		}
 	}
@@ -389,9 +406,99 @@ namespace forest::parser {
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
-			return Type {id->mText + "[]", ARRAY};
+			return Type {id->mText + "[]", Builtin_Type::ARRAY};
 		}
 
 		return Type {id->mText, getTypeFromName(id->mText)};
+	}
+
+	std::optional<Expression> Parser::tryParseExpression(const Statement& statementContext) {
+		std::vector<Token>::iterator saved = mCurrentToken;
+		// While no semicolon for variable assignment or return call, parse
+		// While no ')' for function calls or if-statements, parse
+		// While no ']' for array indexing, parse
+		// While no '{' for range statement, parse
+		std::optional<Token> nextToken = peekNextToken();
+		std::stack<char> parenStack;
+		std::vector<Node*> nodes;
+
+		// While the next token exists and is not a closing character for the current statement context
+		while (nextToken.has_value() && !((
+					(nextToken.value().mText == ")" && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF)) ||
+					(nextToken.value().mText == "]" && (statementContext.mType == Statement_Type::ARRAY_INDEX)) ||
+					(nextToken.value().mText == "}" && (statementContext.mType == Statement_Type::LOOP)) ||
+					(nextToken.value().mType == TokenType::SEMICOLON)
+				) && parenStack.empty() )
+			) {
+			if (nextToken.value().mText == "(") {
+				parenStack.push('(');
+			} else if (nextToken.value().mType == TokenType::IDENTIFIER) {
+				std::optional<Token> identifier = expectIdentifier();
+				Node* node = new Node;
+				node->mValue = identifier.value();
+				nodes.push_back(node);
+			} else if (nextToken.value().mType == TokenType::OPERATOR) {
+				std::optional<Token> op = expectOperator();
+				Node* node = new Node;
+				node->mValue = op.value();
+				nodes.push_back(node);
+			} else if (nextToken.value().mType == TokenType::LITERAL) {
+				std::optional<Token> literal = expectLiteral();
+				Node* node;
+				node->mValue = literal.value();
+				nodes.push_back(node);
+			} else if (nextToken.value().mText == ")") {
+				// Pop parenStack
+				// Pop last 3 nodes
+				// Put middle node as root
+				// Push back root node into vector
+				parenStack.pop();
+				Node* right = nodes.back();
+				nodes.pop_back();
+				Node* op = nodes.back();
+				nodes.pop_back();
+				Node* left = nodes.back();
+				nodes.pop_back();
+
+				if (op->mValue.mType != TokenType::OPERATOR) {
+					std::cerr << "Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				}
+				/*if (left->mValue.mType != TokenType::LITERAL || left->mValue.mType != TokenType::IDENTIFIER) {
+					std::cerr << "Expected a literal or identifier while parsing the expression at " << left->mValue << " but got '" << left->mValue.mText << "' instead." << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				}
+				if (right->mValue.mType != TokenType::LITERAL || right->mValue.mType != TokenType::IDENTIFIER) {
+					std::cerr << "Expected a literal or identifier while parsing the expression at " << right->mValue << " but got '" << right->mValue.mText << "' instead." << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				}*/ // These are commented out because left or right can be an operator when we push back the root
+
+				op->mLeft = left;
+				op->mRight = right;
+				nodes.push_back(op);
+			}
+
+			// E.g. (4 - (3 + 1)) or ((4 - 3) + 1)
+
+			nextToken = peekNextToken();
+		} // End of while
+
+		if (nodes.empty()) {
+			std::cerr << "Zero nodes found while parsing expression at " << *mCurrentToken << std::endl;
+			mCurrentToken = saved;
+			return std::nullopt;
+		} else if (nodes.size() > 1) {
+			std::cerr << "Unexpected amount of nodes while parsing expression. Found " << nodes.size() << " but expected one. Full list:" << std::endl;
+			for (auto node : nodes) {
+				std::cerr << "Unexpected node at " << node << std::endl;
+			}
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+
+		return Expression { nodes[0] };
 	}
 } // forest::parser

@@ -18,7 +18,7 @@ namespace forest::parser {
 			if (!tokens.empty())
 				lastToken = tokens.back();
 
-			if (currentToken.mType == STRING_ESCAPE_SEQUENCE) {
+			if (currentToken.mType == TokenType::STRING_ESCAPE_SEQUENCE) {
 				switch (currChar) {
 					case 'n':
 						currentToken.mText.append(1, '\n');
@@ -36,20 +36,20 @@ namespace forest::parser {
 						throw std::runtime_error(std::string("Unknown escape sequence: \\") + currChar +
 						" in string at " + std::to_string(currentToken.mLineNumber) + ":" + std::to_string(currentToken.mEndOffset));
 				}
-				currentToken.mType = LITERAL;
-				currentToken.mSubType = STRING_LITERAL;
+				currentToken.mType = TokenType::LITERAL;
+				currentToken.mSubType = TokenSubType::STRING_LITERAL;
 				currentToken.mEndOffset = end + 1;
 				continue;
-			} else if (currentToken.mType == POTENTIAL_COMMENT && currChar != '/') {
-				currentToken.mType = OPERATOR;
-				currentToken.mSubType = NONE;
+			} else if (currentToken.mType == TokenType::POTENTIAL_COMMENT && currChar != '/') {
+				currentToken.mType = TokenType::OPERATOR;
+				currentToken.mSubType = TokenSubType::NOTHING;
 				endToken(currentToken, tokens);
-			} else if (currentToken.mType == COMMENT && currChar != '\n') {
+			} else if (currentToken.mType == TokenType::COMMENT && currChar != '\n') {
 				currentToken.mText.append(1, currChar);
 				continue;
-			} else if (currentToken.mType == POTENTIAL_NEGATIVE_NUMBER && !isdigit(currChar)) {
-				currentToken.mType = OPERATOR;
-				currentToken.mSubType = NONE;
+			} else if (currentToken.mType == TokenType::POTENTIAL_NEGATIVE_NUMBER && !isdigit(currChar)) {
+				currentToken.mType = TokenType::OPERATOR;
+				currentToken.mSubType = TokenSubType::NOTHING;
 				endToken(currentToken, tokens);
 			}
 
@@ -64,16 +64,16 @@ namespace forest::parser {
 				case '7':
 				case '8':
 				case '9':
-					if (currentToken.mType == NOTHING) {
-						currentToken.mType = LITERAL;
-						currentToken.mSubType = INTEGER_LITERAL;
+					if (currentToken.mType == TokenType::NOTHING) {
+						currentToken.mType = TokenType::LITERAL;
+						currentToken.mSubType = TokenSubType::INTEGER_LITERAL;
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.erase();
 						currentToken.mText.append(1, currChar);
-					} else if (currentToken.mType == POTENTIAL_NEGATIVE_NUMBER) {
-						currentToken.mType = LITERAL;
-						currentToken.mSubType = INTEGER_LITERAL;
+					} else if (currentToken.mType == TokenType::POTENTIAL_NEGATIVE_NUMBER) {
+						currentToken.mType = TokenType::LITERAL;
+						currentToken.mSubType = TokenSubType::INTEGER_LITERAL;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.append(1, currChar);
 					} else {
@@ -83,57 +83,57 @@ namespace forest::parser {
 					break;
 
 				case '.':
-					if ((currentToken.mType == NOTHING || currentToken.mType == IDENTIFIER) && lastToken.mSubType != DOT) {
+					if ((currentToken.mType == TokenType::NOTHING || currentToken.mType == TokenType::IDENTIFIER) && lastToken.mSubType != TokenSubType::DOT) {
 						endToken(currentToken, tokens);
-						currentToken.mType = OPERATOR;
-						currentToken.mSubType = DOT;
+						currentToken.mType = TokenType::OPERATOR;
+						currentToken.mSubType = TokenSubType::DOT;
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.append(1, currChar);
 						endToken(currentToken, tokens);
-					} else if (currentToken.mSubType == FLOAT_LITERAL) {// A *second* decimal point -> range operator
+					} else if (currentToken.mSubType == TokenSubType::FLOAT_LITERAL) {// A *second* decimal point -> range operator
 						// Split into 2 tokens, integer literal and range op
 						currentToken.mText.erase(currentToken.mText.size() - 1);
-						currentToken.mSubType = INTEGER_LITERAL;
+						currentToken.mSubType = TokenSubType::INTEGER_LITERAL;
 						currentToken.mEndOffset = start - 2;
 						endToken(currentToken, tokens);
 
-						currentToken.mType = OPERATOR;
-						currentToken.mSubType = RANGE;
+						currentToken.mType = TokenType::OPERATOR;
+						currentToken.mSubType = TokenSubType::RANGE;
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.append(2, currChar);
 						endToken(currentToken, tokens);
-					} else if (lastToken.mSubType == DOT) { // A 2nd dot -> range operator
+					} else if (lastToken.mSubType == TokenSubType::DOT) { // A 2nd dot -> range operator
 						tokens.pop_back();
 						currentToken.mText.append(2, currChar);
-						currentToken.mType = OPERATOR;
-						currentToken.mSubType = RANGE;
+						currentToken.mType = TokenType::OPERATOR;
+						currentToken.mSubType = TokenSubType::RANGE;
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 						endToken(currentToken, tokens);
-					} else if (currentToken.mSubType == INTEGER_LITERAL) {// Integers can't contain dots, so this must be a decimal number.
-						currentToken.mSubType = FLOAT_LITERAL;
+					} else if (currentToken.mSubType == TokenSubType::INTEGER_LITERAL) {// Integers can't contain dots, so this must be a decimal number.
+						currentToken.mSubType = TokenSubType::FLOAT_LITERAL;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.append(1, currChar);
-					} else if (currentToken.mType != NOTHING) {
+					} else if (currentToken.mType != TokenType::NOTHING) {
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.append(1, currChar);
 					}
 					break;
 
 				case '/':
-					if (currentToken.mSubType == STRING_LITERAL) {
+					if (currentToken.mSubType == TokenSubType::STRING_LITERAL) {
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.append(1, currChar);
-					} else if (currentToken.mType == POTENTIAL_COMMENT) {
-						currentToken.mType = COMMENT;
-						currentToken.mSubType = NONE;
+					} else if (currentToken.mType == TokenType::POTENTIAL_COMMENT) {
+						currentToken.mType = TokenType::COMMENT;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						currentToken.mText.erase();
 					} else {
 						endToken(currentToken, tokens);
-						currentToken.mType = POTENTIAL_COMMENT;
-						currentToken.mSubType = NONE;
+						currentToken.mType = TokenType::POTENTIAL_COMMENT;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.append(1, currChar);
@@ -141,13 +141,13 @@ namespace forest::parser {
 
 					break;
 				case '-':
-					if (currentToken.mSubType == STRING_LITERAL) {
+					if (currentToken.mSubType == TokenSubType::STRING_LITERAL) {
 						currentToken.mText.append(1, currChar);
 						currentToken.mEndOffset = end + 1;
 					} else {
 						endToken(currentToken, tokens);
-						currentToken.mType = POTENTIAL_NEGATIVE_NUMBER;
-						currentToken.mSubType = NONE;
+						currentToken.mType = TokenType::POTENTIAL_NEGATIVE_NUMBER;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.append(1, currChar);
@@ -166,10 +166,10 @@ namespace forest::parser {
 				case '+':
 				case '*':
 				case ',':
-					if (currentToken.mSubType != STRING_LITERAL) {
+					if (currentToken.mSubType != TokenSubType::STRING_LITERAL) {
 						endToken(currentToken, tokens);
-						currentToken.mType = OPERATOR;
-						currentToken.mSubType = NONE;
+						currentToken.mType = TokenType::OPERATOR;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.erase();
@@ -181,28 +181,28 @@ namespace forest::parser {
 					}
 					break;
 				case '"':
-					if (currentToken.mSubType == STRING_LITERAL) {
+					if (currentToken.mSubType == TokenSubType::STRING_LITERAL) {
 						currentToken.mEndOffset = end + 1;
 						endToken(currentToken, tokens);
 					} else {
-						if (currentToken.mType != NOTHING) {
+						if (currentToken.mType != TokenType::NOTHING) {
 							endToken(currentToken, tokens);
 						}
-						currentToken.mType = LITERAL;
-						currentToken.mSubType = STRING_LITERAL;
+						currentToken.mType = TokenType::LITERAL;
+						currentToken.mSubType = TokenSubType::STRING_LITERAL;
 						currentToken.mText.erase();
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 					}
 					break;
 				case '\\':
-					if (currentToken.mSubType == STRING_LITERAL) {
-						currentToken.mType = STRING_ESCAPE_SEQUENCE;
-						currentToken.mSubType = NONE;
+					if (currentToken.mSubType == TokenSubType::STRING_LITERAL) {
+						currentToken.mType = TokenType::STRING_ESCAPE_SEQUENCE;
+						currentToken.mSubType = TokenSubType::NOTHING;
 					} else { // \ in code is a reference operator
 						endToken(currentToken, tokens);
-						currentToken.mType = OPERATOR;
-						currentToken.mSubType = NONE;
+						currentToken.mType = TokenType::OPERATOR;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.erase();
@@ -212,8 +212,8 @@ namespace forest::parser {
 					break;
 				case ';':
 					endToken(currentToken, tokens);
-					currentToken.mType = SEMICOLON;
-					currentToken.mSubType = NONE;
+					currentToken.mType = TokenType::SEMICOLON;
+					currentToken.mSubType = TokenSubType::NOTHING;
 					currentToken.mText.append(1, currChar);
 					currentToken.mStartOffset = start;
 					currentToken.mEndOffset = end + 1;
@@ -221,7 +221,7 @@ namespace forest::parser {
 					break;
 				case ' ':
 				case '\t':
-					if (currentToken.mType == COMMENT || currentToken.mSubType == STRING_LITERAL) {
+					if (currentToken.mType == TokenType::COMMENT || currentToken.mSubType == TokenSubType::STRING_LITERAL) {
 						currentToken.mText.append(1, currChar);
 						break;
 					}
@@ -235,10 +235,10 @@ namespace forest::parser {
 					end = 0;
 					break;
 				default:
-					if (currentToken.mType == NOTHING || currentToken.mSubType == INTEGER_LITERAL || currentToken.mSubType == FLOAT_LITERAL) {
+					if (currentToken.mType == TokenType::NOTHING || currentToken.mSubType == TokenSubType::INTEGER_LITERAL || currentToken.mSubType == TokenSubType::FLOAT_LITERAL) {
 						endToken(currentToken, tokens);
-						currentToken.mType = IDENTIFIER;
-						currentToken.mSubType = NONE;
+						currentToken.mType = TokenType::IDENTIFIER;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						currentToken.mText.append(1, currChar);
 						currentToken.mStartOffset = start;
 						currentToken.mEndOffset = end + 1;
@@ -255,31 +255,31 @@ namespace forest::parser {
 	}
 
 	void Tokeniser::endToken(Token& currentToken, std::vector<Token>& tokens) {
-		if (currentToken.mType == IDENTIFIER) {
+		if (currentToken.mType == TokenType::IDENTIFIER) {
 			if (currentToken.mText == "return") {
-				currentToken.mSubType = RETURN;
+				currentToken.mSubType = TokenSubType::RETURN;
 			} else if (currentToken.mText == "break") {
-				currentToken.mSubType = BREAK;
+				currentToken.mSubType = TokenSubType::BREAK;
 			} else if (currentToken.mText == "skip") {
-				currentToken.mSubType = SKIP;
+				currentToken.mSubType = TokenSubType::SKIP;
 			} else {
-				currentToken.mSubType = USER_DEFINED;
+				currentToken.mSubType = TokenSubType::USER_DEFINED;
 			}
 
 			tokens.push_back(currentToken);
-		} else if (currentToken.mType == COMMENT) {
+		} else if (currentToken.mType == TokenType::COMMENT) {
 			std::cout << "Ignoring comment: " << currentToken.mText << std::endl;
-		} else if (currentToken.mType != NOTHING) {
+		} else if (currentToken.mType != TokenType::NOTHING) {
 			tokens.push_back(currentToken);
 		}
 
-		currentToken.mType = NOTHING;
-		currentToken.mSubType = NONE;
+		currentToken.mType = TokenType::NOTHING;
+		currentToken.mSubType = TokenSubType::NOTHING;
 		currentToken.mText.erase();
 	}
 
 	void Token::debugPrint() const {
-		std::cout << "Token (" << TokenTypes[mType] << ", " << TokenSubTypes[mSubType]
+		std::cout << "Token (" << TokenTypes[int(mType)] << ", " << TokenSubTypes[int(mSubType)]
 		<< ", \"" << mText << "\" " << file << ":" << mLineNumber << ":" << mStartOffset << "-" << mEndOffset << ")"
 		<< std::endl;
 	}
@@ -290,6 +290,6 @@ namespace forest::parser {
 	}
 
 	const char* Token::getType() const {
-		return TokenTypes[mType];
+		return TokenTypes[int(mType)];
 	}
 } // forest

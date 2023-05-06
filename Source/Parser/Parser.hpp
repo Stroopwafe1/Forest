@@ -6,9 +6,10 @@
 #include <vector>
 #include <optional>
 #include "Tokeniser.hpp"
+#include "Expression.hpp"
 
 namespace forest::parser {
-	enum Builtin_Type {
+	enum class Builtin_Type {
 		UNDEFINED,
 		UI8,
 		UI16,
@@ -29,20 +30,21 @@ namespace forest::parser {
 		VOID,
 	};
 
-	enum Statement_Type {
+	enum class Statement_Type {
 		VAR_DECLARATION,
 		FUNC_CALL,
 		RETURN_CALL,
 		LOOP,
 		IF,
+		ARRAY_INDEX,
 	};
 
-	enum StdLib_Class_Type {
+	enum class StdLib_Class_Type {
 		STDIN,
 		STDOUT,
 	};
 
-	enum StdLib_Function_Type {
+	enum class StdLib_Function_Type {
 		READ,
 		READLN,
 		WRITE,
@@ -112,8 +114,8 @@ namespace forest::parser {
 		std::vector<Literal> literals;
 		bool requires_libs = false;
 
-		std::optional<Literal> findLiteral(const std::string& alias) {
-			for (std::vector<Literal>::iterator it = literals.begin(); it != literals.end(); it++) {
+		std::optional<Literal> findLiteral(const std::string& alias) const {
+			for (std::vector<Literal>::const_iterator it = literals.begin(); it != literals.end(); it++) {
 				if ((*it).mAlias == alias) return (*it);
 			}
 			return std::nullopt;
@@ -127,6 +129,7 @@ namespace forest::parser {
 	private:
 		static Builtin_Type getTypeFromName(const std::string& name);
 		Type getTypeFromRange(const Range& range);
+		std::optional<Token> peekNextToken();
 		std::optional<Token> expectIdentifier(const std::string& name = "");
 		std::optional<Token> expectOperator(const std::string& name = "");
 		std::optional<Token> expectLiteral(const std::string& name = "");
@@ -136,8 +139,10 @@ namespace forest::parser {
 		std::optional<Block> expectBlock();
 		std::optional<Statement> tryParseStdLibFunction();
 		std::optional<Statement> tryParseLoop();
+		std::optional<Expression> tryParseExpression(const Statement& statementContext);
 
 		std::vector<Token>::iterator mCurrentToken;
+		std::vector<Token>::iterator mTokensEnd;
 		std::vector<Literal> literals;
 		bool requires_libs = false;
 	};

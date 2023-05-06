@@ -6,7 +6,7 @@
 
 namespace forest::parser {
 
-	enum TokenType {
+	enum class TokenType : int {
 		NOTHING = 0,
 		IDENTIFIER,
 		LITERAL,
@@ -18,8 +18,8 @@ namespace forest::parser {
 		POTENTIAL_NEGATIVE_NUMBER
 	};
 
-	enum TokenSubType {
-		NONE = 0,
+	enum class TokenSubType : int {
+		NOTHING = 0,
 		INTEGER_LITERAL,
 		FLOAT_LITERAL,
 		STRING_LITERAL,
@@ -62,8 +62,8 @@ namespace forest::parser {
 
 	class Token {
 	public:
-		enum TokenType mType {NOTHING};
-		enum TokenSubType mSubType {NONE};
+		TokenType mType {TokenType::NOTHING};
+		TokenSubType mSubType {TokenSubType::NOTHING};
 		std::string mText;
 		size_t mStartOffset{0};
 		size_t mEndOffset{0};

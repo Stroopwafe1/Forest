@@ -5,7 +5,7 @@ include_directories(../Tokeniser)
 add_library(ForestParser STATIC
         Parser.hpp
         Parser.cpp
-)
+        Expression.cpp Expression.hpp Node.cpp Node.hpp)
 
 target_include_directories(ForestParser PUBLIC .)
 set_target_properties(ForestParser PROPERTIES VERSION ${PROJECT_VERSION})
