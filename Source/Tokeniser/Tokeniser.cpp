@@ -34,11 +34,15 @@ namespace forest::parser {
 						break;
 					default:
 						throw std::runtime_error(std::string("Unknown escape sequence: \\") + currChar +
-						" in string at " + std::to_string(currentToken.mLineNumber) + ":" + std::to_string(currentToken.mEndOffset));
+												 " in string at " + std::to_string(currentToken.mLineNumber) + ":" +
+												 std::to_string(currentToken.mEndOffset));
 				}
 				currentToken.mType = TokenType::LITERAL;
 				currentToken.mSubType = TokenSubType::STRING_LITERAL;
 				currentToken.mEndOffset = end + 1;
+				continue;
+			} else if (currentToken.mType == TokenType::LITERAL && currentToken.mSubType == TokenSubType::STRING_LITERAL && currChar != '\\' && currChar != '"') {
+				currentToken.mText.append(1, currChar);
 				continue;
 			} else if (currentToken.mType == TokenType::POTENTIAL_COMMENT && currChar != '/') {
 				currentToken.mType = TokenType::OPERATOR;
@@ -278,10 +282,24 @@ namespace forest::parser {
 		currentToken.mText.erase();
 	}
 
+	Token::Token() {
+		mType = TokenType::NOTHING;
+		mSubType = TokenSubType::NOTHING;
+		mText = "";
+		mStartOffset = 0;
+		mEndOffset = 0;
+		mLineNumber = 0;
+		file = "";
+	}
+
 	void Token::debugPrint() const {
 		std::cout << "Token (" << TokenTypes[int(mType)] << ", " << TokenSubTypes[int(mSubType)]
 		<< ", \"" << mText << "\" " << file << ":" << mLineNumber << ":" << mStartOffset << "-" << mEndOffset << ")"
 		<< std::endl;
+	}
+
+	const char* Token::getType() const {
+		return TokenTypes[int(mType)];
 	}
 
 	std::ostream& operator<<(std::ostream& os, const Token& t) {
@@ -289,7 +307,4 @@ namespace forest::parser {
 		return os;
 	}
 
-	const char* Token::getType() const {
-		return TokenTypes[int(mType)];
-	}
 } // forest

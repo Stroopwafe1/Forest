@@ -1,7 +1,9 @@
 #include "Expression.hpp"
 
 namespace forest::parser {
+
 	Expression::~Expression() {
-		delete mRoot;
+		delete mLeft;
+		delete mRight;
 	}
 } // forest::parser

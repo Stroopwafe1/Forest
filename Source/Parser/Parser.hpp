@@ -126,7 +126,7 @@ namespace forest::parser {
 	public:
 		Programme parse(std::vector<Token>& tokens);
 
-	private:
+	public: // This was private before implementing testing. I care more about making sure the code does what it needs to do than following OOP principles.
 		static Builtin_Type getTypeFromName(const std::string& name);
 		Type getTypeFromRange(const Range& range);
 		std::optional<Token> peekNextToken();
@@ -139,7 +139,7 @@ namespace forest::parser {
 		std::optional<Block> expectBlock();
 		std::optional<Statement> tryParseStdLibFunction();
 		std::optional<Statement> tryParseLoop();
-		std::optional<Expression> tryParseExpression(const Statement& statementContext);
+		Expression* tryParseExpression(const Statement& statementContext);
 
 		std::vector<Token>::iterator mCurrentToken;
 		std::vector<Token>::iterator mTokensEnd;

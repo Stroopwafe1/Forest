@@ -3,7 +3,6 @@
 #include <sstream>
 #include <string>
 #include <stack>
-#include <map>
 #include "Parser.hpp"
 #include "Tokeniser.hpp"
 
@@ -412,93 +411,100 @@ namespace forest::parser {
 		return Type {id->mText, getTypeFromName(id->mText)};
 	}
 
-	std::optional<Expression> Parser::tryParseExpression(const Statement& statementContext) {
+	Expression* Parser::tryParseExpression(const Statement& statementContext) {
 		std::vector<Token>::iterator saved = mCurrentToken;
 		// While no semicolon for variable assignment or return call, parse
 		// While no ')' for function calls or if-statements, parse
 		// While no ']' for array indexing, parse
 		// While no '{' for range statement, parse
-		std::optional<Token> nextToken = peekNextToken();
 		std::stack<char> parenStack;
-		std::vector<Node*> nodes;
+		std::vector<Expression*> nodes;
 
 		// While the next token exists and is not a closing character for the current statement context
-		while (nextToken.has_value() && !((
-					(nextToken.value().mText == ")" && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF)) ||
-					(nextToken.value().mText == "]" && (statementContext.mType == Statement_Type::ARRAY_INDEX)) ||
-					(nextToken.value().mText == "}" && (statementContext.mType == Statement_Type::LOOP)) ||
-					(nextToken.value().mType == TokenType::SEMICOLON)
+		while (mCurrentToken != mTokensEnd && !((
+					(mCurrentToken->mText == ")" && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF)) ||
+					(mCurrentToken->mText == "]" && (statementContext.mType == Statement_Type::ARRAY_INDEX)) ||
+					(mCurrentToken->mText == "}" && (statementContext.mType == Statement_Type::LOOP)) ||
+					(mCurrentToken->mType == TokenType::SEMICOLON)
 				) && parenStack.empty() )
 			) {
-			if (nextToken.value().mText == "(") {
+			if (mCurrentToken->mText == "(") {
 				parenStack.push('(');
-			} else if (nextToken.value().mType == TokenType::IDENTIFIER) {
-				std::optional<Token> identifier = expectIdentifier();
-				Node* node = new Node;
-				node->mValue = identifier.value();
-				nodes.push_back(node);
-			} else if (nextToken.value().mType == TokenType::OPERATOR) {
-				std::optional<Token> op = expectOperator();
-				Node* node = new Node;
-				node->mValue = op.value();
-				nodes.push_back(node);
-			} else if (nextToken.value().mType == TokenType::LITERAL) {
-				std::optional<Token> literal = expectLiteral();
-				Node* node;
-				node->mValue = literal.value();
-				nodes.push_back(node);
-			} else if (nextToken.value().mText == ")") {
+				expectOperator("(");
+			} else if (mCurrentToken->mText == ")") {
+				expectOperator(")");
 				// Pop parenStack
 				// Pop last 3 nodes
 				// Put middle node as root
 				// Push back root node into vector
 				parenStack.pop();
-				Node* right = nodes.back();
+				Expression* right = nodes.back();
 				nodes.pop_back();
-				Node* op = nodes.back();
+				Expression* op = nodes.back();
 				nodes.pop_back();
-				Node* left = nodes.back();
+				Expression* left = nodes.back();
 				nodes.pop_back();
 
 				if (op->mValue.mType != TokenType::OPERATOR) {
 					std::cerr << "Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
 					mCurrentToken = saved;
-					return std::nullopt;
+					return nullptr;
 				}
-				/*if (left->mValue.mType != TokenType::LITERAL || left->mValue.mType != TokenType::IDENTIFIER) {
-					std::cerr << "Expected a literal or identifier while parsing the expression at " << left->mValue << " but got '" << left->mValue.mText << "' instead." << std::endl;
-					mCurrentToken = saved;
-					return std::nullopt;
-				}
-				if (right->mValue.mType != TokenType::LITERAL || right->mValue.mType != TokenType::IDENTIFIER) {
-					std::cerr << "Expected a literal or identifier while parsing the expression at " << right->mValue << " but got '" << right->mValue.mText << "' instead." << std::endl;
-					mCurrentToken = saved;
-					return std::nullopt;
-				}*/ // These are commented out because left or right can be an operator when we push back the root
 
 				op->mLeft = left;
 				op->mRight = right;
 				nodes.push_back(op);
+			} else if (mCurrentToken->mType == TokenType::IDENTIFIER) {
+				std::optional<Token> identifier = expectIdentifier();
+				Expression* node = new Expression;
+				node->mValue = identifier.value();
+				nodes.push_back(node);
+			} else if (mCurrentToken->mType == TokenType::OPERATOR) {
+				std::optional<Token> op = expectOperator();
+				Expression* node = new Expression;
+				node->mValue = op.value();
+				nodes.push_back(node);
+			} else if (mCurrentToken->mType == TokenType::LITERAL) {
+				std::optional<Token> literal = expectLiteral();
+				Expression* node = new Expression;
+				node->mValue = literal.value();
+				nodes.push_back(node);
 			}
 
 			// E.g. (4 - (3 + 1)) or ((4 - 3) + 1)
-
-			nextToken = peekNextToken();
 		} // End of while
+		if (nodes.size() == 3) {
+			Expression* right = nodes.back();
+			nodes.pop_back();
+			Expression* op = nodes.back();
+			nodes.pop_back();
+			Expression* left = nodes.back();
+			nodes.pop_back();
+
+			if (op->mValue.mType != TokenType::OPERATOR) {
+				std::cerr << "Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
+				mCurrentToken = saved;
+				return nullptr;
+			}
+
+			op->mLeft = left;
+			op->mRight = right;
+			nodes.push_back(op);
+		}
 
 		if (nodes.empty()) {
 			std::cerr << "Zero nodes found while parsing expression at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
-			return std::nullopt;
+			return nullptr;
 		} else if (nodes.size() > 1) {
 			std::cerr << "Unexpected amount of nodes while parsing expression. Found " << nodes.size() << " but expected one. Full list:" << std::endl;
 			for (auto node : nodes) {
-				std::cerr << "Unexpected node at " << node << std::endl;
+				std::cerr << "Unexpected node at " << (*node).mValue << std::endl;
 			}
 			mCurrentToken = saved;
-			return std::nullopt;
+			return nullptr;
 		}
 
-		return Expression { nodes[0] };
+		return nodes[0];
 	}
 } // forest::parser

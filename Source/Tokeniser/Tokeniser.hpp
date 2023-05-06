@@ -48,7 +48,7 @@ namespace forest::parser {
 	};
 
 	static const char* TokenSubTypes[] = {
-		"NONE",
+		"NOTHING",
 		"INTEGER_LITERAL",
 		"FLOAT_LITERAL",
 		"STRING_LITERAL",
@@ -69,6 +69,8 @@ namespace forest::parser {
 		size_t mEndOffset{0};
 		size_t mLineNumber{1};
 		std::string file;
+
+		Token();
 
 		void debugPrint() const;
 		const char* getType() const;

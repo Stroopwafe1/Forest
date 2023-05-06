@@ -1,17 +1,17 @@
 #ifndef FOREST_EXPRESSION_HPP
 #define FOREST_EXPRESSION_HPP
 
-#include "Node.hpp"
+#include "Tokeniser.hpp"
 
 namespace forest::parser {
 
 	class Expression {
 	public:
-		Node* mRoot;
+		Expression* mLeft = nullptr;
+		Expression* mRight = nullptr;
+		Token mValue {};
 
 		~Expression();
-
-
 	};
 
 } // forest::parser

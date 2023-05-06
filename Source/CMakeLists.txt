@@ -4,10 +4,14 @@ project(Forest)
 set(CMAKE_CXX_STANDARD 17)
 add_subdirectory(Tokeniser)
 add_subdirectory(Parser)
+add_subdirectory(Tests)
+
+enable_testing()
 
 add_executable(Forest
         main.cpp
-        X86_64LinuxYasmCompiler.cpp X86_64LinuxYasmCompiler.hpp)
+        X86_64LinuxYasmCompiler.cpp
+        X86_64LinuxYasmCompiler.hpp)
 
 target_link_libraries(Forest PUBLIC ForestTokeniser ForestParser)
 target_include_directories(Forest PUBLIC
