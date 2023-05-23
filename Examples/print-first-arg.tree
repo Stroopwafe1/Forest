@@ -1,0 +1,4 @@
+i32 main(string[] argv) {
+    stdout.writeln(argv[0]);
+    return 0;
+}
