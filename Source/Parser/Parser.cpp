@@ -332,7 +332,7 @@ namespace forest::parser {
 				return std::nullopt;
 			}
 			// Expect a range
-			// TODO: Allow for variables in range declaration
+			// TODO: Allow for ~~variables~~ ANY expression in range declaration
 			std::optional<Token> min = expectLiteral();
 			if (!min.has_value()) {
 				std::cerr << "Expected a beginning of a range declaration at " << *mCurrentToken << std::endl;
@@ -517,7 +517,7 @@ namespace forest::parser {
 		return Type {id->mText, getTypeFromName(id->mText)};
 	}
 
-	Expression* Parser::expectExpression(const Statement& statementContext, bool collapse) {
+	Expression* Parser::expectExpression(Statement& statementContext, bool collapse) {
 		std::vector<Token>::iterator saved = mCurrentToken;
 		// While no semicolon for variable assignment or return call, parse
 		// While no ')' for function calls or if-statements, parse
@@ -561,10 +561,40 @@ namespace forest::parser {
 				op->mRight = right;
 				nodes.push_back(op);
 			} else if (mCurrentToken->mType == TokenType::IDENTIFIER) {
+				std::optional<Token> nextToken = peekNextToken();
 				std::optional<Token> identifier = expectIdentifier();
-				Expression* node = new Expression;
-				node->mValue = identifier.value();
-				nodes.push_back(node);
+				if (nextToken.has_value() && nextToken.value().mText == "[") {
+					std::optional<Token> arrayIndex = expectOperator("[");
+					Statement newStatement;
+					newStatement.mType = Statement_Type::ARRAY_INDEX;
+
+					// Array indexing expression is the following tree
+					//            [
+					//         /     \
+					//        id       index of array
+					Expression* node = new Expression;
+					node->mValue = arrayIndex.value();
+					Expression* left = new Expression;
+					left->mValue = identifier.value();
+					Expression* right = expectExpression(newStatement);
+					expectOperator("]"); // We discard this value because we don't need it
+					node->mLeft = left;
+					node->mRight = right;
+					nodes.push_back(node);
+				} else if (nextToken.has_value() && nextToken.value().mText == "(") {
+					// Can only be function call, would be regular operator if this is meant to be a variable
+					// ui8 foo = bar(
+					// TODO: Transfer function calls to expressions like array indexing above
+					// TODO: Current token is already consumed if we were to try to parse function call + Make function calls more generic than standard library function
+					Statement newStatement;
+					newStatement.mType = Statement_Type::FUNC_CALL;
+					newStatement.mContent = expectExpression(newStatement);
+					statementContext.mSubStatements.push_back(newStatement);
+				} else {
+					Expression* node = new Expression;
+					node->mValue = identifier.value();
+					nodes.push_back(node);
+				}
 			} else if (mCurrentToken->mType == TokenType::OPERATOR) {
 				std::optional<Token> op = expectOperator();
 				Expression* node = new Expression;

@@ -38,7 +38,7 @@ namespace forest::parser {
 		RETURN_CALL,
 		LOOP,
 		IF,
-		ARRAY_INDEX,
+		ARRAY_INDEX, // Not actually a statement, but used for parsing array indexing expressions
 	};
 
 	enum class StdLib_Class_Type {
@@ -94,9 +94,10 @@ namespace forest::parser {
 	struct Statement {
 		Statement_Type mType = Statement_Type::NOTHING;
 		Expression* mContent{};
-		std::optional<FuncCallStatement> funcCall;
-		std::optional<LoopStatement> loopStatement;
-		std::optional<Variable> variable;
+		std::optional<FuncCallStatement> funcCall = std::nullopt;
+		std::optional<LoopStatement> loopStatement = std::nullopt;
+		std::optional<Variable> variable = std::nullopt;
+		std::vector<Statement> mSubStatements{};
 	};
 
 	struct Function {
@@ -127,7 +128,8 @@ namespace forest::parser {
 		std::optional<Literal> findLiteralByContent(const std::string& content) const {
 			for (const auto& literal : literals) {
 				std::string s = literal.mContent;
-				if (s.rfind('\n') != std::string::npos) {
+				if (s == content) return literal; // First try to see if it matches literally
+				if (s.rfind('\n') != std::string::npos) { // Otherwise try to see if it matches without newline
 					s = s.substr(0, literal.mContent.find_last_of('\n'));
 				}
 				if (s == content) return literal;
@@ -156,7 +158,7 @@ namespace forest::parser {
 		std::optional<Statement> tryParseLoop();
 		std::optional<Statement> tryParseReturnCall();
 		std::optional<Statement> tryParseVariableDeclaration();
-		Expression* expectExpression(const Statement& statementContext, bool collapse = false);
+		Expression* expectExpression(Statement& statementContext, bool collapse = false);
 
 		std::vector<Token>::iterator mCurrentToken;
 		std::vector<Token>::iterator mTokensEnd;
