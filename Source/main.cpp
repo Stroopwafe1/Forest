@@ -14,7 +14,8 @@ namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {
 	//fs::path filePath = argc == 1 ? "../Examples/print-first-arg.tree" : argv[1];
-	fs::path filePath = argc == 1 ? "../Examples/seq100.tree" : argv[1];
+	//fs::path filePath = argc == 1 ? "../Examples/seq100.tree" : argv[1];
+	fs::path filePath = argc == 1 ? "../Examples/libc.tree" : argv[1];
 	fs::path fileName = filePath.stem();
 
 	if (argc >= 2) {

@@ -1,0 +1,9 @@
+#depends(c)
+
+i32 main(string[] argv) {
+    e:printf("Hello from %s\n", "Forest!");
+    e:puts("You can use any function from any library");
+    e:puts("The e: stands for an external function, you just have to make sure you link with the right libraries");
+    e:puts("Like above, this file depends on 'c', or the libc library");
+    return 0;
+}

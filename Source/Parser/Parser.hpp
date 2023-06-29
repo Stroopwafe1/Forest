@@ -41,6 +41,12 @@ namespace forest::parser {
 		ARRAY_INDEX, // Not actually a statement, but used for parsing array indexing expressions
 	};
 
+	enum class SpecialStatementType {
+		NOTHING,
+		DEPENDENCY,
+		ASSERT,
+	};
+
 	struct Type {
 		std::string name;
 		Builtin_Type builtinType;
@@ -90,6 +96,11 @@ namespace forest::parser {
 		std::vector<Statement> mSubStatements{};
 	};
 
+	struct SpecialStatement {
+		SpecialStatementType mType;
+		Expression* mContent{};
+	};
+
 	struct Function {
 		Type mReturnType;
 		std::string mName;
@@ -107,6 +118,7 @@ namespace forest::parser {
 		std::vector<Function> functions;
 		std::vector<Literal> literals;
 		std::vector<FuncCallStatement> externalFunctions;
+		std::vector<std::string> libDependencies;
 		bool requires_libs = false;
 
 		std::optional<Literal> findLiteralByAlias(const std::string& alias) const {
@@ -145,6 +157,7 @@ namespace forest::parser {
 		std::optional<Function> expectFunction();
 		std::optional<Block> expectBlock();
 		std::optional<Statement> expectStatement();
+		std::optional<SpecialStatement> expectSpecialStatement();
 		std::optional<Statement> tryParseFunctionCall();
 		std::optional<Statement> tryParseLoop();
 		std::optional<Statement> tryParseReturnCall();
@@ -155,6 +168,7 @@ namespace forest::parser {
 		std::vector<Token>::iterator mTokensEnd;
 		std::vector<Literal> literals;
 		std::vector<FuncCallStatement> externalFunctions;
+		std::vector<std::string> libDependencies;
 		bool requires_libs = false;
 	};
 

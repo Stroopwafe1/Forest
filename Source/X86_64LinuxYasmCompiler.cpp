@@ -52,20 +52,20 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 	labelCount = 0;
 	outfile << "section .data" << std::endl;
 	for (const auto& literal : p.literals) {
-		outfile << "\t" << literal.mAlias << " db \"";
+		outfile << "\t" << literal.mAlias << ": db \"";
 		if (literal.mContent[literal.mContent.size() - 1] == '\n') {
 			// Replace \n in string with ',0xA' put after the quote
-			outfile << literal.mContent.substr(0, literal.mContent.size() - 1) << "\",0xA" << std::endl;
+			outfile << literal.mContent.substr(0, literal.mContent.size() - 1) << "\",0xA,0" << std::endl;
 		} else {
 			// Just write the string normally
-			outfile << literal.mContent << "\"" << std::endl;
+			outfile << literal.mContent << "\"" << ",0" << std::endl;
 		}
 	}
 	outfile << std::endl;
 	outfile << "section .text" << std::endl;
 
 	for (const auto& funcCall : p.externalFunctions) {
-		outfile << "\textern " << funcCall.mFunctionName;
+		outfile << "\textern " << funcCall.mFunctionName << std::endl;
 	}
 
 	outfile << "\tglobal _start" << std::endl;
@@ -108,7 +108,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 
 	outfile.close();
 
-	bool debug = false;
+	bool debug = true;
 
 	std::stringstream assembler;
 	assembler << "yasm -f elf64";
@@ -124,7 +124,10 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 		linker << " -s -z noseparate-code ";
 	else
 		linker << " -g";
-	linker << " -o ./build/" << fileName.stem().string() << " ./build/" << fileName.stem().string() << ".o";
+	linker << " -o ./build/" << fileName.stem().string() << " --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ./build/" << fileName.stem().string() << ".o";
+	for (auto& dependency : p.libDependencies) {
+		linker << " -l" << dependency;
+	}
 	//std::cout << linker.str().c_str() << std::endl;
 	std::system(linker.str().c_str());
 
@@ -316,11 +319,19 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					break;
 				}
 				for (int i = statement.funcCall.value().mArgs.size() - 1; i >= 0; i--) {
+					std::string value;
+					Expression* expr = statement.funcCall.value().mArgs[i];
+					if (expr->mValue.mSubType == forest::parser::TokenSubType::STRING_LITERAL) {
+						value = p.findLiteralByContent(expr->mValue.mText)->mAlias;
+					} else {
+						value = expr->mValue.mText;
+					}
 					if (i <= 6)
-						outfile << "\tmov " << callingConvention[i] << ", "	<< statement.funcCall.value().mArgs[i] << std::endl;
+						outfile << "\tmov " << callingConvention[i] << ", "	<< value << std::endl;
 					else
-						outfile << "\tpush " << statement.funcCall.value().mArgs[i] << std::endl;
+						outfile << "\tpush " << value << std::endl;
 				}
+				outfile << "\tmov rax, 0" << std::endl;
 				outfile << "\tcall " << statement.funcCall.value().mFunctionName << std::endl;
 				break;
 			}

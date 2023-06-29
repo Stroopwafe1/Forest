@@ -12,13 +12,21 @@ namespace forest::parser {
 		std::vector<Function> functions;
 		mTokensEnd = tokens.end();
 		while (mCurrentToken != tokens.end()) {
-			/*std::optional<Token> id = expectIdentifier();
-			if (!id.has_value()) {
-				std::cerr << "Expected identifier at: " << *mCurrentToken << ". But found a " << mCurrentToken->getType() << " instead with value '" << mCurrentToken->mText << "'." << std::endl;
-				mCurrentToken++;
-			} else {
-				std::cout << "Successfully parsed identifier at " << id.value() << " with value: " << id.value().mText << std::endl;
-			}*/
+			if (mCurrentToken->mText == "#") {
+				// Parse special statement
+				// #depends(c)
+				// #assert(a == 3)
+				// etc...
+				std::optional<SpecialStatement> special = expectSpecialStatement();
+				if (special.has_value()) {
+					if (special.value().mType == SpecialStatementType::DEPENDENCY) {
+						Token& t = special.value().mContent->mValue;
+						if (t.mType == TokenType::IDENTIFIER) {
+							libDependencies.push_back(t.mText);
+						}
+					}
+				}
+			}
 			std::optional<Function> f = expectFunction();
 			if (!f.has_value()) {
 				break;
@@ -27,7 +35,7 @@ namespace forest::parser {
 				functions.push_back(f.value());
 			}
 		}
-		return Programme { functions, literals, externalFunctions, requires_libs };
+		return Programme { functions, literals, externalFunctions, libDependencies, requires_libs };
 	}
 
 	std::optional<Token> Parser::peekNextToken() {
@@ -196,6 +204,37 @@ namespace forest::parser {
 		return std::nullopt;
 	}
 
+	std::optional<SpecialStatement> Parser::expectSpecialStatement() {
+		std::vector<Token>::iterator saved = mCurrentToken;
+		std::optional<Token> hash = expectOperator("#");
+		if (!hash.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		std::optional<Token> type = expectIdentifier();
+		if (!type.has_value()) {
+			mCurrentToken = saved;
+			std::cerr << "Expected a function name after the # at " << *mCurrentToken << std::endl;
+			return std::nullopt;
+		}
+		SpecialStatementType actualType = SpecialStatementType::NOTHING;
+		if (type.value().mText == "depends") {
+			actualType = SpecialStatementType::DEPENDENCY;
+		} else if (type.value().mText == "assert") {
+			actualType = SpecialStatementType::ASSERT;
+		}
+
+		std::optional<Token> paren = expectOperator("(");
+
+		Statement s;
+		s.mType = Statement_Type::FUNC_CALL;
+		Expression* content = expectExpression(s);
+
+		std::optional<Token> rparen = expectOperator(")");
+
+		return SpecialStatement {actualType, content};
+	}
+
 	std::optional<Statement> Parser::tryParseFunctionCall() {
 		std::vector<Token>::iterator saved = mCurrentToken;
 		Statement returnValue;
@@ -282,7 +321,8 @@ namespace forest::parser {
 				return std::nullopt;
 			}
 		}
-		requires_libs = true;
+		if (functionName.value().mText == "write" || functionName.value().mText == "writeln")
+			requires_libs = true;
 		fc.mArgs = args;
 
 		std::optional<Token> semi = expectSemicolon();
