@@ -49,7 +49,6 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 	std::ofstream outfile;
 	outfile.open(outPath);
 
-	// Compile main. TODO: Also add other functions
 	labelCount = 0;
 	outfile << "section .data" << std::endl;
 	for (const auto& literal : p.literals) {
