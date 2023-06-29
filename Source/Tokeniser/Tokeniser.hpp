@@ -27,6 +27,7 @@ namespace forest::parser {
 		// Maybe operator subtypes too
 		DOT,
 		RANGE,
+		NAMESPACE,
 
 		// Keyword Identifiers
 		RETURN,
@@ -54,6 +55,7 @@ namespace forest::parser {
 		"STRING_LITERAL",
 		"DOT",
 		"RANGE",
+		"NAMESPACE",
 		"RETURN",
 		"BREAK",
 		"SKIP",

@@ -381,12 +381,12 @@ TEST_F(ParserTests, ParserTryParseLoopStatement) {
 	EXPECT_EQ(loop.mIterator.value().mType.builtinType, Builtin_Type::UI8);
 	EXPECT_STREQ(loop.mIterator.value().mName.c_str(), "i");
 
-	EXPECT_EQ(loop.mRange.value().mMinimum, 0);
-	EXPECT_EQ(loop.mRange.value().mMaximum, 10);
+	EXPECT_STREQ(loop.mRange.value().mMinimum->mValue.mText.c_str(), "0");
+	EXPECT_STREQ(loop.mRange.value().mMaximum->mValue.mText.c_str(), "10");
 }
 
 TEST_F(ParserTests, ParserTryParseFuncCallStatement) {
-	std::vector<Token> tokens = Tokeniser::parse("stdout.write(20);", "testing.tree");
+	std::vector<Token> tokens = Tokeniser::parse("stdlib::stdout.write(20);", "testing.tree");
 	parser.mCurrentToken = tokens.begin();
 	parser.mTokensEnd = tokens.end();
 
@@ -398,14 +398,45 @@ TEST_F(ParserTests, ParserTryParseFuncCallStatement) {
 	ASSERT_TRUE(statement.value().funcCall.has_value());
 
 	FuncCallStatement fc = statement.value().funcCall.value();
-	EXPECT_EQ(fc.mClassType, StdLib_Class_Type::STDOUT);
-	EXPECT_EQ(fc.mFunctionType, StdLib_Function_Type::WRITE);
+	EXPECT_STREQ(fc.mNamespace.c_str(), "stdlib");
+	EXPECT_STREQ(fc.mClassName.c_str(), "stdout");
+	EXPECT_STREQ(fc.mFunctionName.c_str(), "write");
 	ASSERT_EQ(fc.mArgs.size(), 1);
 
 	Expression* arg = fc.mArgs[0];
 	EXPECT_EQ(arg->mValue.mType, TokenType::LITERAL);
 	EXPECT_EQ(arg->mValue.mSubType, TokenSubType::INTEGER_LITERAL);
 	EXPECT_STREQ(arg->mValue.mText.c_str(), "20");
+}
+
+TEST_F(ParserTests, ParserTryParseExternalFuncCallStatement) {
+	std::vector<Token> tokens = Tokeniser::parse(R"(e:printf("Hello, %s", "Forest!");)", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::FUNC_CALL);
+	EXPECT_FALSE(statement.value().loopStatement.has_value());
+	ASSERT_TRUE(statement.value().funcCall.has_value());
+
+	FuncCallStatement fc = statement.value().funcCall.value();
+	EXPECT_STREQ(fc.mNamespace.c_str(), "");
+	EXPECT_STREQ(fc.mClassName.c_str(), "");
+	EXPECT_STREQ(fc.mFunctionName.c_str(), "printf");
+	EXPECT_TRUE(fc.mIsExternal);
+	ASSERT_EQ(fc.mArgs.size(), 2);
+
+	Expression* arg0 = fc.mArgs[0];
+	EXPECT_EQ(arg0->mValue.mType, TokenType::LITERAL);
+	EXPECT_EQ(arg0->mValue.mSubType, TokenSubType::STRING_LITERAL);
+	EXPECT_STREQ(arg0->mValue.mText.c_str(), "Hello, %s");
+
+	Expression* arg1 = fc.mArgs[1];
+	EXPECT_EQ(arg1->mValue.mType, TokenType::LITERAL);
+	EXPECT_EQ(arg1->mValue.mSubType, TokenSubType::STRING_LITERAL);
+	EXPECT_STREQ(arg1->mValue.mText.c_str(), "Forest!");
 }
 
 TEST_F(ParserTests, ParserTryParseVariableStatement) {
@@ -420,4 +451,10 @@ TEST_F(ParserTests, ParserTryParseVariableStatement) {
 	EXPECT_STREQ(statement.value().mContent->mValue.mText.c_str(), "100");
 	EXPECT_FALSE(statement.value().loopStatement.has_value());
 	EXPECT_FALSE(statement.value().funcCall.has_value());
+
+	ASSERT_TRUE(statement.value().variable.has_value());
+	Variable var = statement.value().variable.value();
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
 }

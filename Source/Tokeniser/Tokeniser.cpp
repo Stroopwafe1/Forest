@@ -57,7 +57,7 @@ namespace forest::parser {
 				endToken(currentToken, tokens);
 			}
 
-			// TODO: We've forgotten completely about char literals
+			// TODO: We've forgotten completely about char literals, and power of (**), and <=, ==, =>, ||, &&, |, &, !, /*, */, @,
 			switch (currChar) {
 				case '0':
 				case '1':
@@ -176,6 +176,22 @@ namespace forest::parser {
 					currentToken.mText.append(1, currChar);
 					endToken(currentToken, tokens);
 					break;
+				case ':':
+					if (currentToken.mType == TokenType::OPERATOR && currentToken.mText == ":") {
+						currentToken.mText.append(1, ':');
+						currentToken.mEndOffset++;
+						currentToken.mSubType = TokenSubType::NAMESPACE;
+						endToken(currentToken, tokens);
+						break;
+					}
+					endToken(currentToken, tokens);
+					currentToken.mType = TokenType::OPERATOR;
+					currentToken.mSubType = TokenSubType::NOTHING;
+					currentToken.mStartOffset = start;
+					currentToken.mEndOffset = end + 1;
+					currentToken.mText.erase();
+					currentToken.mText.append(1, currChar);
+					break;
 				case '"':
 					if (currentToken.mSubType == TokenSubType::STRING_LITERAL) {
 						currentToken.mEndOffset = end + 1;
@@ -231,7 +247,7 @@ namespace forest::parser {
 					end = 0;
 					break;
 				default:
-					if (currentToken.mType == TokenType::NOTHING || currentToken.mSubType == TokenSubType::INTEGER_LITERAL || currentToken.mSubType == TokenSubType::FLOAT_LITERAL) {
+					if (currentToken.mType == TokenType::NOTHING || currentToken.mSubType == TokenSubType::INTEGER_LITERAL || currentToken.mSubType == TokenSubType::FLOAT_LITERAL || currentToken.mType == TokenType::OPERATOR) {
 						endToken(currentToken, tokens);
 						currentToken.mType = TokenType::IDENTIFIER;
 						currentToken.mSubType = TokenSubType::NOTHING;

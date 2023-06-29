@@ -1,6 +1,46 @@
 #include <sstream>
 #include <fstream>
+#include <map>
 #include "X86_64LinuxYasmCompiler.hpp"
+
+std::string X86_64LinuxYasmCompiler::addToSymbols(size_t* offset, const Variable& variable) {
+	std::string result;
+	switch (variable.mType.builtinType) {
+		case Builtin_Type::UNDEFINED:
+		case Builtin_Type::VOID:
+			break;
+		case Builtin_Type::UI8:
+		case Builtin_Type::I8:
+		case Builtin_Type::F8:
+		case Builtin_Type::CHAR:
+			(*offset) += 1;
+			result = "byte";
+			break;
+		case Builtin_Type::UI16:
+		case Builtin_Type::I16:
+		case Builtin_Type::F16:
+			(*offset) += 2;
+			result = "word";
+			break;
+		case Builtin_Type::UI32:
+		case Builtin_Type::I32:
+		case Builtin_Type::F32:
+		case Builtin_Type::BOOL:
+		case Builtin_Type::REF:
+		case Builtin_Type::ARRAY:
+			(*offset) += 4;
+			result = "dword";
+			break;
+		case Builtin_Type::UI64:
+		case Builtin_Type::I64:
+		case Builtin_Type::F64:
+			(*offset) += 8;
+			result = "qword";
+			break;
+	}
+	symbolTable.insert(std::make_pair(variable.mName, SymbolInfo {*offset, variable.mType, result}));
+	return result;
+}
 
 void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, const Function& main) {
 	fs::create_directory("./build");
@@ -10,7 +50,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 	outfile.open(outPath);
 
 	// Compile main. TODO: Also add other functions
-	uint32_t labelCount = 0;
+	labelCount = 0;
 	outfile << "section .data" << std::endl;
 	for (const auto& literal : p.literals) {
 		outfile << "\t" << literal.mAlias << " db \"";
@@ -24,78 +64,68 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 	}
 	outfile << std::endl;
 	outfile << "section .text" << std::endl;
+
+	for (const auto& funcCall : p.externalFunctions) {
+		outfile << "\textern " << funcCall.mFunctionName;
+	}
+
 	outfile << "\tglobal _start" << std::endl;
 	if (p.requires_libs) {
 		printLibs(outfile);
 	}
-	outfile << std::endl << "_start:" << std::endl;
-	// TODO: Make this recursive
-	for (const auto& statement : main.mBody.statements) {
-		if (statement.mType == Statement_Type::RETURN_CALL) {
-			outfile << "; =============== RETURN ===============" << std::endl;
-			outfile << "\tmov rax, 60" << std::endl;
-			outfile << "\tmov rdi, " << statement.mContent->mValue.mText << std::endl;
-			outfile << "\tsyscall" << std::endl;
-			outfile << "; =============== END RETURN ===============" << std::endl;
-		} else if (statement.mType == Statement_Type::FUNC_CALL) {
-			if (!statement.funcCall.has_value()) continue;
-			FuncCallStatement fc = statement.funcCall.value();
-			printFunctionCall(outfile, p, fc, "");
 
-		} else if (statement.mType == Statement_Type::LOOP) {
-			if (!statement.loopStatement.has_value()) continue;
-			LoopStatement ls = statement.loopStatement.value();
-			outfile << "; =============== LOOP ===============" << std::endl;
-			Builtin_Type t = ls.mIterator.value().mType.builtinType;
-			std::string op = ls.mRange.value().mMinimum < ls.mRange.value().mMaximum ? "inc " : "dec ";
-			std::string r1;
-			std::string r2;
+	// Loop over functions
+	// Start with prologue 'push rbp', 'mov rbp, rsp'
+	// For every variable, keep track of the offset
+	// End with epilogue 'pop rbp'
 
-			if (t == Builtin_Type::I8 || t == Builtin_Type::UI8) {
-				r1 = "r12b";
-				r2 = "r13b";
-			} else if (t == Builtin_Type::I16 || t == Builtin_Type::UI16) {
-				r1 = "r12w";
-				r2 = "r13w";
-			} else if (t == Builtin_Type::I32 || t == Builtin_Type::UI32) {
-				r1 = "r12d";
-				r2 = "r13d";
-			} else if (t == Builtin_Type::I64 || t == Builtin_Type::UI64) {
-				r1 = "r12";
-				r2 = "r13";
-			}
+	for (const auto& function : p.functions) {
+		if (function.mName == "main") {
+			outfile << std::endl << "_start:" << std::endl;
+		} else {
+			outfile << std::endl << function.mName << std::endl;
+		}
+		outfile << "; =============== PROLOGUE ===============" << std::endl;
+		outfile << "\tpush rbp" << std::endl;
+		outfile << "\tmov rbp, rsp" << std::endl;
+		outfile << "; =============== END PROLOGUE ===============" << std::endl;
 
-			// IDEA: If users start to loop loops, we can have the innermost loop use the registers, and the outer loops pushing their values onto the stack and then retrieve into the registers
 
-			outfile << "\tmov " << r1 << ", " << ls.mRange.value().mMinimum << std::endl;
-			outfile << "\tmov " << r2 << ", " << ls.mRange.value().mMaximum << std::endl;
-			outfile << "label" << ++labelCount << ":" << std::endl;
-			// Code inside the loop here
-			for (auto& lsit : ls.mBody.statements) {
-				if (!lsit.funcCall.has_value()) continue;
-				FuncCallStatement fc = lsit.funcCall.value();
-				// Again, we assume only one argument, and it being fully collapsed
-				printFunctionCall(outfile, p, fc, r1);
-			}
+		// Construct symbol table, keeping track of scope
+		// offset from stack, type
+		std::map<std::string, SymbolInfo> symbolTable;
+		size_t offset = 0;
 
-			outfile << "\t" << op << r1 << std::endl;
-			outfile << "\tcmp " << r1 << ", " << r2 << std::endl;
-			outfile << "\tje not_label" << labelCount << std::endl;
-			outfile << "\tjmp label" << labelCount << std::endl;
-			outfile << "not_label" << labelCount << ":" << std::endl;
-			outfile << "; =============== END LOOP ===============" << std::endl;
+		// TODO: Have function that compiles expressions
+
+		printBody(outfile, p, function.mBody, function.mName, &offset);
+
+		if (function.mName != "main") {
+			outfile << "; =============== EPILOGUE ===============" << std::endl;
+			outfile << "\tpop rbp" << std::endl;
+			outfile << "; =============== END EPILOGUE ===============" << std::endl;
 		}
 	}
 
 	outfile.close();
 
+	bool debug = false;
+
 	std::stringstream assembler;
-	assembler << "yasm -f elf64 -o ./build/" <<  fileName.stem().string() << ".o ./build/" << fileName.stem().string() << ".asm";
+	assembler << "yasm -f elf64";
+	if (debug)
+		assembler << " -g dwarf2";
+	assembler << " -o ./build/" <<  fileName.stem().string() << ".o ./build/" << fileName.stem().string() << ".asm";
 	//std::cout << assembler.str().c_str() << std::endl;
 	std::system(assembler.str().c_str());
 
 	std::stringstream linker;
-	linker << "ld -s -z noseparate-code -o ./build/" << fileName.stem().string() << " ./build/" << fileName.stem().string() << ".o";
+	linker << "ld";
+	if (!debug)
+		linker << " -s -z noseparate-code ";
+	else
+		linker << " -g";
+	linker << " -o ./build/" << fileName.stem().string() << " ./build/" << fileName.stem().string() << ".o";
 	//std::cout << linker.str().c_str() << std::endl;
 	std::system(linker.str().c_str());
 
@@ -165,15 +195,15 @@ void X86_64LinuxYasmCompiler::printLibs(std::ofstream& outfile) {
 	outfile << "\tret" << std::endl;
 }
 
-void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Programme& p, const FuncCallStatement& fc, const std::string& varRegister) {
+void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Programme& p, const FuncCallStatement& fc) {
 	// TODO: We assume only one argument here
 	// TODO: We assume entire expression tree is collapsed
 	Expression* arg = fc.mArgs[0];
 	if (arg->mValue.mType == TokenType::LITERAL && arg->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 		Literal l = p.findLiteralByContent(arg->mValue.mText).value();
 		outfile << "; =============== FUNC CALL + STRING ===============" << std::endl;
-		outfile << "\tmov rax, " << (fc.mFunctionType == StdLib_Function_Type::READ || fc.mFunctionType == StdLib_Function_Type::READLN ? 0 : 1) << std::endl;
-		outfile << "\tmov rdi, " << (fc.mClassType == StdLib_Class_Type::STDIN ? 0 : 1) << std::endl;
+		outfile << "\tmov rax, " << (fc.mFunctionName == "read" || fc.mFunctionName == "readln" ? 0 : 1) << std::endl;
+		outfile << "\tmov rdi, " << (fc.mClassName == "stdin" ? 0 : 1) << std::endl;
 		outfile << "\tmov rsi, " << l.mAlias << std::endl;
 		outfile << "\tmov rdx, " << l.mSize << std::endl;
 		outfile << "\tsyscall" << std::endl;
@@ -182,19 +212,20 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 	} else if (arg->mValue.mType == TokenType::LITERAL && arg->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 		outfile << "; =============== FUNC CALL + INT ===============" << std::endl;
 		outfile << "\tmov edi, " << arg->mValue.mText << std::endl;
-		if (fc.mFunctionType == StdLib_Function_Type::WRITE) {
+		if (fc.mFunctionName == "write") {
 			outfile << "\tcall print_uint32" << std::endl;
-		} else if (fc.mFunctionType == StdLib_Function_Type::WRITELN) {
+		} else if (fc.mFunctionName == "writeln") {
 			outfile << "\tcall print_uint32_newline" << std::endl;
 		}
 		outfile << "; =============== END FUNC CALL + INT ===============" << std::endl;
 
 	} else if (arg->mValue.mType == TokenType::IDENTIFIER) {
+		SymbolInfo& var = symbolTable[arg->mValue.mText];
 		outfile << "; =============== FUNC CALL + VARIABLE ===============" << std::endl;
-		outfile << "\tmovzx edi, " << varRegister << std::endl;
-		if (fc.mFunctionType == StdLib_Function_Type::WRITE) {
+		outfile << "\tmovzx edi, " << var.size << " [rbp+" << var.offset << "]" << std::endl;
+		if (fc.mFunctionName == "write") {
 			outfile << "\tcall print_uint32" << std::endl;
-		} else if (fc.mFunctionType == StdLib_Function_Type::WRITELN) {
+		} else if (fc.mFunctionName == "writeln") {
 			outfile << "\tcall print_uint32_newline" << std::endl;
 		}
 		outfile << "; =============== END FUNC CALL + VARIABLE ===============" << std::endl;
@@ -204,12 +235,131 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 		if (arg->mLeft->mValue.mText != "argv") throw std::runtime_error("Unexpected array index name");
 		outfile << "\tmov rdi, qword [rsp+8+" << arg->mRight->mValue.mText << "*8] ; Move the CLI arg into rdi" << std::endl;
 		outfile << "\tcall printString" << std::endl;
-		if (fc.mFunctionType == StdLib_Function_Type::WRITELN) {
+		if (fc.mFunctionName == "writeln") {
 			outfile << "\tmov rax, 1" << std::endl;
 			outfile << "\tmov rdi, 1" << std::endl;
 			outfile << "\tmov rsi, 0xA" << std::endl;
 			outfile << "\tmov rdx, 1" << std::endl;
 			outfile << "\tsyscall" << std::endl;
 		}
+	}
+}
+
+void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, size_t* offset) {
+	const char callingConvention[6][4] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+	std::map<std::string, SymbolInfo> localSymbols;
+	size_t localOffset = 0;
+
+	for (const auto& statement : block.statements) {
+		switch (statement.mType) {
+			case Statement_Type::RETURN_CALL:
+				if (labelName == "main") {
+					outfile << "\tmov rax, 60" << std::endl;
+					outfile << "\tmov rdi, " << statement.mContent->mValue.mText << std::endl;
+					outfile << "\tsyscall" << std::endl;
+				} else {
+					outfile << "\tmov rax, " << statement.mContent->mValue.mText << std::endl;
+					outfile << "\tret" << std::endl;
+				}
+				break;
+			case Statement_Type::VAR_DECLARATION:
+				addToSymbols(offset, statement.variable.value());
+				addToSymbols(&localOffset, statement.variable.value());
+				break;
+			case Statement_Type::VAR_ASSIGNMENT: {
+				addToSymbols(&localOffset, statement.variable.value());
+				outfile << "\tmov " << addToSymbols(offset, statement.variable.value()) << " [rbp+"
+						<< symbolTable[statement.variable.value().mName].offset << "], " << statement.mContent->mValue.mText
+						<< std::endl;
+				break;
+			}
+			case Statement_Type::LOOP: {
+				if (!statement.loopStatement.has_value()) continue;
+				LoopStatement ls = statement.loopStatement.value();
+				if (ls.mIterator.has_value()) {
+					std::string size = addToSymbols(offset, ls.mIterator.value());
+					addToSymbols(&localOffset, ls.mIterator.value());
+					std::string op = ls.mRange.value().mMinimum < ls.mRange.value().mMaximum ? "inc " : "dec ";
+					std::string label = "label";
+					label = label.append(std::to_string(++labelCount));
+					outfile << "\tmov " << size << " [rbp+" << symbolTable[ls.mIterator.value().mName].offset << "], " << ls.mRange.value().mMinimum->mValue.mText << std::endl;
+					outfile << label << ":" << std::endl;
+					outfile << "\tcmp " << size << " [rbp+" << symbolTable[ls.mIterator.value().mName].offset << "], " << ls.mRange.value().mMaximum->mValue.mText << std::endl;
+					outfile << "\tjne inside_label" << labelCount << std::endl;
+					outfile << "\tjmp not_label" << labelCount << std::endl;
+					outfile << "inside_label" << labelCount << ":" << std::endl;
+					printBody(outfile, p, ls.mBody, label, offset);
+					outfile << "\tmovzx eax, " << size << " [rbp+" << symbolTable[ls.mIterator.value().mName].offset << "]" << std::endl;
+					outfile << "\t" << op << "eax" << std::endl;
+					outfile << "\tmov " << size << " [rbp+" << symbolTable[ls.mIterator.value().mName].offset << "], al" << std::endl;
+					outfile << "\tjmp label" << labelCount << std::endl;
+					outfile << "not_label" << labelCount << ":" << std::endl;
+				} else {
+					if (statement.mContent == nullptr) {
+						// We have "loop { ... }"
+						std::string label = "label";
+						label = label.append(std::to_string(++labelCount));
+						outfile << label << ":" << std::endl;
+						printBody(outfile, p, ls.mBody, label, offset);
+						outfile << "\tjmp label" << labelCount << std::endl;
+						outfile << "not_label" << labelCount << ":" << std::endl; // Used for break statements
+					} else {
+						// we have "until condition { ... }"
+					}
+				}
+				break;
+			}
+			case Statement_Type::FUNC_CALL: {
+				FuncCallStatement fc = statement.funcCall.value();
+				// If function is stdlib call, need to expand this into something better when stdlib expands
+				if (fc.mClassName == "stdout" || fc.mClassName == "stdin") {
+					printFunctionCall(outfile, p, fc);
+					break;
+				}
+				for (int i = statement.funcCall.value().mArgs.size() - 1; i >= 0; i--) {
+					if (i <= 6)
+						outfile << "\tmov " << callingConvention[i] << ", "	<< statement.funcCall.value().mArgs[i] << std::endl;
+					else
+						outfile << "\tpush " << statement.funcCall.value().mArgs[i] << std::endl;
+				}
+				outfile << "\tcall " << statement.funcCall.value().mFunctionName << std::endl;
+				break;
+			}
+			case Statement_Type::NOTHING:
+				outfile << "\tnop" << std::endl;
+				break;
+			case Statement_Type::IF:
+				break;
+			case Statement_Type::ARRAY_INDEX:
+				break;
+		}
+	}
+	symbolTable.erase(localSymbols.cbegin(), localSymbols.cend());
+}
+
+const char* X86_64LinuxYasmCompiler::getRegister(const std::string& size, const std::string& reg) {
+	return "";
+}
+
+void X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression) {
+	if (expression == nullptr) return;
+	if (expression->mLeft == nullptr && expression->mRight == nullptr) {
+		return;
+	}
+	if (expression->mValue.mType != TokenType::OPERATOR) {
+		return;
+	}
+	if (expression->mLeft->mValue.mSubType == TokenSubType::STRING_LITERAL || expression->mRight->mValue.mSubType == TokenSubType::STRING_LITERAL)
+		return;
+	printExpression(outfile, p, expression->mLeft);
+	printExpression(outfile, p, expression->mRight);
+
+	// Here the fun starts
+	// TODO: If left had nodes, then eax would already have a value. So fix this
+	if (expression->mLeft->mValue.mType == TokenType::IDENTIFIER) {
+		SymbolInfo& left = symbolTable[expression->mLeft->mValue.mText];
+		outfile << "\tmovzx eax, " << left.size << " [rbp+" << left.offset << "]" << std::endl;
+	} else if (expression->mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+		outfile << "\tmov eax, " << expression->mLeft->mValue.mText << std::endl;
 	}
 }

@@ -3,17 +3,33 @@
 
 #include <filesystem>
 #include "Parser.hpp"
+#include <map>
 
 using namespace forest::parser;
 namespace fs = std::filesystem;
 
+struct SymbolInfo {
+	size_t offset = 0;
+	Type type {};
+	std::string size;
+};
+
 class X86_64LinuxYasmCompiler {
 public:
-	static void compile(fs::path& fileName, const Programme& p, const Function& main);
+	void compile(fs::path& fileName, const Programme& p, const Function& main);
 
 private:
-	static void printLibs(std::ofstream& outfile);
-	static void printFunctionCall(std::ofstream& outfile, const Programme& p, const FuncCallStatement& fc, const std::string& varRegister);
+	uint32_t labelCount = 0;
+	std::map<std::string, SymbolInfo> symbolTable;
+	void printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, size_t* offset);
+	void printLibs(std::ofstream& outfile);
+	void printFunctionCall(std::ofstream& outfile, const Programme& p, const FuncCallStatement& fc);
+	/**
+	 * Will print the expression. The resulting value will be in the a register (rax, eax, ax, al)
+	 */
+	void printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression);
+	std::string addToSymbols(size_t* offset, const Variable& variable);
+	const char* getRegister(const std::string& size, const std::string& reg);
 };
 
 

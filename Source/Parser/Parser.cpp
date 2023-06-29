@@ -27,7 +27,7 @@ namespace forest::parser {
 				functions.push_back(f.value());
 			}
 		}
-		return Programme { functions, literals, requires_libs };
+		return Programme { functions, literals, externalFunctions, requires_libs };
 	}
 
 	std::optional<Token> Parser::peekNextToken() {
@@ -177,9 +177,9 @@ namespace forest::parser {
 			return returnCall.value();
 		}
 
-		std::optional<Statement> stdlib_call = tryParseStdLibFunction();
-		if (stdlib_call.has_value()) {
-			return stdlib_call.value();
+		std::optional<Statement> functionCall = tryParseFunctionCall();
+		if (functionCall.has_value()) {
+			return functionCall.value();
 		}
 
 		std::optional<Statement> loop = tryParseLoop();
@@ -196,27 +196,57 @@ namespace forest::parser {
 		return std::nullopt;
 	}
 
-	std::optional<Statement> Parser::tryParseStdLibFunction() {
+	std::optional<Statement> Parser::tryParseFunctionCall() {
 		std::vector<Token>::iterator saved = mCurrentToken;
 		Statement returnValue;
 		returnValue.mType = Statement_Type::FUNC_CALL;
 
+		// Format for function calls: [namespace::]?[class.]?[e:]?<FunctionName>(args...)
+		// Optional namespace, optional class name, required function name with opening (
+		// Also, function names starting with `e:` are external (really only useful for compilation step, since interpreted would need to actually link those libraries)
+
 		FuncCallStatement fc;
-		std::optional<Token> className = expectIdentifier();
-		if (!className.has_value()) {
+		std::optional<Token> nsClassOrFunction = expectIdentifier();
+		if (!nsClassOrFunction.has_value()) {
 			mCurrentToken = saved;
 			return std::nullopt;
 		}
+
+		std::optional<Token> ns = expectOperator("::");
+		std::optional<Token> className;
+		if (ns.has_value()) {
+			// We know the first identifier is the namespace identifier
+			// We need to parse the class identifier
+			fc.mNamespace = nsClassOrFunction.value().mText;
+			className = expectIdentifier();
+		} else {
+			className = nsClassOrFunction;
+		}
+
 		std::optional<Token> dot = expectOperator(".");
-		if (!dot.has_value()) {
+		std::optional<Token> functionName;
+		if (!dot.has_value() && !ns.has_value()) {
+			functionName = nsClassOrFunction;
+		} else if (dot.has_value() && !className.has_value()) {
+			// We got a dot after the namespace -> ::. -> Syntax error
+			std::cerr << "Syntax error: Unexpected '.' after namespace operator '::' at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
+		} else {
+			fc.mClassName = className.value().mText;
+			functionName = expectIdentifier();
 		}
-		std::optional<Token> functionName = expectIdentifier();
-		if (!functionName.has_value()) {
-			mCurrentToken = saved;
-			return std::nullopt;
+
+		if (functionName.has_value() && functionName.value().mText == "e") {
+			std::optional<Token> externalOp = expectOperator(":");
+			if (externalOp.has_value()) {
+				fc.mIsExternal = true;
+				functionName = expectIdentifier();
+			}
+			// If not, we just have a function called 'e' which is fine
 		}
+
+		fc.mFunctionName = functionName.value().mText;
 		std::optional<Token> openingParenthesis = expectOperator("(");
 		if (!openingParenthesis.has_value()) {
 			mCurrentToken = saved;
@@ -227,7 +257,7 @@ namespace forest::parser {
 		while (!expectOperator(")").has_value()) {
 			Expression* expression = expectExpression(returnValue, true);
 			if (expression == nullptr) {
-				std::cerr << "Expected an expression while parsing the standard library function's argument list at " << *mCurrentToken << std::endl;
+				std::cerr << "Expected an expression while parsing " << fc.mFunctionName << "'s argument list at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -247,7 +277,7 @@ namespace forest::parser {
 			std::optional<Token> comma = expectOperator(",");
 			if (!comma.has_value()) {
 				// We didn't encounter the ')', and we didn't get a ','
-				std::cerr << "Expected a ',' while parsing the standard library function's argument list at " << *mCurrentToken << std::endl;
+				std::cerr << "Expected a ',' while parsing " << fc.mFunctionName << "'s argument list at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -255,55 +285,16 @@ namespace forest::parser {
 		requires_libs = true;
 		fc.mArgs = args;
 
-		// Arguments are more dynamic, but TODO: We only accept string literals
-		/*std::optional<Token> arg = expectLiteral();
-		if (!arg.has_value()) {
-			arg = expectIdentifier();
-			if (!arg.has_value()) {
-				mCurrentToken = saved;
-				return std::nullopt;
-			}
-			fc.arg = arg.value();
-			requires_libs = true;
-		} else {
-			if (arg.value().mSubType == TokenSubType::STRING_LITERAL) {
-				std::stringstream alias;
-				alias << "str" << literals.size();
-
-				literals.push_back(Literal{alias.str(), arg.value().mText, uint32_t(arg.value().mText.size())});
-				returnValue.content = alias.str();
-				fc.arg = arg.value();
-			} else if (arg.value().mSubType == TokenSubType::INTEGER_LITERAL) {
-				returnValue.content = arg.value().mText;
-				fc.arg = arg.value();
-				int num = std::stoi(arg.value().mText);
-				if (num > 0 && num <= 2147483647)
-					requires_libs = true;
-			}
-		}
-*/
-
 		std::optional<Token> semi = expectSemicolon();
 		if (!semi.has_value()) {
 			std::cerr << "Expected a closing ';' to end the statement at " << *(mCurrentToken - 1) << std::endl;
-			mCurrentToken = saved;
+			//mCurrentToken = saved;
+			// ^ Commented out because it did parse the function call correctly, it just didn't end with a semi.
+			// We want it to keep giving parser errors for the rest of the code, not try to parse something else.
 			return std::nullopt;
 		}
 
-		if (className.value().mText == "stdin") {
-			fc.mClassType = StdLib_Class_Type::STDIN;
-		} else {
-			fc.mClassType = StdLib_Class_Type::STDOUT;
-		}
-
-		if (functionName.value().mText == "read") {
-			fc.mFunctionType = StdLib_Function_Type::READ;
-		} else if (functionName.value().mText == "readln") {
-			fc.mFunctionType = StdLib_Function_Type::READLN;
-		} else if (functionName.value().mText == "write") {
-			fc.mFunctionType = StdLib_Function_Type::WRITE;
-		} else if (functionName.value().mText == "writeln") {
-			fc.mFunctionType = StdLib_Function_Type::WRITELN;
+		if (className.value().mText == "stdout" && functionName.value().mText == "writeln") {
 			if (!literals.empty()) {
 				literals.at(literals.size() - 1).mContent.append("\n");
 				literals.at(literals.size() - 1).mSize += 1;
@@ -311,17 +302,27 @@ namespace forest::parser {
 		}
 
 		returnValue.funcCall = fc;
+		if (fc.mIsExternal)
+			externalFunctions.push_back(fc);
 		return returnValue;
 	}
 
 	std::optional<Statement> Parser::tryParseLoop() {
 		std::vector<Token>::iterator saved = mCurrentToken;
 		LoopStatement ls;
-		// Try parse from longest form to smallest
+		// Try parse from the longest form to smallest
 		std::optional<Token> loop = expectIdentifier("loop");
+		Expression* content = nullptr;
 		if (!loop.has_value()) {
-			mCurrentToken = saved;
-			return std::nullopt;
+			loop = expectIdentifier("until");
+			if (!loop.has_value()) {
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+			Statement s;
+			s.mType = Statement_Type::LOOP;
+			Expression* condition = expectExpression(s, true);
+			content = condition;
 		}
 		std::optional<Token> iterator = expectIdentifier();
 		if (iterator.has_value()) {
@@ -332,9 +333,10 @@ namespace forest::parser {
 				return std::nullopt;
 			}
 			// Expect a range
-			// TODO: Allow for ~~variables~~ ANY expression in range declaration
-			std::optional<Token> min = expectLiteral();
-			if (!min.has_value()) {
+			Statement s;
+			s.mType = Statement_Type::LOOP;
+			Expression* min = expectExpression(s, true);
+			if (min == nullptr) {
 				std::cerr << "Expected a beginning of a range declaration at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
@@ -345,13 +347,13 @@ namespace forest::parser {
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
-			std::optional<Token> max = expectLiteral();
-			if (!max.has_value()) {
+			Expression* max = expectExpression(s, true);
+			if (max == nullptr) {
 				std::cerr << "Expected an ending of the range declaration at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
-			Range r = Range { std::stol(min.value().mText), std::stol(max.value().mText) };
+			Range r = Range { min, max };
 			ls.mRange = r;
 			ls.mIterator = Variable { getTypeFromRange(r), iterator.value().mText, iterator.value() };
 		}
@@ -362,7 +364,7 @@ namespace forest::parser {
 			return std::nullopt;
 		}
 		ls.mBody = body.value();
-		return Statement { Statement_Type::LOOP, nullptr, std::nullopt, ls};
+		return Statement { Statement_Type::LOOP, content, std::nullopt, ls};
 	}
 
 	std::optional<Statement> Parser::tryParseReturnCall() {
@@ -456,8 +458,16 @@ namespace forest::parser {
 	}
 
 	Type Parser::getTypeFromRange(const Range& range) {
-		int64_t min = range.mMinimum < range.mMaximum ? range.mMinimum : range.mMaximum;
-		int64_t max = range.mMaximum > range.mMinimum ? range.mMaximum : range.mMinimum;
+		// TODO: We cannot know the types at compile time for some expressions
+		if (range.mMinimum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
+			return Type {"undefined", Builtin_Type::UNDEFINED};
+		if (range.mMaximum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
+			return Type {"undefined", Builtin_Type::UNDEFINED};
+
+		long range_min = std::stol(range.mMinimum->mValue.mText);
+		long range_max = std::stol(range.mMaximum->mValue.mText);
+		int64_t min = range_min < range_max ? range_min : range_max;
+		int64_t max = range_max > range_min ? range_max : range_min;
 
 		if (min < 0) {
 			// Has to be signed
@@ -528,9 +538,9 @@ namespace forest::parser {
 
 		// While the next token exists and is not a closing character for the current statement context
 		while (mCurrentToken != mTokensEnd && !((
-					(mCurrentToken->mText == ")" && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF)) ||
+					((mCurrentToken->mText == ")" || mCurrentToken->mText == ",") && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF)) ||
 					(mCurrentToken->mText == "]" && (statementContext.mType == Statement_Type::ARRAY_INDEX)) ||
-					(mCurrentToken->mText == "}" && (statementContext.mType == Statement_Type::LOOP)) ||
+					((mCurrentToken->mText == "{" || mCurrentToken->mText == "..") && (statementContext.mType == Statement_Type::LOOP)) ||
 					(mCurrentToken->mType == TokenType::SEMICOLON)
 				) && parenStack.empty() )
 			) {
@@ -584,12 +594,19 @@ namespace forest::parser {
 				} else if (nextToken.has_value() && nextToken.value().mText == "(") {
 					// Can only be function call, would be regular operator if this is meant to be a variable
 					// ui8 foo = bar(
-					// TODO: Transfer function calls to expressions like array indexing above
-					// TODO: Current token is already consumed if we were to try to parse function call + Make function calls more generic than standard library function
+					// TODO: Make function calls more generic than standard library function
+					std::optional<Token> funcCall = expectOperator("(");
 					Statement newStatement;
 					newStatement.mType = Statement_Type::FUNC_CALL;
-					newStatement.mContent = expectExpression(newStatement);
-					statementContext.mSubStatements.push_back(newStatement);
+					Expression* node = new Expression;
+					node->mValue = funcCall.value();
+					Expression* left = new Expression;
+					left->mValue = identifier.value();
+					Expression* right = expectExpression(newStatement);
+					expectOperator(")"); // We discard this value because we don't need it
+					node->mLeft = left;
+					node->mRight = right;
+					nodes.push_back(node);
 				} else {
 					Expression* node = new Expression;
 					node->mValue = identifier.value();

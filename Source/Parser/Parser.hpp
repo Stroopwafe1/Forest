@@ -41,18 +41,6 @@ namespace forest::parser {
 		ARRAY_INDEX, // Not actually a statement, but used for parsing array indexing expressions
 	};
 
-	enum class StdLib_Class_Type {
-		STDIN,
-		STDOUT,
-	};
-
-	enum class StdLib_Function_Type {
-		READ,
-		READLN,
-		WRITE,
-		WRITELN,
-	};
-
 	struct Type {
 		std::string name;
 		Builtin_Type builtinType;
@@ -64,9 +52,11 @@ namespace forest::parser {
 	};
 
 	struct FuncCallStatement {
-		StdLib_Class_Type mClassType;
-		StdLib_Function_Type mFunctionType;
+		std::string mNamespace;
+		std::string mClassName;
+		std::string mFunctionName;
 		std::vector<Expression*> mArgs;
+		bool mIsExternal = false;
 	};
 
 	struct Variable {
@@ -76,8 +66,8 @@ namespace forest::parser {
 	};
 
 	struct Range {
-		int64_t mMinimum;
-		int64_t mMaximum;
+		Expression* mMinimum;
+		Expression* mMaximum;
 	};
 
 	struct Statement;
@@ -116,6 +106,7 @@ namespace forest::parser {
 	struct Programme {
 		std::vector<Function> functions;
 		std::vector<Literal> literals;
+		std::vector<FuncCallStatement> externalFunctions;
 		bool requires_libs = false;
 
 		std::optional<Literal> findLiteralByAlias(const std::string& alias) const {
@@ -154,7 +145,7 @@ namespace forest::parser {
 		std::optional<Function> expectFunction();
 		std::optional<Block> expectBlock();
 		std::optional<Statement> expectStatement();
-		std::optional<Statement> tryParseStdLibFunction();
+		std::optional<Statement> tryParseFunctionCall();
 		std::optional<Statement> tryParseLoop();
 		std::optional<Statement> tryParseReturnCall();
 		std::optional<Statement> tryParseVariableDeclaration();
@@ -163,6 +154,7 @@ namespace forest::parser {
 		std::vector<Token>::iterator mCurrentToken;
 		std::vector<Token>::iterator mTokensEnd;
 		std::vector<Literal> literals;
+		std::vector<FuncCallStatement> externalFunctions;
 		bool requires_libs = false;
 	};
 

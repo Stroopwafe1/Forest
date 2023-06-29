@@ -96,6 +96,28 @@ TEST_F(TokeniserTests, TokeniserParseShouldTokeniseRange) {
 	EXPECT_STREQ(third.mText.c_str(), "4");
 }
 
+TEST_F(TokeniserTests, TokeniserParseShouldTokeniseNamespace) {
+	std::string code = "ns::function";
+	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, filePath);
+
+	ASSERT_EQ(tokens.size(), 3);
+
+	Token first = tokens[0];
+	EXPECT_EQ(first.mType, TokenType::IDENTIFIER);
+	EXPECT_EQ(first.mSubType, TokenSubType::USER_DEFINED);
+	EXPECT_STREQ(first.mText.c_str(), "ns");
+
+	Token second = tokens[1];
+	EXPECT_EQ(second.mType, TokenType::OPERATOR);
+	EXPECT_EQ(second.mSubType, TokenSubType::NAMESPACE);
+	EXPECT_STREQ(second.mText.c_str(), "::");
+
+	Token third = tokens[2];
+	EXPECT_EQ(third.mType, TokenType::IDENTIFIER);
+	EXPECT_EQ(third.mSubType, TokenSubType::USER_DEFINED);
+	EXPECT_STREQ(third.mText.c_str(), "function");
+}
+
 TEST_F(TokeniserTests, TokeniserEndTokenShouldConvertSubtypes) {
 	std::vector<Token> tokens;
 
