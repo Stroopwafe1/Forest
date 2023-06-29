@@ -166,8 +166,8 @@ TEST(TokenTests, TokenGetTypeShouldReturnType) {
 	token.mType = TokenType::SEMICOLON;
 	EXPECT_STREQ(token.getType(), "SEMICOLON");
 
-	token.mType = TokenType::COMMENT;
-	EXPECT_STREQ(token.getType(), "COMMENT");
+	token.mType = TokenType::SINGLELINE_COMMENT;
+	EXPECT_STREQ(token.getType(), "SINGLELINE_COMMENT");
 
 	token.mType = TokenType::POTENTIAL_COMMENT;
 	EXPECT_STREQ(token.getType(), "POTENTIAL_COMMENT");
