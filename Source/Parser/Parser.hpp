@@ -63,6 +63,10 @@ namespace forest::parser {
 		std::string mFunctionName;
 		std::vector<Expression*> mArgs;
 		bool mIsExternal = false;
+
+		bool operator ==(const FuncCallStatement& other) const {
+			return mNamespace == other.mNamespace && mClassName == other.mClassName && mFunctionName == other.mFunctionName && mIsExternal == other.mIsExternal;
+		}
 	};
 
 	struct Variable {

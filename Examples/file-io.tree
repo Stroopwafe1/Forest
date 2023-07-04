@@ -1,25 +1,25 @@
 use std::fs;
 
 i32 main(string[] args) {
-    ui32 fd = fs.open(args[1], fs::read); // args[1] because args[0] is the path to executable
-    ui32 write_fd = fs.open(args[2], fs::write); // This can error if the user doesn't have the write permission for the file specified
+	ui32 fd = fs.open(args[1], fs::read); // args[1] because args[0] is the path to executable
+	ui32 write_fd = fs.open(args[2], fs::write); // This can error if the user doesn't have the write permission for the file specified
 
-    // This increments the file pointer by the length of type read.
-    // Reading past the length of the file will result in an error
-    char char_in_file = fs.readUTF8(fd);
+	// This increments the file pointer by the length of type read.
+	// Reading past the length of the file will result in an error
+	char char_in_file = fs.readUTF8(fd);
 
-    // You can check for end of file with eof. This checks if the current byte is EOF (part of file metadata)
-    if (!fs.eof(fd))
-        stdout.writeln("We still good");
+	// You can check for end of file with eof. This checks if the current byte is EOF (part of file metadata)
+	if (!fs.eof(fd))
+	stdout.writeln("We still good");
 
-    // This reads a Little Endian value from the file and increments the file pointer by the length of type read (4 bytes in this case)
-    ui32 num_in_file = fs.readLE<ui32>(fd);
+	// This reads a Little Endian value from the file and increments the file pointer by the length of type read (4 bytes in this case)
+	ui32 num_in_file = fs.readLE<ui32>(fd);
 
-    // This writes the value we just read into the 2nd file as a Big Endian value
-    ui32 bytes_written = fs.writeBE<ui32>(write_fd, num_in_file);
+	// This writes the value we just read into the 2nd file as a Big Endian value
+	ui32 bytes_written = fs.writeBE<ui32>(write_fd, num_in_file);
 
-    // And of course we should close our files
-    fs.close(fd);
-    fs.close(write_fd);
-    return 0;
+	// And of course we should close our files
+	fs.close(fd);
+	fs.close(write_fd);
+	return 0;
 }

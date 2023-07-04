@@ -1,6 +1,7 @@
 #include <sstream>
 #include <fstream>
 #include <map>
+#include <algorithm>
 #include "X86_64LinuxYasmCompiler.hpp"
 
 std::string X86_64LinuxYasmCompiler::addToSymbols(size_t* offset, const Variable& variable) {
@@ -26,14 +27,14 @@ std::string X86_64LinuxYasmCompiler::addToSymbols(size_t* offset, const Variable
 		case Builtin_Type::I32:
 		case Builtin_Type::F32:
 		case Builtin_Type::BOOL:
-		case Builtin_Type::REF:
-		case Builtin_Type::ARRAY:
 			(*offset) += 4;
 			result = "dword";
 			break;
 		case Builtin_Type::UI64:
 		case Builtin_Type::I64:
 		case Builtin_Type::F64:
+		case Builtin_Type::REF:
+		case Builtin_Type::ARRAY:
 			(*offset) += 8;
 			result = "qword";
 			break;
@@ -64,8 +65,12 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 	outfile << std::endl;
 	outfile << "section .text" << std::endl;
 
+	std::vector<FuncCallStatement> external;
 	for (const auto& funcCall : p.externalFunctions) {
-		outfile << "\textern " << funcCall.mFunctionName << std::endl;
+		if (std::find(external.begin(), external.end(), funcCall) == external.end()) {
+			outfile << "\textern " << funcCall.mFunctionName << std::endl;
+			external.push_back(funcCall);
+		}
 	}
 
 	outfile << "\tglobal _start" << std::endl;
@@ -108,7 +113,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 
 	outfile.close();
 
-	bool debug = true;
+	bool debug = false;
 
 	std::stringstream assembler;
 	assembler << "yasm -f elf64";
@@ -291,8 +296,8 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << "\tjmp not_label" << labelCount << std::endl;
 					outfile << "inside_label" << labelCount << ":" << std::endl;
 					printBody(outfile, p, ls.mBody, label, offset);
-					outfile << "\tmovzx eax, " << size << " [rbp+" << symbolTable[ls.mIterator.value().mName].offset << "]" << std::endl;
-					outfile << "\t" << op << "eax" << std::endl;
+					outfile << "\t" << moveToRegister("rax", symbolTable[ls.mIterator.value().mName]).str();
+					outfile << "\t" << op << "rax" << std::endl;
 					outfile << "\tmov " << size << " [rbp+" << symbolTable[ls.mIterator.value().mName].offset << "], al" << std::endl;
 					outfile << "\tjmp label" << labelCount << std::endl;
 					outfile << "not_label" << labelCount << ":" << std::endl;
@@ -321,10 +326,11 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				for (int i = statement.funcCall.value().mArgs.size() - 1; i >= 0; i--) {
 					std::string value;
 					Expression* expr = statement.funcCall.value().mArgs[i];
-					if (expr->mValue.mSubType == forest::parser::TokenSubType::STRING_LITERAL) {
+					if (expr->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 						value = p.findLiteralByContent(expr->mValue.mText)->mAlias;
 					} else {
-						value = expr->mValue.mText;
+						printExpression(outfile, p, expr, 0);
+						value = "rax";
 					}
 					if (i <= 6)
 						outfile << "\tmov " << callingConvention[i] << ", "	<< value << std::endl;
@@ -347,29 +353,72 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 	symbolTable.erase(localSymbols.cbegin(), localSymbols.cend());
 }
 
-const char* X86_64LinuxYasmCompiler::getRegister(const std::string& size, const std::string& reg) {
-	return "";
+std::stringstream X86_64LinuxYasmCompiler::moveToRegister(const std::string& reg, const SymbolInfo& symbol) {
+	std::stringstream ss;
+	switch (symbol.type.builtinType) {
+		case Builtin_Type::UI8:
+		case Builtin_Type::UI16:
+			ss << "movzx ";
+			break;
+		case Builtin_Type::I8:
+		case Builtin_Type::I16:
+			ss << "movsx ";
+			break;
+		case Builtin_Type::I32:
+			ss << "movsxd ";
+			break;
+		case Builtin_Type::UI32:
+		case Builtin_Type::UI64:
+		case Builtin_Type::I64:
+		default:
+			ss << "mov ";
+			break;
+	}
+	ss << reg << ", " << symbol.size << " [rbp+" << symbol.offset << "]" << std::endl;
+	return ss;
 }
 
-void X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression) {
-	if (expression == nullptr) return;
+bool X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression, uint8_t nodeType) {
+	if (expression == nullptr) return false;
 	if (expression->mLeft == nullptr && expression->mRight == nullptr) {
-		return;
+		return false;
 	}
 	if (expression->mValue.mType != TokenType::OPERATOR) {
-		return;
+		return false;
 	}
 	if (expression->mLeft->mValue.mSubType == TokenSubType::STRING_LITERAL || expression->mRight->mValue.mSubType == TokenSubType::STRING_LITERAL)
-		return;
-	printExpression(outfile, p, expression->mLeft);
-	printExpression(outfile, p, expression->mRight);
+		return false;
 
-	// Here the fun starts
-	// TODO: If left had nodes, then eax would already have a value. So fix this
+	bool leftPrinted = printExpression(outfile, p, expression->mLeft, -1);
+	if (leftPrinted)
+		outfile << "\tmov r10, rax" << std::endl; // Save left
+	printExpression(outfile, p, expression->mRight, 1);
+
 	if (expression->mLeft->mValue.mType == TokenType::IDENTIFIER) {
 		SymbolInfo& left = symbolTable[expression->mLeft->mValue.mText];
-		outfile << "\tmovzx eax, " << left.size << " [rbp+" << left.offset << "]" << std::endl;
+		outfile << "\t" << moveToRegister("rax", left).str();
 	} else if (expression->mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-		outfile << "\tmov eax, " << expression->mLeft->mValue.mText << std::endl;
+		outfile << "\tmov rax, " << expression->mLeft->mValue.mText << std::endl;
 	}
+
+	if (expression->mRight->mValue.mType == TokenType::IDENTIFIER) {
+		SymbolInfo& right = symbolTable[expression->mRight->mValue.mText];
+		outfile << "\t" << moveToRegister("rbx", right).str();
+	} else if (expression->mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+		outfile << "\tmov rbx, " << expression->mRight->mValue.mText << std::endl;
+	}
+
+	if (leftPrinted)
+		outfile << "\tmov rax, r10" << std::endl; // Recover left
+
+	if (expression->mValue.mText == "+") {
+		outfile << "\tadd rax, rbx" << std::endl;
+	} else if (expression->mValue.mText == "-") {
+		outfile << "\tsub rax, rbx" << std::endl;
+	}
+
+	if (nodeType == 1) {
+		outfile << "\tmov rbx, rax" << std::endl;
+	}
+	return true;
 }

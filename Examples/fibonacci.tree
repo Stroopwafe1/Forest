@@ -4,8 +4,8 @@ ui64 fibonacci(ui8 n) {
 }
 
 i32 main(string[] argv) {
-    ui64 fibo = fibonacci(10);
-    #assert(fibo == 89);
-    stdout.write(fibo);
-    return 0;
+	ui64 fibo = fibonacci(10);
+	#assert(fibo == 89);
+	stdout.write(fibo);
+	return 0;
 }

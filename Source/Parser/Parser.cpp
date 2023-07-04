@@ -470,6 +470,13 @@ namespace forest::parser {
 
 		statement.mType = Statement_Type::VAR_ASSIGNMENT;
 		Expression* expression = expectExpression(statement, true);
+
+		semi = expectSemicolon();
+		if (!semi.has_value()) {
+			std::cerr << "Expected a semicolon to close the variable assignment of " << name.value().mText << " at " << *mCurrentToken << std::endl;
+			return std::nullopt;
+		}
+
 		statement.loopStatement = std::nullopt;
 		statement.funcCall = std::nullopt;
 		statement.variable = Variable { type.value(), name.value().mText, expression->mValue };

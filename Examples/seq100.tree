@@ -1,8 +1,8 @@
 i32 main(string[] argv) {
-    loop i, 0..100 {
-        stdout.write(i);
-        stdout.write(" ");
-    }
-    stdout.write("\n");
-    return 0;
+	loop i, 0..100 {
+		stdout.write(i);
+		stdout.write(" ");
+	}
+	stdout.write("\n");
+	return 0;
 }

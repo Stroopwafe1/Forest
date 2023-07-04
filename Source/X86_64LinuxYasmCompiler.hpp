@@ -27,9 +27,9 @@ private:
 	/**
 	 * Will print the expression. The resulting value will be in the a register (rax, eax, ax, al)
 	 */
-	void printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression);
+	bool printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression, uint8_t nodeType);
 	std::string addToSymbols(size_t* offset, const Variable& variable);
-	const char* getRegister(const std::string& size, const std::string& reg);
+	std::stringstream moveToRegister(const std::string& reg, const SymbolInfo& symbol);
 };
 
 
