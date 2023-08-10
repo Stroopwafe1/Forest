@@ -411,7 +411,7 @@ namespace forest::parser {
 		mText = "";
 		mStartOffset = 0;
 		mEndOffset = 0;
-		mLineNumber = 0;
+		mLineNumber = 1;
 		file = "";
 	}
 

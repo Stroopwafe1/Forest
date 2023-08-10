@@ -440,7 +440,7 @@ TEST_F(ParserTests, ParserTryParseExternalFuncCallStatement) {
 }
 
 TEST_F(ParserTests, ParserTryParseVariableStatement) {
-	std::vector<Token> tokens = Tokeniser::parse("ui8 test = 100", "testing.tree");
+	std::vector<Token> tokens = Tokeniser::parse("ui8 test = 100;", "testing.tree");
 	parser.mCurrentToken = tokens.begin();
 	parser.mTokensEnd = tokens.end();
 

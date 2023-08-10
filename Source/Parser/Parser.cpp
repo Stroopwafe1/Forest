@@ -155,14 +155,20 @@ namespace forest::parser {
 	std::optional<Block> Parser::expectBlock() {
 		std::vector<Token>::iterator saved = mCurrentToken;
 
+		std::vector<Statement> statements;
+
 		std::optional<Token> open_bracket = expectOperator("{");
 		if (!open_bracket.has_value()) {
-			std::cerr << "Expected a '{' while parsing a scoped block at " << *mCurrentToken << std::endl;
-			mCurrentToken = saved;
-			return std::nullopt;
+			std::optional<Statement> statement = expectStatement();
+			if (!statement.has_value()) {
+				std::cerr << "Could not parse statement at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+			// Maybe have a debug message that mentions we parsed a simple block without brackets
+			statements.push_back(statement.value());
+			return Block { statements };
 		}
-
-		std::vector<Statement> statements;
 
 		while(!expectOperator("}").has_value()) {
 			// Parse statements
@@ -185,14 +191,19 @@ namespace forest::parser {
 			return returnCall.value();
 		}
 
-		std::optional<Statement> functionCall = tryParseFunctionCall();
-		if (functionCall.has_value()) {
-			return functionCall.value();
+		std::optional<Statement> ifStatement = tryParseIfStatement();
+		if (ifStatement.has_value()) {
+			return ifStatement.value();
 		}
 
 		std::optional<Statement> loop = tryParseLoop();
 		if (loop.has_value()) {
 			return loop.value();
+		}
+
+		std::optional<Statement> functionCall = tryParseFunctionCall();
+		if (functionCall.has_value()) {
+			return functionCall.value();
 		}
 
 		std::optional<Statement> variable = tryParseVariableDeclaration();
@@ -353,19 +364,28 @@ namespace forest::parser {
 		// Try parse from the longest form to smallest
 		std::optional<Token> loop = expectIdentifier("loop");
 		Expression* content = nullptr;
+
+		Statement s;
+		s.mType = Statement_Type::LOOP;
 		if (!loop.has_value()) {
 			loop = expectIdentifier("until");
 			if (!loop.has_value()) {
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
-			Statement s;
-			s.mType = Statement_Type::LOOP;
+
 			Expression* condition = expectExpression(s, true);
 			content = condition;
 		}
 		std::optional<Token> iterator = expectIdentifier();
 		if (iterator.has_value()) {
+			std::optional<Token> stepOp = expectOperator(":");
+			if (stepOp.has_value()) {
+				Expression* step = expectExpression(s, true);
+				if (step != nullptr)
+					ls.mStep = step;
+			}
+
 			std::optional<Token> comma = expectOperator(",");
 			if (!comma.has_value()) {
 				std::cerr << "Expected a ',' after the variable at " << *mCurrentToken << std::endl;
@@ -373,8 +393,6 @@ namespace forest::parser {
 				return std::nullopt;
 			}
 			// Expect a range
-			Statement s;
-			s.mType = Statement_Type::LOOP;
 			Expression* min = expectExpression(s, true);
 			if (min == nullptr) {
 				std::cerr << "Expected a beginning of a range declaration at " << *mCurrentToken << std::endl;
@@ -455,14 +473,12 @@ namespace forest::parser {
 		if (semi.has_value()) {
 			statement.mType = Statement_Type::VAR_DECLARATION;
 			statement.mContent = nullptr;
-			statement.loopStatement = std::nullopt;
-			statement.funcCall = std::nullopt;
 			statement.variable = Variable { type.value(), name.value().mText, name.value() };
 			return statement;
 		}
 
 		std::optional<Token> assignment = expectOperator("=");
-		if (!name.has_value()) {
+		if (!assignment.has_value()) {
 			std::cerr << "Expected a '=' for the assignment of variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
@@ -477,11 +493,52 @@ namespace forest::parser {
 			return std::nullopt;
 		}
 
-		statement.loopStatement = std::nullopt;
-		statement.funcCall = std::nullopt;
 		statement.variable = Variable { type.value(), name.value().mText, expression->mValue };
 		statement.mContent = expression;
 
+		return statement;
+	}
+
+	std::optional<Statement> Parser::tryParseIfStatement() {
+		std::vector<Token>::iterator saved = mCurrentToken;
+		Statement statement;
+		statement.mType = Statement_Type::IF;
+
+		std::optional<Token> ifI = expectIdentifier("if");
+		if (!ifI.has_value()) {
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+
+		Expression* expression = expectExpression(statement, true);
+		if (expression == nullptr) {
+			std::cerr << "Expected an expression after the if statement at " << *mCurrentToken << std::endl;
+			return std::nullopt;
+		}
+
+		std::optional<Block> body = expectBlock();
+		if (!body.has_value()) {
+			std::cerr << "Expected a code block for the if statement at " << *mCurrentToken << std::endl;
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+
+		std::optional<Token> elseI = expectIdentifier("else");
+		if (!elseI.has_value()) {
+			// We have a simple if-statement `if expression { ... }`
+			statement.mContent = expression;
+			statement.ifStatement = IfStatement { std::nullopt, std::nullopt, body.value() };
+			return statement;
+		}
+
+		std::optional<Block> elseBody = expectBlock();
+		if (!elseBody.has_value()) {
+			std::cerr << "Expected a code block for the else statement at " << *mCurrentToken << std::endl;
+			return std::nullopt;
+		}
+
+		statement.mContent = expression;
+		statement.ifStatement = IfStatement { elseI, elseBody.value(), body.value() };
 		return statement;
 	}
 
@@ -585,9 +642,9 @@ namespace forest::parser {
 
 		// While the next token exists and is not a closing character for the current statement context
 		while (mCurrentToken != mTokensEnd && !((
-					((mCurrentToken->mText == ")" || mCurrentToken->mText == ",") && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF)) ||
+					((mCurrentToken->mText == ")" || mCurrentToken->mText == "," || mCurrentToken->mText == "{") && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF)) ||
 					(mCurrentToken->mText == "]" && (statementContext.mType == Statement_Type::ARRAY_INDEX)) ||
-					((mCurrentToken->mText == "{" || mCurrentToken->mText == "..") && (statementContext.mType == Statement_Type::LOOP)) ||
+					((mCurrentToken->mText == "{" || mCurrentToken->mText == ".." || mCurrentToken->mText == ",") && (statementContext.mType == Statement_Type::LOOP)) ||
 					(mCurrentToken->mType == TokenType::SEMICOLON)
 				) && parenStack.empty() )
 			) {

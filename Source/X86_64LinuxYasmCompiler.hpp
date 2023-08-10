@@ -11,7 +11,13 @@ namespace fs = std::filesystem;
 struct SymbolInfo {
 	size_t offset = 0;
 	Type type {};
-	std::string size;
+	int size {};
+};
+
+struct ExpressionPrinted {
+	bool printed = false;
+	bool sign = false;
+	int size {};
 };
 
 class X86_64LinuxYasmCompiler {
@@ -20,6 +26,7 @@ public:
 
 private:
 	uint32_t labelCount = 0;
+	uint32_t ifCount = 0;
 	std::map<std::string, SymbolInfo> symbolTable;
 	void printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, size_t* offset);
 	void printLibs(std::ofstream& outfile);
@@ -27,9 +34,14 @@ private:
 	/**
 	 * Will print the expression. The resulting value will be in the a register (rax, eax, ax, al)
 	 */
-	bool printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression, uint8_t nodeType);
-	std::string addToSymbols(size_t* offset, const Variable& variable);
+	ExpressionPrinted printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression, uint8_t nodeType);
+	void printConditionalMove(std::ofstream& outfile, int leftSize, int rightSize, const char* instruction);
+	int addToSymbols(size_t* offset, const Variable& variable);
 	std::stringstream moveToRegister(const std::string& reg, const SymbolInfo& symbol);
+	const char* getRegister(const std::string& reg, int size);
+	int getSizeFromNumber(const std::string& text);
+	int getEvenSize(int size1, int size2);
+	const char* getMoveAction(int regSize, int valSize, bool isSigned);
 };
 
 

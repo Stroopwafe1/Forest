@@ -88,6 +88,13 @@ namespace forest::parser {
 	struct LoopStatement {
 		std::optional<Variable> mIterator;
 		std::optional<Range> mRange;
+		std::optional<Expression*> mStep;
+		Block mBody;
+	};
+
+	struct IfStatement {
+		std::optional<Token> mElse;
+		std::optional<Block> mElseBody;
 		Block mBody;
 	};
 
@@ -97,6 +104,7 @@ namespace forest::parser {
 		std::optional<FuncCallStatement> funcCall = std::nullopt;
 		std::optional<LoopStatement> loopStatement = std::nullopt;
 		std::optional<Variable> variable = std::nullopt;
+		std::optional<IfStatement> ifStatement = std::nullopt;
 		std::vector<Statement> mSubStatements{};
 	};
 
@@ -166,6 +174,7 @@ namespace forest::parser {
 		std::optional<Statement> tryParseLoop();
 		std::optional<Statement> tryParseReturnCall();
 		std::optional<Statement> tryParseVariableDeclaration();
+		std::optional<Statement> tryParseIfStatement();
 		Expression* expectExpression(Statement& statementContext, bool collapse = false);
 
 		std::vector<Token>::iterator mCurrentToken;
