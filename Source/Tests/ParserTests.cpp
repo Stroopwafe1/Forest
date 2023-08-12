@@ -458,3 +458,65 @@ TEST_F(ParserTests, ParserTryParseVariableStatement) {
 	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
 	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
 }
+
+TEST_F(ParserTests, ParserTryParseSimpleStruct) {
+	std::vector<Token> tokens = Tokeniser::parse("struct Test { ui8 val1; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Struct> s = parser.expectStruct();
+	ASSERT_TRUE(s.has_value());
+
+	Struct st = s.value();
+	EXPECT_STREQ(st.mName.c_str(), "Test");
+	EXPECT_EQ(st.mSize, 1);
+
+	ASSERT_EQ(st.mFields.size(), 1);
+	StructField sf = st.mFields[0];
+
+	EXPECT_EQ(sf.mOffset, 0);
+	EXPECT_EQ(sf.mType.builtinType, Builtin_Type::UI8);
+	EXPECT_STREQ(sf.mType.name.c_str(), "ui8");
+	EXPECT_EQ(sf.mType.byteSize, 1);
+	EXPECT_EQ(sf.mType.subTypes.size(), 0);
+
+	ASSERT_EQ(sf.mNames.size(), 1);
+	EXPECT_STREQ(sf.mNames[0].c_str(), "val1");
+}
+
+TEST_F(ParserTests, ParserTryParseStructWithSharedNames) {
+	std::vector<Token> tokens = Tokeniser::parse("struct Test { ui8 val1|val2|val3; ui16 otherVal; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Struct> s = parser.expectStruct();
+	ASSERT_TRUE(s.has_value());
+
+	Struct st = s.value();
+	EXPECT_STREQ(st.mName.c_str(), "Test");
+	EXPECT_EQ(st.mSize, 3);
+
+	ASSERT_EQ(st.mFields.size(), 2);
+	StructField sf1 = st.mFields[0];
+
+	EXPECT_EQ(sf1.mOffset, 0);
+	EXPECT_EQ(sf1.mType.builtinType, Builtin_Type::UI8);
+	EXPECT_STREQ(sf1.mType.name.c_str(), "ui8");
+	EXPECT_EQ(sf1.mType.byteSize, 1);
+	EXPECT_EQ(sf1.mType.subTypes.size(), 0);
+
+	ASSERT_EQ(sf1.mNames.size(), 3);
+	EXPECT_STREQ(sf1.mNames[0].c_str(), "val1");
+	EXPECT_STREQ(sf1.mNames[1].c_str(), "val2");
+	EXPECT_STREQ(sf1.mNames[2].c_str(), "val3");
+
+	StructField sf2 = st.mFields[1];
+	EXPECT_EQ(sf2.mOffset, 1);
+	EXPECT_EQ(sf2.mType.builtinType, Builtin_Type::UI16);
+	EXPECT_STREQ(sf2.mType.name.c_str(), "ui16");
+	EXPECT_EQ(sf2.mType.byteSize, 2);
+	EXPECT_EQ(sf2.mType.subTypes.size(), 0);
+
+	ASSERT_EQ(sf2.mNames.size(), 1);
+	EXPECT_STREQ(sf2.mNames[0].c_str(), "otherVal");
+}

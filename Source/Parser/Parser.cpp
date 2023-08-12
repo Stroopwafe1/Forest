@@ -7,6 +7,25 @@
 #include "Tokeniser.hpp"
 
 namespace forest::parser {
+	Parser::Parser() {
+		sizeCache = {
+				{ "ui8", 1},
+				{ "ui16", 2},
+				{ "ui32", 4},
+				{ "ui64", 8},
+				{ "i8", 1},
+				{ "i16", 2},
+				{ "i32", 4},
+				{ "i64", 8},
+				{ "f8", 1},
+				{ "f16", 2},
+				{ "f32", 4},
+				{ "f64", 8},
+				{ "char", 4},
+				{ "bool", 1},
+		};
+	}
+
 	Programme Parser::parse(std::vector<Token>& tokens) {
 		mCurrentToken = tokens.begin();
 		std::vector<Function> functions;
@@ -25,6 +44,12 @@ namespace forest::parser {
 							libDependencies.push_back(t.mText);
 						}
 					}
+				}
+			} else if (mCurrentToken->mText == "struct") {
+				std::optional<Struct> s = expectStruct();
+				if (s.has_value()) {
+					structs.insert({s.value().mName, s.value()});
+					sizeCache[s.value().mName] = s.value().mSize;
 				}
 			}
 			std::optional<Function> f = expectFunction();
@@ -244,6 +269,73 @@ namespace forest::parser {
 		std::optional<Token> rparen = expectOperator(")");
 
 		return SpecialStatement {actualType, content};
+	}
+
+	std::optional<Struct> Parser::expectStruct() {
+		std::optional<Token> keyword = expectIdentifier("struct");
+		if (!keyword.has_value()) return std::nullopt;
+		std::vector<Token>::iterator saved = mCurrentToken;
+
+		std::optional<Token> sname = expectIdentifier();
+		if (!sname.has_value()) {
+			std::cerr << "Expected struct to have a name at " << *mCurrentToken << std::endl;
+			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		std::optional<Token> openingBracket = expectOperator("{");
+
+		Struct s;
+		s.mName = sname.value().mText;
+		size_t offset = 0;
+
+		while(!expectOperator("}").has_value()) {
+			// Parse fields
+			StructField sf;
+			std::optional<Type> type = expectType();
+			if (!type.has_value()) {
+				std::cerr << "Expected struct field type at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+
+			// Parse name(s), fields can have multiple names with the | operator
+			/*
+			 * struct Test {
+			 * 	ui32 color|colour;
+			 * 	bool val;
+			 * 	bool initialised|initialized;
+			 * }
+			 */
+			std::vector<std::string> names;
+			while (!expectSemicolon().has_value()) {
+				std::optional<Token> name = expectIdentifier();
+				if (!name.has_value()) {
+					std::cerr << "Expected struct field name at " << *mCurrentToken << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				}
+
+				names.push_back(name.value().mText);
+				if (expectSemicolon().has_value())
+					break;
+				else if (expectOperator("|").has_value()) {
+					continue;
+				} else {
+					std::cerr << "Expected a ';' or '|' to separate the struct field name at " << *mCurrentToken << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				}
+			}
+
+			sf.mType = type.value();
+			sf.mNames = names;
+			sf.mOffset = offset;
+			offset += type.value().byteSize;
+			s.mFields.push_back(sf);
+		}
+
+		s.mSize = offset; // This is after all fields calculated their offset, including the last one
+		return s;
 	}
 
 	std::optional<Statement> Parser::tryParseFunctionCall() {
@@ -558,6 +650,7 @@ namespace forest::parser {
 		if (name == "char") return Builtin_Type::CHAR;
 		if (name == "bool") return Builtin_Type::BOOL;
 		if (name == "void") return Builtin_Type::VOID;
+		if (structs.find(name) != structs.end()) return Builtin_Type::STRUCT;
 		return Builtin_Type::UNDEFINED;
 	}
 
@@ -612,20 +705,72 @@ namespace forest::parser {
 		if (!openingBracket.has_value()) {
 			std::optional<Token> openingSharp = expectOperator("<");
 			if (!openingSharp.has_value()) {
-				return Type {id->mText, getTypeFromName(id->mText)};
+				size_t size = 0;
+				const auto& found = sizeCache.find(id->mText);
+				if (found != sizeCache.end())
+					size = found->second;
+				return Type {id->mText, getTypeFromName(id->mText), {}, size};
 			} else {
 				// Child element
 				std::optional<Type> childType = expectType();
-				// TODO: Do stuff with this
+				if (!childType.has_value()) {
+					std::cerr << "Expected a type within the <...> of type '" << id->mText << "' at " << *mCurrentToken << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				}
+				std::vector<Type> types;
+				types.push_back(childType.value());
+				if (id->mText == "array") {
+					std::optional<Token> semi = expectSemicolon();
+					size_t len = 1;
+					if (semi.has_value()) {
+						std::optional<Token> length = expectLiteral();
+						if (!length.has_value())
+							std::cerr << "Expected a length after the ';' in the generic array type at " << *mCurrentToken << std::endl;
+						else {
+							len = stol(length.value().mText);
+						}
+					}
+					return Type{"array<>", Builtin_Type::ARRAY, types, len * childType.value().byteSize};
+				} else if (id->mText == "ref") {
+					return Type{"ref<>", Builtin_Type::REF, types, 8};
+				} else {
+					// TODO: This byteSize value is not correct
+					// Basically, we have a generic class here, so we should fetch its size + size of generic argument * how many times it's used, or if just a reference, 8
+					/* class Test<T> {
+					 * 	T val // This would add the size of generic argument
+					 * 	ref<T> val2 // This would only reference size, which is 8; size of T doesn't matter
+					 * 	T[] val3 // This would add size of generic argument * size of array
+					 * }
+					 */
+					return Type{id->mText + "<>", Builtin_Type::UNDEFINED, types, 0};
+				}
 			}
 		} else {
+			size_t len = 1;
+			std::optional<Token> length = expectLiteral();
+			if (length.has_value())
+				len = stol(length.value().mText);
+
 			std::optional<Token> closingBracket = expectOperator("]");
 			if (!closingBracket.has_value()) {
 				std::cerr << "Expected a ']' to close the opening '[' at " << openingBracket.value() << " in type declaration." << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
-			return Type {id->mText + "[]", Builtin_Type::ARRAY};
+
+			std::vector<Type> types;
+			Type t = Type {id->mText, getTypeFromName(id->mText), {}, 0};
+
+			size_t size = 8;
+			const auto& found = sizeCache.find(id->mText);
+			if (found != sizeCache.end()) {
+				size = found->second;
+			}
+			t.byteSize = size;
+
+			types.emplace_back(t);
+			return Type {"array[]", Builtin_Type::ARRAY, types, len * size};
 		}
 
 		return Type {id->mText, getTypeFromName(id->mText)};

@@ -4,8 +4,9 @@
 #include <algorithm>
 #include "X86_64LinuxYasmCompiler.hpp"
 
-int X86_64LinuxYasmCompiler::addToSymbols(size_t* offset, const Variable& variable) {
-	int result;
+int X86_64LinuxYasmCompiler::addToSymbols(size_t* offset, const Variable& variable, const std::string& reg) {
+	int result = 0;
+	std::string checkReg = reg.substr(0, 3);
 	switch (variable.mType.builtinType) {
 		case Builtin_Type::UNDEFINED:
 		case Builtin_Type::VOID:
@@ -14,20 +15,22 @@ int X86_64LinuxYasmCompiler::addToSymbols(size_t* offset, const Variable& variab
 		case Builtin_Type::I8:
 		case Builtin_Type::F8:
 		case Builtin_Type::CHAR:
-			(*offset) += 1;
-			result = 0;
+			if (checkReg == "rbp")
+				(*offset) += 1;
 			break;
 		case Builtin_Type::UI16:
 		case Builtin_Type::I16:
 		case Builtin_Type::F16:
-			(*offset) += 2;
+			if (checkReg == "rbp")
+				(*offset) += 2;
 			result = 1;
 			break;
 		case Builtin_Type::UI32:
 		case Builtin_Type::I32:
 		case Builtin_Type::F32:
 		case Builtin_Type::BOOL:
-			(*offset) += 4;
+			if (checkReg == "rbp")
+				(*offset) += 4;
 			result = 2;
 			break;
 		case Builtin_Type::UI64:
@@ -35,11 +38,17 @@ int X86_64LinuxYasmCompiler::addToSymbols(size_t* offset, const Variable& variab
 		case Builtin_Type::F64:
 		case Builtin_Type::REF:
 		case Builtin_Type::ARRAY:
-			(*offset) += 8;
+			if (checkReg == "rbp")
+				(*offset) += 8;
 			result = 3;
 			break;
 	}
-	symbolTable.insert(std::make_pair(variable.mName, SymbolInfo {*offset, variable.mType, result}));
+	std::stringstream ss;
+	if (checkReg == "rbp")
+		ss << reg << *offset << "]";
+	else
+		ss << reg;
+	symbolTable.insert(std::make_pair(variable.mName, SymbolInfo {ss.str(), variable.mType, result}));
 	return result;
 }
 
@@ -84,6 +93,8 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 	// For every variable, keep track of the offset
 	// End with epilogue 'pop rbp'
 
+	const char callingConvention[6][4] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+
 	for (const auto& function : p.functions) {
 		if (function.mName == "main") {
 			outfile << std::endl << "_start:" << std::endl;
@@ -98,8 +109,16 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 
 		// Construct symbol table, keeping track of scope
 		// offset from stack, type
-		std::map<std::string, SymbolInfo> symbolTable;
+		symbolTable.clear();
 		size_t offset = 0;
+		size_t argOffset = 0;
+
+		for (size_t i = 0; i < function.mArgs.size(); i++) {
+			const auto& arg = function.mArgs[i];
+			std::string reg = i < 6 ? callingConvention[i] : "rbp+";
+
+			addToSymbols(&argOffset, Variable { arg.mType, arg.mName }, reg);
+		}
 
 		printBody(outfile, p, function.mBody, function.mName, &offset);
 
@@ -205,6 +224,7 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 	// TODO: We assume only one argument here
 	// TODO: We assume entire expression tree is collapsed
 	Expression* arg = fc.mArgs[0];
+	const char* sizes[] = {"byte", "word", "dword", "qword"};
 	if (arg->mValue.mType == TokenType::LITERAL && arg->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 		Literal l = p.findLiteralByContent(arg->mValue.mText).value();
 		outfile << "; =============== FUNC CALL + STRING ===============" << std::endl;
@@ -228,7 +248,7 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 	} else if (arg->mValue.mType == TokenType::IDENTIFIER) {
 		SymbolInfo& var = symbolTable[arg->mValue.mText];
 		outfile << "; =============== FUNC CALL + VARIABLE ===============" << std::endl;
-		outfile << "\tmovzx edi, " << var.size << " [rbp+" << var.offset << "]" << std::endl;
+		outfile << "\tmovzx edi, " << sizes[var.size] << " " << var.location << std::endl;
 		if (fc.mFunctionName == "write") {
 			outfile << "\tcall print_uint32" << std::endl;
 		} else if (fc.mFunctionName == "writeln") {
@@ -276,8 +296,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 			case Statement_Type::VAR_ASSIGNMENT: {
 				addToSymbols(&localOffset, statement.variable.value());
 				int size = addToSymbols(offset, statement.variable.value());
-				outfile << "\tmov " << sizes[size] << " [rbp+"
-						<< symbolTable[statement.variable.value().mName].offset << "], " << statement.mContent->mValue.mText
+				outfile << "\tmov " << sizes[size] << " " << symbolTable[statement.variable.value().mName].location << ", " << statement.mContent->mValue.mText
 						<< std::endl;
 				break;
 			}
@@ -290,16 +309,16 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					std::string op = ls.mRange.value().mMinimum < ls.mRange.value().mMaximum ? "inc " : "dec ";
 					std::string label = "label";
 					label = label.append(std::to_string(++labelCount));
-					outfile << "\tmov " << sizes[size] << " [rbp+" << symbolTable[ls.mIterator.value().mName].offset << "], " << ls.mRange.value().mMinimum->mValue.mText << std::endl;
+					outfile << "\tmov " << sizes[size] << " " << symbolTable[statement.variable.value().mName].location << ", " << ls.mRange.value().mMinimum->mValue.mText << std::endl;
 					outfile << label << ":" << std::endl;
-					outfile << "\tcmp " << sizes[size] << " [rbp+" << symbolTable[ls.mIterator.value().mName].offset << "], " << ls.mRange.value().mMaximum->mValue.mText << std::endl;
+					outfile << "\tcmp " << sizes[size] << " " << symbolTable[statement.variable.value().mName].location << ", " << ls.mRange.value().mMaximum->mValue.mText << std::endl;
 					outfile << "\tjne inside_label" << labelCount << std::endl;
 					outfile << "\tjmp not_label" << labelCount << std::endl;
 					outfile << "inside_label" << labelCount << ":" << std::endl;
 					printBody(outfile, p, ls.mBody, label, offset);
 					outfile << "\t" << moveToRegister("rax", symbolTable[ls.mIterator.value().mName]).str();
 					outfile << "\t" << op << "rax" << std::endl;
-					outfile << "\tmov " << sizes[size] << " [rbp+" << symbolTable[ls.mIterator.value().mName].offset << "], al" << std::endl;
+					outfile << "\tmov " << sizes[size] << " " << symbolTable[statement.variable.value().mName].location << ", al" << std::endl;
 					outfile << "\tjmp label" << labelCount << std::endl;
 					outfile << "not_label" << labelCount << ":" << std::endl;
 				} else {
@@ -396,7 +415,7 @@ std::stringstream X86_64LinuxYasmCompiler::moveToRegister(const std::string& reg
 			ss << "mov ";
 			break;
 	}
-	ss << reg << ", " << sizes[symbol.size] << " [rbp+" << symbol.offset << "]" << std::endl;
+	ss << reg << ", " << sizes[symbol.size] << " " << symbol.location << std::endl;
 	return ss;
 }
 
@@ -415,7 +434,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			SymbolInfo& val = symbolTable[expression->mValue.mText];
 			bool sign = val.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 			const char* moveAction = getMoveAction(3, val.size, sign);
-			outfile << "\t" << moveAction << " rax, " << sizes[val.size] << " [rbp+" << val.offset << "]" << std::endl;
+			outfile << "\t" << moveAction << " rax, " << sizes[val.size] << " " << val.location << std::endl;
 		}
 	}
 
@@ -449,7 +468,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		leftSize = left.size;
 		const char* reg = "rax";//getRegister("a", left.size);
 		const char* moveAction = getMoveAction(3, leftSize, leftSign);
-		outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " [rbp+" << left.offset << "]" << std::endl;
+		outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location << std::endl;
 	} else if (expression->mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 		int size = getSizeFromNumber(expression->mLeft->mValue.mText);
 		if (size < 0) {
@@ -469,7 +488,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		rightSize = right.size;
 		const char* reg = "rbx";//getRegister("b", right.size);
 		const char* moveAction = getMoveAction(3, rightSize, rightSign);
-		outfile << "\t" << moveAction << " " << reg << ", " << sizes[right.size] << " [rbp+" << right.offset << "]" << std::endl;
+		outfile << "\t" << moveAction << " " << reg << ", " << sizes[right.size] << " " << right.location << std::endl;
 	} else if (expression->mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 		int size = getSizeFromNumber(expression->mRight->mValue.mText);
 		if (size < 0) {
@@ -622,6 +641,7 @@ const char* X86_64LinuxYasmCompiler::getRegister(const std::string& reg, int siz
 		if (reg == "14") return "r14";
 		if (reg == "15") return "r15";
 	}
+	return "UNREACHABLE";
 }
 
 int X86_64LinuxYasmCompiler::getSizeFromNumber(const std::string& text) {

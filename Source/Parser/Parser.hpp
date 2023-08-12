@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <optional>
+#include <map>
 #include "Tokeniser.hpp"
 #include "Expression.hpp"
 
@@ -28,6 +29,7 @@ namespace forest::parser {
 		REF,
 		ARRAY,
 		VOID,
+		STRUCT,
 	};
 
 	enum class Statement_Type {
@@ -50,6 +52,20 @@ namespace forest::parser {
 	struct Type {
 		std::string name;
 		Builtin_Type builtinType;
+		std::vector<Type> subTypes;
+		size_t byteSize;
+	};
+
+	struct StructField {
+		std::vector<std::string> mNames;
+		Type mType;
+		size_t mOffset;
+	};
+
+	struct Struct {
+		std::string mName;
+		std::vector<StructField> mFields;
+		size_t mSize;
 	};
 
 	struct FuncArg {
@@ -156,9 +172,10 @@ namespace forest::parser {
 	class Parser {
 	public:
 		Programme parse(std::vector<Token>& tokens);
+		Parser();
 
 	public: // This was private before implementing testing. I care more about making sure the code does what it needs to do than following OOP principles.
-		static Builtin_Type getTypeFromName(const std::string& name);
+		Builtin_Type getTypeFromName(const std::string& name);
 		Type getTypeFromRange(const Range& range);
 		std::optional<Token> peekNextToken();
 		std::optional<Token> expectIdentifier(const std::string& name = "");
@@ -170,6 +187,7 @@ namespace forest::parser {
 		std::optional<Block> expectBlock();
 		std::optional<Statement> expectStatement();
 		std::optional<SpecialStatement> expectSpecialStatement();
+		std::optional<Struct> expectStruct();
 		std::optional<Statement> tryParseFunctionCall();
 		std::optional<Statement> tryParseLoop();
 		std::optional<Statement> tryParseReturnCall();
@@ -182,6 +200,8 @@ namespace forest::parser {
 		std::vector<Literal> literals;
 		std::vector<FuncCallStatement> externalFunctions;
 		std::vector<std::string> libDependencies;
+		std::map<std::string, Struct> structs;
+		std::map<std::string, size_t> sizeCache;
 		bool requires_libs = false;
 	};
 

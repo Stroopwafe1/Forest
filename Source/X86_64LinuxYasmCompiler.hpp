@@ -9,7 +9,7 @@ using namespace forest::parser;
 namespace fs = std::filesystem;
 
 struct SymbolInfo {
-	size_t offset = 0;
+	std::string location {};
 	Type type {};
 	int size {};
 };
@@ -36,7 +36,7 @@ private:
 	 */
 	ExpressionPrinted printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression, uint8_t nodeType);
 	void printConditionalMove(std::ofstream& outfile, int leftSize, int rightSize, const char* instruction);
-	int addToSymbols(size_t* offset, const Variable& variable);
+	int addToSymbols(size_t* offset, const Variable& variable, const std::string& reg = "rbp-");
 	std::stringstream moveToRegister(const std::string& reg, const SymbolInfo& symbol);
 	const char* getRegister(const std::string& reg, int size);
 	int getSizeFromNumber(const std::string& text);
