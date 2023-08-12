@@ -192,20 +192,30 @@ namespace forest::parser {
 			}
 			// Maybe have a debug message that mentions we parsed a simple block without brackets
 			statements.push_back(statement.value());
-			return Block { statements };
+			return Block { statements, 0 };
 		}
 
+		size_t stackMem = 0;
 		while(!expectOperator("}").has_value()) {
 			// Parse statements
 			std::optional<Statement> statement = expectStatement();
 			if (!statement.has_value()) {
 				std::cerr << "Could not parse statement at " << *mCurrentToken << std::endl;
+				continue;
+			}
+
+			if (statement.value().mType == Statement_Type::VAR_ASSIGNMENT || statement.value().mType == Statement_Type::VAR_DECLARATION) {
+				Variable variable = statement.value().variable.value();
+				stackMem += variable.mType.byteSize;
+			} else if (statement.value().mType == Statement_Type::LOOP) {
+				LoopStatement ls = statement.value().loopStatement.value();
+				stackMem += ls.mIterator.value().mType.byteSize;
 			}
 
 			statements.push_back(statement.value());
 		}
 
-		return Block { statements };
+		return Block { statements, stackMem };
 	}
 
 	std::optional<Statement> Parser::expectStatement() {
@@ -669,23 +679,23 @@ namespace forest::parser {
 		if (min < 0) {
 			// Has to be signed
 			if (min >= -128 && max <= 127) {
-				return Type { "i8", Builtin_Type::I8 };
+				return Type { "i8", Builtin_Type::I8, {}, 1 };
 			} else if (min >= -32768 && max <= 32767) {
-				return Type { "i16", Builtin_Type::I16 };
+				return Type { "i16", Builtin_Type::I16, {}, 2 };
 			} else if (min >= -2147483648 && max <= 2147483647) {
-				return Type { "i32", Builtin_Type::I32 };
+				return Type { "i32", Builtin_Type::I32, {}, 4 };
 			} else {
-				return Type { "i64", Builtin_Type::I64 };
+				return Type { "i64", Builtin_Type::I64, {}, 8 };
 			}
 		} else {
 			if (max <= 255) {
-				return Type { "ui8", Builtin_Type::UI8 };
+				return Type { "ui8", Builtin_Type::UI8, {}, 1 };
 			} else if (max <= 65535) {
-				return Type { "ui16", Builtin_Type::UI16 };
+				return Type { "ui16", Builtin_Type::UI16, {}, 2 };
 			} else if (max <= 4294967295) {
-				return Type { "ui32", Builtin_Type::UI32 };
+				return Type { "ui32", Builtin_Type::UI32, {}, 4 };
 			} else {
-				return Type { "ui64", Builtin_Type::UI64 };
+				return Type { "ui64", Builtin_Type::UI64, {}, 8 };
 			}
 		}
 	}

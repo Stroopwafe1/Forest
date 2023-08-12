@@ -45,7 +45,7 @@ int X86_64LinuxYasmCompiler::addToSymbols(size_t* offset, const Variable& variab
 	}
 	std::stringstream ss;
 	if (checkReg == "rbp")
-		ss << reg << *offset << "]";
+		ss << "[" << reg << *offset << "]";
 	else
 		ss << reg;
 	symbolTable.insert(std::make_pair(variable.mName, SymbolInfo {ss.str(), variable.mType, result}));
@@ -276,6 +276,8 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 	const char* sizes[] = {"byte", "word", "dword", "qword"};
 	std::map<std::string, SymbolInfo> localSymbols;
 	size_t localOffset = 0;
+	if (block.stackMemory != 0)
+		outfile << "\tsub rsp, " << block.stackMemory << std::endl;
 
 	for (const auto& statement : block.statements) {
 		switch (statement.mType) {
@@ -309,16 +311,16 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					std::string op = ls.mRange.value().mMinimum < ls.mRange.value().mMaximum ? "inc " : "dec ";
 					std::string label = "label";
 					label = label.append(std::to_string(++labelCount));
-					outfile << "\tmov " << sizes[size] << " " << symbolTable[statement.variable.value().mName].location << ", " << ls.mRange.value().mMinimum->mValue.mText << std::endl;
+					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location << ", " << ls.mRange.value().mMinimum->mValue.mText << std::endl;
 					outfile << label << ":" << std::endl;
-					outfile << "\tcmp " << sizes[size] << " " << symbolTable[statement.variable.value().mName].location << ", " << ls.mRange.value().mMaximum->mValue.mText << std::endl;
+					outfile << "\tcmp " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location << ", " << ls.mRange.value().mMaximum->mValue.mText << std::endl;
 					outfile << "\tjne inside_label" << labelCount << std::endl;
 					outfile << "\tjmp not_label" << labelCount << std::endl;
 					outfile << "inside_label" << labelCount << ":" << std::endl;
 					printBody(outfile, p, ls.mBody, label, offset);
 					outfile << "\t" << moveToRegister("rax", symbolTable[ls.mIterator.value().mName]).str();
 					outfile << "\t" << op << "rax" << std::endl;
-					outfile << "\tmov " << sizes[size] << " " << symbolTable[statement.variable.value().mName].location << ", al" << std::endl;
+					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location << ", al" << std::endl;
 					outfile << "\tjmp label" << labelCount << std::endl;
 					outfile << "not_label" << labelCount << ":" << std::endl;
 				} else {
@@ -390,6 +392,9 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				break;
 		}
 	}
+
+	if (block.stackMemory != 0)
+		outfile << "\tadd rsp, " << block.stackMemory << std::endl;
 	symbolTable.erase(localSymbols.cbegin(), localSymbols.cend());
 }
 

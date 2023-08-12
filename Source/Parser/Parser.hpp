@@ -99,6 +99,7 @@ namespace forest::parser {
 	struct Statement;
 	struct Block {
 		std::vector<Statement> statements;
+		size_t stackMemory {};
 	};
 
 	struct LoopStatement {
