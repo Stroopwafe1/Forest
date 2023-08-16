@@ -226,28 +226,32 @@ namespace forest::parser {
 		if (returnCall.has_value()) {
 			return returnCall.value();
 		}
+		mCurrentToken = saved;
 
 		std::optional<Statement> ifStatement = tryParseIfStatement();
 		if (ifStatement.has_value()) {
 			return ifStatement.value();
 		}
+		mCurrentToken = saved;
 
 		std::optional<Statement> loop = tryParseLoop();
 		if (loop.has_value()) {
 			return loop.value();
 		}
+		mCurrentToken = saved;
 
 		std::optional<Statement> functionCall = tryParseFunctionCall();
 		if (functionCall.has_value()) {
 			return functionCall.value();
 		}
+		mCurrentToken = saved;
 
 		std::optional<Statement> variable = tryParseVariableDeclaration();
 		if (variable.has_value()) {
 			return variable.value();
 		}
 
-		mCurrentToken = saved;
+		mCurrentToken++;
 		return std::nullopt;
 	}
 
@@ -564,12 +568,34 @@ namespace forest::parser {
 			mCurrentToken = saved;
 			return std::nullopt;
 		}
+		Type actualType = type.value();
 
 		std::optional<Token> name = expectIdentifier();
 		if (!name.has_value()) {
 			std::cerr << "Expected a name for the variable declaration at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
+		}
+
+		std::optional<Token> arrayBracket = expectOperator("[");
+		if (arrayBracket.has_value()) {
+			// We have a syntactic alias for array declaration
+			// ui8[4] test;
+			// ui8 test[4];
+			size_t len = 1;
+			std::optional<Token> length = expectLiteral();
+			if (length.has_value())
+				len = stol(length.value().mText);
+
+			std::optional<Token> closingBracket = expectOperator("]");
+			if (!closingBracket.has_value()) {
+				std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in type declaration." << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+
+			Type transformedType = Type {actualType.name + "[]", Builtin_Type::ARRAY, {actualType}, len * actualType.byteSize };
+			actualType = transformedType;
 		}
 
 		std::optional<Token> semi = expectSemicolon();
@@ -590,7 +616,7 @@ namespace forest::parser {
 		statement.mType = Statement_Type::VAR_ASSIGNMENT;
 
 		std::vector<Expression*> values;
-		if (type.value().builtinType == Builtin_Type::ARRAY) {
+		if (actualType.builtinType == Builtin_Type::ARRAY) {
 			// type[N] varName = { val1, val2, val3, etc... };
 			std::optional<Token> bracket = expectOperator("{");
 			if (!bracket.has_value()) {
@@ -616,7 +642,7 @@ namespace forest::parser {
 					return std::nullopt;
 				}
 			}
-		} else if (type.value().builtinType == Builtin_Type::STRUCT) {
+		} else if (actualType.builtinType == Builtin_Type::STRUCT) {
 			// TODO: implement this
 			throw std::runtime_error("Not implemented yet");
 		} else {
@@ -632,7 +658,7 @@ namespace forest::parser {
 			return std::nullopt;
 		}
 
-		statement.variable = Variable { type.value(), name.value().mText, values };
+		statement.variable = Variable { actualType, name.value().mText, values };
 
 		return statement;
 	}

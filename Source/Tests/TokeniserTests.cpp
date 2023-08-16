@@ -74,6 +74,27 @@ TEST_F(TokeniserTests, TokeniserParseShouldTokeniseFloatLiterals) {
 	EXPECT_STREQ(second.mText.c_str(), "-928.291");
 }
 
+TEST_F(TokeniserTests, TokeniserParseShouldTokeniseAssignmentOperators) {
+	std::string code = "+= -= *= /= %= >>= <<= |= &= ^= != **=";
+	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, filePath);
+
+	ASSERT_EQ(tokens.size(), 12);
+
+	size_t pos = 0;
+	std::string op;
+	std::string delim = " ";
+	int i = 0;
+	while ((pos = code.find(delim)) != std::string::npos) {
+		op = code.substr(0, pos);
+		Token token = tokens[i];
+		EXPECT_EQ(token.mType, TokenType::OPERATOR);
+		EXPECT_STREQ(token.mText.c_str(), op.c_str());
+		i++;
+		code.erase(0, pos + delim.length());
+	}
+
+}
+
 TEST_F(TokeniserTests, TokeniserParseShouldTokeniseRange) {
 	std::string code = "1..4";
 	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, filePath);

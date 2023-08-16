@@ -51,7 +51,7 @@ namespace forest::parser {
 			} else if (currentToken.mSubType == TokenSubType::CHAR_LITERAL && currChar != '\\' && currChar != '\'') {
 				currentToken.mText.append(1, currChar);
 				continue;
-			} else if (currentToken.mType == TokenType::POTENTIAL_COMMENT && !(currChar == '/' || currChar == '*')) {
+			} else if (currentToken.mType == TokenType::POTENTIAL_COMMENT && !(currChar == '/' || currChar == '*' || currChar == '=')) {
 				currentToken.mType = TokenType::OPERATOR;
 				currentToken.mSubType = TokenSubType::NOTHING;
 				endToken(currentToken, tokens);
@@ -88,7 +88,7 @@ namespace forest::parser {
 						currentToken.mEndOffset = end + 1;
 						currentToken.mText.erase();
 						currentToken.mText.append(1, currChar);
-					} else if (currentToken.mType == TokenType::POTENTIAL_NEGATIVE_NUMBER) {
+					} else if (currentToken.mType == TokenType::OPERATOR && currentToken.mText == "-") {
 						currentToken.mType = TokenType::LITERAL;
 						currentToken.mSubType = TokenSubType::INTEGER_LITERAL;
 						currentToken.mEndOffset = end + 1;
@@ -164,7 +164,7 @@ namespace forest::parser {
 					break;
 				case '-':
 					endToken(currentToken, tokens);
-					currentToken.mType = TokenType::POTENTIAL_NEGATIVE_NUMBER;
+					currentToken.mType = TokenType::OPERATOR;
 					currentToken.mSubType = TokenSubType::NOTHING;
 					currentToken.mStartOffset = start;
 					currentToken.mEndOffset = end + 1;
@@ -179,10 +179,9 @@ namespace forest::parser {
 				case ']':
 				case ',':
 				case '!':
+				case '^':
 				case '#':
 				case '@':
-				case '<':
-				case '>':
 				case '+':
 				case '%':
 					endToken(currentToken, tokens);
@@ -194,21 +193,27 @@ namespace forest::parser {
 					currentToken.mText.append(1, currChar);
 					break;
 				case '=':
-					if (currentToken.mType == TokenType::OPERATOR &&
+					if ((currentToken.mType == TokenType::OPERATOR &&
 					(currentToken.mText == "-" ||
 					currentToken.mText == "=" ||
 					currentToken.mText == "+" ||
 					currentToken.mText == "*" ||
+					currentToken.mText == "**" ||
 					currentToken.mText == "/" ||
 					currentToken.mText == "%" ||
+					currentToken.mText == "^" ||
 					currentToken.mText == "<" ||
+					currentToken.mText == "<<" ||
 					currentToken.mText == ">" ||
+					currentToken.mText == ">>" ||
 					currentToken.mText == "|" ||
 					currentToken.mText == "&" ||
-					currentToken.mText == "!")) {
+					currentToken.mText == "!")) ||
+					currentToken.mType == TokenType::POTENTIAL_COMMENT) {
 						currentToken.mText.append(1, currChar);
 						currentToken.mEndOffset++;
-						currentToken.mSubType = TokenSubType::NAMESPACE;
+						currentToken.mType = TokenType::OPERATOR;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						endToken(currentToken, tokens);
 						break;
 					}
@@ -240,7 +245,7 @@ namespace forest::parser {
 					if (currentToken.mType == TokenType::OPERATOR && currentToken.mText == "|") {
 						currentToken.mText.append(1, currChar);
 						currentToken.mEndOffset++;
-						currentToken.mSubType = TokenSubType::NAMESPACE;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						endToken(currentToken, tokens);
 						break;
 					}
@@ -256,7 +261,7 @@ namespace forest::parser {
 					if (currentToken.mType == TokenType::OPERATOR && currentToken.mText == "&") {
 						currentToken.mText.append(1, currChar);
 						currentToken.mEndOffset++;
-						currentToken.mSubType = TokenSubType::NAMESPACE;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						endToken(currentToken, tokens);
 						break;
 					}
@@ -272,13 +277,42 @@ namespace forest::parser {
 					if (currentToken.mType == TokenType::OPERATOR && currentToken.mText == "*") {
 						currentToken.mText.append(1, currChar);
 						currentToken.mEndOffset++;
-						currentToken.mSubType = TokenSubType::NAMESPACE;
-						endToken(currentToken, tokens);
+						currentToken.mSubType = TokenSubType::NOTHING;
 						break;
 					} else if (currentToken.mType == TokenType::POTENTIAL_COMMENT) {
 						currentToken.mType = TokenType::MULTILINE_COMMENT;
 						currentToken.mSubType = TokenSubType::NOTHING;
 						currentToken.mText.erase();
+						break;
+					}
+					endToken(currentToken, tokens);
+					currentToken.mType = TokenType::OPERATOR;
+					currentToken.mSubType = TokenSubType::NOTHING;
+					currentToken.mStartOffset = start;
+					currentToken.mEndOffset = end + 1;
+					currentToken.mText.erase();
+					currentToken.mText.append(1, currChar);
+					break;
+				case '>':
+					if (currentToken.mType == TokenType::OPERATOR && currentToken.mText == ">") {
+						currentToken.mText.append(1, currChar);
+						currentToken.mEndOffset++;
+						currentToken.mSubType = TokenSubType::NOTHING;
+						break;
+					}
+					endToken(currentToken, tokens);
+					currentToken.mType = TokenType::OPERATOR;
+					currentToken.mSubType = TokenSubType::NOTHING;
+					currentToken.mStartOffset = start;
+					currentToken.mEndOffset = end + 1;
+					currentToken.mText.erase();
+					currentToken.mText.append(1, currChar);
+					break;
+				case '<':
+					if (currentToken.mType == TokenType::OPERATOR && currentToken.mText == "<") {
+						currentToken.mText.append(1, currChar);
+						currentToken.mEndOffset++;
+						currentToken.mSubType = TokenSubType::NOTHING;
 						break;
 					}
 					endToken(currentToken, tokens);
