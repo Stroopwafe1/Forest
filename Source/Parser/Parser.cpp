@@ -23,6 +23,7 @@ namespace forest::parser {
 				{ "f64", 8},
 				{ "char", 4},
 				{ "bool", 1},
+				{ "string", 8},
 		};
 	}
 
@@ -515,7 +516,7 @@ namespace forest::parser {
 			}
 			Range r = Range { min, max };
 			ls.mRange = r;
-			ls.mIterator = Variable { getTypeFromRange(r), iterator.value().mText, iterator.value() };
+			ls.mIterator = Variable { getTypeFromRange(r), iterator.value().mText, {} };
 		}
 		std::optional<Block> body = expectBlock();
 		if (!body.has_value()) {
@@ -575,7 +576,7 @@ namespace forest::parser {
 		if (semi.has_value()) {
 			statement.mType = Statement_Type::VAR_DECLARATION;
 			statement.mContent = nullptr;
-			statement.variable = Variable { type.value(), name.value().mText, name.value() };
+			statement.variable = Variable { type.value(), name.value().mText, {} };
 			return statement;
 		}
 
@@ -587,7 +588,43 @@ namespace forest::parser {
 		}
 
 		statement.mType = Statement_Type::VAR_ASSIGNMENT;
-		Expression* expression = expectExpression(statement, true);
+
+		std::vector<Expression*> values;
+		if (type.value().builtinType == Builtin_Type::ARRAY) {
+			// type[N] varName = { val1, val2, val3, etc... };
+			std::optional<Token> bracket = expectOperator("{");
+			if (!bracket.has_value()) {
+				std::cerr << "Expected a '{' for the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return std::nullopt;
+			}
+
+			while (!expectOperator("}").has_value()) {
+				Expression* expression = expectExpression(statement);
+
+				values.push_back(expression);
+
+				std::optional<Token> closingBracket = expectOperator("}");
+				if (closingBracket.has_value())
+					break;
+
+				std::optional<Token> comma = expectOperator(",");
+				if (!comma.has_value()) {
+					// We didn't encounter the '}', and we didn't get a ','
+					std::cerr << "Expected a ',' while parsing the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				}
+			}
+		} else if (type.value().builtinType == Builtin_Type::STRUCT) {
+			// TODO: implement this
+			throw std::runtime_error("Not implemented yet");
+		} else {
+			Expression* expression = expectExpression(statement, true);
+			if (expression != nullptr)
+				values.push_back(expression);
+		}
+
 
 		semi = expectSemicolon();
 		if (!semi.has_value()) {
@@ -595,8 +632,7 @@ namespace forest::parser {
 			return std::nullopt;
 		}
 
-		statement.variable = Variable { type.value(), name.value().mText, expression->mValue };
-		statement.mContent = expression;
+		statement.variable = Variable { type.value(), name.value().mText, values };
 
 		return statement;
 	}
@@ -780,7 +816,7 @@ namespace forest::parser {
 			t.byteSize = size;
 
 			types.emplace_back(t);
-			return Type {"array[]", Builtin_Type::ARRAY, types, len * size};
+			return Type {id->mText + "[]", Builtin_Type::ARRAY, types, len * size};
 		}
 
 		return Type {id->mText, getTypeFromName(id->mText)};
@@ -796,13 +832,9 @@ namespace forest::parser {
 		std::vector<Expression*> nodes;
 
 		// While the next token exists and is not a closing character for the current statement context
-		while (mCurrentToken != mTokensEnd && !((
-					((mCurrentToken->mText == ")" || mCurrentToken->mText == "," || mCurrentToken->mText == "{") && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF)) ||
-					(mCurrentToken->mText == "]" && (statementContext.mType == Statement_Type::ARRAY_INDEX)) ||
-					((mCurrentToken->mText == "{" || mCurrentToken->mText == ".." || mCurrentToken->mText == ",") && (statementContext.mType == Statement_Type::LOOP)) ||
-					(mCurrentToken->mType == TokenType::SEMICOLON)
-				) && parenStack.empty() )
-			) {
+
+
+		while (ExpressionShouldContinueParsing(statementContext, parenStack)) {
 			if (mCurrentToken->mText == "(") {
 				parenStack.push('(');
 				expectOperator("(");
@@ -911,7 +943,7 @@ namespace forest::parser {
 		} else if (nodes.size() > 1) {
 			std::cerr << "Unexpected amount of nodes while parsing expression. Found " << nodes.size() << " but expected one. Full list:" << std::endl;
 			for (auto node : nodes) {
-				std::cerr << "Unexpected node at " << (*node).mValue << std::endl;
+				std::cerr << "Unexpected node " << node->mValue.mText << " at " << (*node).mValue << std::endl;
 			}
 			mCurrentToken = saved;
 			return nullptr;
@@ -921,6 +953,17 @@ namespace forest::parser {
 			nodes[0]->Collapse();
 
 		return nodes[0];
+	}
+
+	bool Parser::ExpressionShouldContinueParsing(const Statement& statementContext, const std::stack<char>& parenStack) const {
+		bool hasNextToken = mCurrentToken != mTokensEnd;
+		bool closesIf = (mCurrentToken->mText == ")" || mCurrentToken->mText == "{") && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF);
+		bool closesArrayIndex = mCurrentToken->mText == "]" && statementContext.mType == Statement_Type::ARRAY_INDEX;
+		bool closesLoop = (mCurrentToken->mText == "{" || mCurrentToken->mText == "..") && statementContext.mType == Statement_Type::LOOP;
+		bool closesGeneralExpression = mCurrentToken->mType == TokenType::SEMICOLON || mCurrentToken->mText == ",";
+		bool closesVarAssignment = mCurrentToken->mText == "}" && statementContext.mType == Statement_Type::VAR_ASSIGNMENT;
+
+		return hasNextToken && !((closesIf || closesArrayIndex || closesLoop || closesVarAssignment || closesGeneralExpression) && parenStack.empty());
 	}
 
 

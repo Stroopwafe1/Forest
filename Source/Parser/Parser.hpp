@@ -6,6 +6,7 @@
 #include <vector>
 #include <optional>
 #include <map>
+#include <stack>
 #include "Tokeniser.hpp"
 #include "Expression.hpp"
 
@@ -88,7 +89,7 @@ namespace forest::parser {
 	struct Variable {
 		Type mType;
 		std::string mName;
-		Token mValue;
+		std::vector<Expression*> mValues;
 	};
 
 	struct Range {
@@ -204,6 +205,9 @@ namespace forest::parser {
 		std::map<std::string, Struct> structs;
 		std::map<std::string, size_t> sizeCache;
 		bool requires_libs = false;
+
+	private:
+		bool ExpressionShouldContinueParsing(const Statement& statementContext, const std::stack<char>& parenStack) const;
 	};
 
 } // forest::parser

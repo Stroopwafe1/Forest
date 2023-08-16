@@ -1,0 +1,9 @@
+#depends(c)
+
+i32 main(string[] argv) {
+	ui16[5] test = { 0, 1, 2, 3, 4 };
+	loop i, 0..5 {
+		e:printf("Value: %d\n", test[i]);
+	}
+	return 0;
+}

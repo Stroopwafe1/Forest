@@ -448,15 +448,39 @@ TEST_F(ParserTests, ParserTryParseVariableStatement) {
 	ASSERT_TRUE(statement.has_value());
 
 	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_ASSIGNMENT);
-	EXPECT_STREQ(statement.value().mContent->mValue.mText.c_str(), "100");
 	EXPECT_FALSE(statement.value().loopStatement.has_value());
 	EXPECT_FALSE(statement.value().funcCall.has_value());
 
 	ASSERT_TRUE(statement.value().variable.has_value());
 	Variable var = statement.value().variable.value();
+	ASSERT_EQ(var.mValues.size(), 1);
+	EXPECT_STREQ(var.mValues[0]->mValue.mText.c_str(), "100");
 	EXPECT_STREQ(var.mName.c_str(), "test");
 	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
 	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+}
+
+TEST_F(ParserTests, ParserTryParseArrayVariableStatement) {
+	std::vector<Token> tokens = Tokeniser::parse("ui16[3] test = {0, 1, 2};", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_ASSIGNMENT);
+	ASSERT_TRUE(statement.value().variable.has_value());
+	Variable var = statement.value().variable.value();
+
+	ASSERT_EQ(var.mValues.size(), 3);
+	EXPECT_STREQ(var.mValues[0]->mValue.mText.c_str(), "0");
+	EXPECT_STREQ(var.mValues[1]->mValue.mText.c_str(), "1");
+	EXPECT_STREQ(var.mValues[2]->mValue.mText.c_str(), "2");
+
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui16[]");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::ARRAY);
+	EXPECT_EQ(var.mType.byteSize, 6);
 }
 
 TEST_F(ParserTests, ParserTryParseSimpleStruct) {
