@@ -16,12 +16,15 @@ struct SymbolInfo {
 
 	std::string location() const {
 		std::stringstream ss;
-		ss << "[" << reg;
-		if (offset > 0)
-			ss << "+" << offset;
-		else if (offset < 0)
-			ss << offset;
-		ss << "]";
+		if (reg == "rbp") {
+			ss << "[" << reg;
+			if (offset > 0)
+				ss << "+" << offset;
+			else if (offset < 0)
+				ss << offset;
+			ss << "]";
+		} else
+			ss << reg;
 		return ss.str();
 	}
 };
