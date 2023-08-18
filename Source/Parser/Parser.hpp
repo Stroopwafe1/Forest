@@ -43,6 +43,8 @@ namespace forest::parser {
 		LOOP,
 		IF,
 		ARRAY_INDEX, // Not actually a statement, but used for parsing array indexing expressions
+		BREAK,
+		SKIP,
 	};
 
 	enum class SpecialStatementType {
@@ -231,6 +233,7 @@ namespace forest::parser {
 		std::optional<Statement> tryParseFunctionCall();
 		std::optional<Statement> tryParseLoop();
 		std::optional<Statement> tryParseReturnCall();
+		std::optional<Statement> tryParseControlStatement();
 		std::optional<Statement> tryParseVariableDeclaration();
 		std::optional<Statement> tryParseVariableAssignment();
 		std::optional<Statement> tryParseIfStatement();

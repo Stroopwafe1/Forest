@@ -248,6 +248,11 @@ namespace forest::parser {
 		}
 		mCurrentToken = saved;
 
+		std::optional<Statement> controlFlow = tryParseControlStatement();
+		if (controlFlow.has_value())
+			return controlFlow.value();
+		mCurrentToken = saved;
+
 		std::optional<Statement> ifStatement = tryParseIfStatement();
 		if (ifStatement.has_value()) {
 			return ifStatement.value();
@@ -582,6 +587,30 @@ namespace forest::parser {
 			return std::nullopt;
 		}
 
+		return statement;
+	}
+
+
+	std::optional<Statement> Parser::tryParseControlStatement() {
+		std::vector<Token>::iterator saved = mCurrentToken;
+		Statement statement;
+
+		std::optional<Token> br = expectIdentifier("break");
+		if (br.has_value())
+			statement.mType = Statement_Type::BREAK;
+		else {
+			std::optional<Token> skip = expectIdentifier("skip");
+			if (skip.has_value())
+				statement.mType = Statement_Type::SKIP;
+		}
+
+		std::optional<Token> semi = expectSemicolon();
+		if (!semi.has_value()) {
+			return std::nullopt;
+		}
+
+		if (statement.mType == Statement_Type::NOTHING)
+			return std::nullopt;
 		return statement;
 	}
 

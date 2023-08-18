@@ -42,6 +42,7 @@ public:
 private:
 	uint32_t labelCount = 0;
 	uint32_t ifCount = 0;
+	std::string recentLoopLabel{};
 	std::map<std::string, SymbolInfo> symbolTable;
 	void printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, int* offset);
 	void printLibs(std::ofstream& outfile);
@@ -58,6 +59,7 @@ private:
 	int getEvenSize(int size1, int size2);
 	const char* getMoveAction(int regSize, int valSize, bool isSigned);
 	int getSizeFromByteSize(size_t byteSize);
+	const char* convertARegSize(int size);
 };
 
 

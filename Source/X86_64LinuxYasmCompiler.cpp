@@ -394,6 +394,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					std::string label = "label";
 					uint32_t localLabelCount = ++labelCount;
 					label = label.append(std::to_string(localLabelCount));
+					recentLoopLabel = label;
 					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << ls.mRange.value().mMinimum->mValue.mText << std::endl;
 					outfile << label << ":" << std::endl;
 					outfile << "\tcmp " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << ls.mRange.value().mMaximum->mValue.mText << std::endl;
@@ -401,6 +402,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << "\tjmp not_label" << localLabelCount << std::endl;
 					outfile << "inside_label" << localLabelCount << ":" << std::endl;
 					printBody(outfile, p, ls.mBody, label, offset);
+					outfile << "skip_label" << localLabelCount << ":" << std::endl;
 					outfile << "\t" << moveToRegister("rax", symbolTable[ls.mIterator.value().mName]).str();
 					outfile << "\t" << op << "rax" << std::endl;
 					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", al" << std::endl;
@@ -421,6 +423,14 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				}
 				break;
 			}
+			case Statement_Type::BREAK:
+				if (!recentLoopLabel.empty())
+					outfile << "\tjmp not_" << recentLoopLabel << std::endl;
+				break;
+			case Statement_Type::SKIP:
+				if (!recentLoopLabel.empty())
+					outfile << "\tjmp skip_" << recentLoopLabel << std::endl;
+				break;
 			case Statement_Type::FUNC_CALL: {
 				FuncCallStatement fc = statement.funcCall.value();
 				// If function is stdlib call, need to expand this into something better when stdlib expands
@@ -489,8 +499,6 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				outfile << "end_if" << localIfCount << ":" << std::endl;
 				break;
 			}
-			case Statement_Type::ARRAY_INDEX:
-				break;
 		}
 	}
 
@@ -670,6 +678,17 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			outfile << "\tidiv " << r1 << ", " << r2 << std::endl;
 		else
 			outfile << "\tdiv " << r1 << ", " << r2 << std::endl;
+	} else if (expression->mValue.mText == "%") {
+		int size = getEvenSize(leftSize, rightSize);
+		std::string r1 = getRegister("a", size);
+		std::string r2 = getRegister("b", size);
+		std::string r3 = size > 0 ? getRegister("d", size) : "ah";
+		outfile << "\t" << convertARegSize(size) << std::endl;
+		if (curr.sign)
+			outfile << "\tidiv " << r1 << ", " << r2 << std::endl;
+		else
+			outfile << "\tdiv " << r1 << ", " << r2 << std::endl;
+		outfile << "\tmov " << r1 << ", " << r3 << std::endl; // Remainder of div (mod) is stored in d-register
 	} else if (expression->mValue.mText == "<") {
 		printConditionalMove(outfile, leftSize, rightSize, "cmovl");
 	} else if (expression->mValue.mText == "<=") {
@@ -850,5 +869,12 @@ int X86_64LinuxYasmCompiler::getSizeFromByteSize(size_t byteSize) {
 		case 8: return 3;
 		default: return -1;
 	}
+}
+
+const char* X86_64LinuxYasmCompiler::convertARegSize(int size) {
+	if (size == 0) return "cbw";
+	if (size == 1) return "cwd";
+	if (size == 2) return "cdq";
+	if (size == 3) return "cqo";
 }
 
