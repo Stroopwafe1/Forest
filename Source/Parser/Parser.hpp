@@ -36,6 +36,7 @@ namespace forest::parser {
 	enum class Statement_Type {
 		NOTHING,
 		VAR_DECLARATION,
+		VAR_DECL_ASSIGN,
 		VAR_ASSIGNMENT,
 		FUNC_CALL,
 		RETURN_CALL,
@@ -51,10 +52,27 @@ namespace forest::parser {
 	};
 
 	struct Type {
-		std::string name;
-		Builtin_Type builtinType;
-		std::vector<Type> subTypes;
-		size_t byteSize;
+		std::string name{};
+		Builtin_Type builtinType{};
+		std::vector<Type> subTypes{};
+		size_t byteSize{};
+		Type() = default;
+		Type(const std::string& _name, const Builtin_Type& builtin, const std::vector<Type>& subs, const size_t& bytes) {
+			name = _name;
+			builtinType = builtin;
+			subTypes = subs;
+			byteSize = bytes;
+		}
+
+		Type(Type const& rhs) {
+			name = rhs.name;
+			builtinType = rhs.builtinType;
+			byteSize = rhs.byteSize;
+			for (const Type& type: rhs.subTypes) {
+				Type t = Type(type);
+				subTypes.push_back(t);
+			}
+		}
 	};
 
 	struct StructField {
@@ -90,6 +108,25 @@ namespace forest::parser {
 		Type mType;
 		std::string mName;
 		std::vector<Expression*> mValues;
+
+		Variable() {
+			mType = {};
+			mName = {};
+			mValues = {};
+		}
+		Variable(const Type& type, const std::string& name, const std::vector<Expression*>& values) {
+			mType = type;
+			mName = name;
+			mValues = values;
+		}
+		Variable(Variable const& rhs) {
+			mType = rhs.mType;
+			mName = rhs.mName;
+			for (auto& expression: rhs.mValues) {
+				Expression* e = new Expression(*expression);
+				mValues.push_back(e);
+			}
+		}
 	};
 
 	struct Range {
@@ -101,6 +138,7 @@ namespace forest::parser {
 	struct Block {
 		std::vector<Statement> statements;
 		size_t stackMemory {};
+		size_t biggestAlloc {};
 	};
 
 	struct LoopStatement {
@@ -194,6 +232,7 @@ namespace forest::parser {
 		std::optional<Statement> tryParseLoop();
 		std::optional<Statement> tryParseReturnCall();
 		std::optional<Statement> tryParseVariableDeclaration();
+		std::optional<Statement> tryParseVariableAssignment();
 		std::optional<Statement> tryParseIfStatement();
 		Expression* expectExpression(Statement& statementContext, bool collapse = false);
 
@@ -203,10 +242,12 @@ namespace forest::parser {
 		std::vector<FuncCallStatement> externalFunctions;
 		std::vector<std::string> libDependencies;
 		std::map<std::string, Struct> structs;
+		std::map<std::string, Variable> variables;
 		std::map<std::string, size_t> sizeCache;
 		bool requires_libs = false;
 
 	private:
+		uint32_t biggestAlloc = 0;
 		bool ExpressionShouldContinueParsing(const Statement& statementContext, const std::stack<char>& parenStack) const;
 	};
 

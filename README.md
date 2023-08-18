@@ -10,8 +10,8 @@ Because I wanna have a go at making my own language, like every developer has wa
 
 ## Goals
 - [x] Compiled language (Though interpreted is also fine for now)
-- [ ] Turing complete
-- [ ] Statically typed
+- [x] Statically typed
+- [x] Turing complete (see [rule110](Examples/rule110.tree))
 - [ ] Self-hosted (Eventually)
 - [ ] Optimised
 

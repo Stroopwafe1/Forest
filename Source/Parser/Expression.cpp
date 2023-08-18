@@ -7,6 +7,25 @@ namespace forest::parser {
 		delete mRight;
 	}
 
+
+	Expression::Expression() {
+		mValue = {};
+		mLeft = nullptr;
+		mRight = nullptr;
+	}
+
+	Expression::Expression(const Expression& rhs) {
+		mValue = rhs.mValue;
+		if (rhs.mLeft != nullptr)
+			mLeft = new Expression(*rhs.mLeft);
+		else
+			mLeft = nullptr;
+		if (rhs.mRight != nullptr)
+			mRight = new Expression(*rhs.mRight);
+		else
+			mRight = nullptr;
+	}
+
 	void Expression::Collapse() {
 		if (mLeft == nullptr && mRight == nullptr) {
 			return;
@@ -147,4 +166,6 @@ namespace forest::parser {
 			mRight = nullptr;
 		}
 	}
+
+
 } // forest::parser

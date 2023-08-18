@@ -104,7 +104,6 @@ namespace forest::parser {
 						currentToken.mText.append(1, currChar);
 					}
 					break;
-
 				case '.':
 					if ((currentToken.mType == TokenType::NOTHING || currentToken.mType == TokenType::IDENTIFIER || currentToken.mType == TokenType::OPERATOR) && lastToken.mSubType != TokenSubType::DOT) {
 						endToken(currentToken, tokens);
@@ -395,6 +394,25 @@ namespace forest::parser {
 					start = 0;
 					end = 0;
 					break;
+				case 'x': // Hex
+				case 'b': // Binary or Hexadecimal 11
+				case 'o': // Octal
+				case 'a':
+				case 'c':
+				case 'd':
+				case 'e':
+				case 'f':
+				case 'A':
+				case 'B':
+				case 'C':
+				case 'D':
+				case 'E':
+				case 'F':
+					if (currentToken.mSubType == TokenSubType::INTEGER_LITERAL) {
+						currentToken.mEndOffset = end + 1;
+						currentToken.mText.append(1, currChar);
+						break;
+					} // Otherwise, fall through to default
 				default:
 					if (currentToken.mType == TokenType::NOTHING || currentToken.mSubType == TokenSubType::INTEGER_LITERAL || currentToken.mSubType == TokenSubType::FLOAT_LITERAL || currentToken.mType == TokenType::OPERATOR) {
 						endToken(currentToken, tokens);

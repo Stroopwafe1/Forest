@@ -439,6 +439,75 @@ TEST_F(ParserTests, ParserTryParseExternalFuncCallStatement) {
 	EXPECT_STREQ(arg1->mValue.mText.c_str(), "Forest!");
 }
 
+TEST_F(ParserTests, ParserTryParseVariableDeclaration) {
+	std::vector<Token> tokens = Tokeniser::parse("ui8 test;", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+	Variable var = statement.value().variable.value();
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECLARATION);
+	ASSERT_EQ(var.mValues.size(), 0);
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+}
+
+TEST_F(ParserTests, ParserTryParseVariableAssignment) {
+	std::vector<Token> tokens = Tokeniser::parse("{ ui8 test; test = 4; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Block> block = parser.expectBlock();
+	ASSERT_TRUE(block.has_value());
+	Block b = block.value();
+	ASSERT_EQ(b.statements.size(), 2);
+	EXPECT_EQ(b.stackMemory, 2);
+
+	Statement statement = block->statements[0];
+	Variable var = statement.variable.value();
+	EXPECT_EQ(statement.mType, Statement_Type::VAR_DECLARATION);
+	ASSERT_EQ(var.mValues.size(), 0);
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+
+	statement = block->statements[1];
+	var = statement.variable.value();
+	EXPECT_EQ(statement.mType, Statement_Type::VAR_ASSIGNMENT);
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+
+	ASSERT_EQ(var.mValues.size(), 1);
+	EXPECT_STREQ(var.mValues[0]->mValue.mText.c_str(), "4");
+}
+
+TEST_F(ParserTests, ParserTryParseUnknownVariableAssignment) {
+	std::vector<Token> tokens = Tokeniser::parse("{ ui8 test; test2 = 4; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::cerr << "Following errors are expected behaviour in trying to parse unknown variable" << std::endl;
+	std::cerr << "--------------------------------------" << std::endl;
+	std::optional<Block> block = parser.expectBlock();
+	ASSERT_TRUE(block.has_value());
+	Block b = block.value();
+	ASSERT_EQ(b.statements.size(), 1);
+	EXPECT_EQ(b.stackMemory, 2);
+
+	Statement statement = block->statements[0];
+	Variable var = statement.variable.value();
+	EXPECT_EQ(statement.mType, Statement_Type::VAR_DECLARATION);
+	ASSERT_EQ(var.mValues.size(), 0);
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+	std::cerr << "--------------------------------------" << std::endl;
+}
+
 TEST_F(ParserTests, ParserTryParseVariableStatement) {
 	std::vector<Token> tokens = Tokeniser::parse("ui8 test = 100;", "testing.tree");
 	parser.mCurrentToken = tokens.begin();
@@ -447,7 +516,7 @@ TEST_F(ParserTests, ParserTryParseVariableStatement) {
 	std::optional<Statement> statement = parser.expectStatement();
 	ASSERT_TRUE(statement.has_value());
 
-	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_ASSIGNMENT);
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECL_ASSIGN);
 	EXPECT_FALSE(statement.value().loopStatement.has_value());
 	EXPECT_FALSE(statement.value().funcCall.has_value());
 
@@ -468,7 +537,7 @@ TEST_F(ParserTests, ParserTryParseArrayVariableStatement) {
 	std::optional<Statement> statement = parser.expectStatement();
 	ASSERT_TRUE(statement.has_value());
 
-	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_ASSIGNMENT);
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECL_ASSIGN);
 	ASSERT_TRUE(statement.value().variable.has_value());
 	Variable var = statement.value().variable.value();
 
@@ -491,7 +560,7 @@ TEST_F(ParserTests, ParserTryParseArrayVariableStatement2) {
 	std::optional<Statement> statement = parser.expectStatement();
 	ASSERT_TRUE(statement.has_value());
 
-	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_ASSIGNMENT);
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECL_ASSIGN);
 	ASSERT_TRUE(statement.value().variable.has_value());
 	Variable var = statement.value().variable.value();
 
