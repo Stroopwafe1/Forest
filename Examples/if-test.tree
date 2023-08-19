@@ -1,0 +1,11 @@
+i32 main(string[] argv) {
+	i8 x = 25;
+	if (x < 10) {
+		stdout.writeln("x is less than 10");
+	} else if (x < 16) {
+		stdout.writeln("x is less than 16");
+	} else {
+		stdout.writeln("x is greater or equal to 16");
+	}
+	return 0;
+}

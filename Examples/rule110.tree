@@ -1,0 +1,33 @@
+void print_line(ui64 value) {
+	ui64 window = 0x8000000000000000; // 1 shifted to the end
+	loop i, 0..64 {
+		if (value & window) {
+			stdout.write("x");
+		} else {
+			stdout.write(" ");
+		}
+		window >>= 1;
+	}
+	stdout.writeln("");
+}
+
+i32 main(string[] argv) {
+	bool[8] rule = { 0, 1, 1, 1, 0, 1, 1, 0 };
+	ui64 value = 2;
+	ui64 newValue = 0;
+	ui64 window = 0xE000000000000000; // 7 shifted to the end
+	loop step, 0..100 {
+		loop i, 0..62 {
+			if (rule[((value & window) >> (61 - i))]) {
+				newValue |= (0x8000000000000000 >> (i + 1));
+			}
+			window >>= 1;
+		}
+		value = newValue;
+		print_line(newValue);
+		newValue = 0;
+		window = 0xE000000000000000;
+	}
+
+	return 0;
+}

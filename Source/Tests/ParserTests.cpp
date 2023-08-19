@@ -381,12 +381,12 @@ TEST_F(ParserTests, ParserTryParseLoopStatement) {
 	EXPECT_EQ(loop.mIterator.value().mType.builtinType, Builtin_Type::UI8);
 	EXPECT_STREQ(loop.mIterator.value().mName.c_str(), "i");
 
-	EXPECT_EQ(loop.mRange.value().mMinimum, 0);
-	EXPECT_EQ(loop.mRange.value().mMaximum, 10);
+	EXPECT_STREQ(loop.mRange.value().mMinimum->mValue.mText.c_str(), "0");
+	EXPECT_STREQ(loop.mRange.value().mMaximum->mValue.mText.c_str(), "10");
 }
 
 TEST_F(ParserTests, ParserTryParseFuncCallStatement) {
-	std::vector<Token> tokens = Tokeniser::parse("stdout.write(20);", "testing.tree");
+	std::vector<Token> tokens = Tokeniser::parse("stdlib::stdout.write(20);", "testing.tree");
 	parser.mCurrentToken = tokens.begin();
 	parser.mTokensEnd = tokens.end();
 
@@ -398,8 +398,9 @@ TEST_F(ParserTests, ParserTryParseFuncCallStatement) {
 	ASSERT_TRUE(statement.value().funcCall.has_value());
 
 	FuncCallStatement fc = statement.value().funcCall.value();
-	EXPECT_EQ(fc.mClassType, StdLib_Class_Type::STDOUT);
-	EXPECT_EQ(fc.mFunctionType, StdLib_Function_Type::WRITE);
+	EXPECT_STREQ(fc.mNamespace.c_str(), "stdlib");
+	EXPECT_STREQ(fc.mClassName.c_str(), "stdout");
+	EXPECT_STREQ(fc.mFunctionName.c_str(), "write");
 	ASSERT_EQ(fc.mArgs.size(), 1);
 
 	Expression* arg = fc.mArgs[0];
@@ -408,16 +409,230 @@ TEST_F(ParserTests, ParserTryParseFuncCallStatement) {
 	EXPECT_STREQ(arg->mValue.mText.c_str(), "20");
 }
 
-TEST_F(ParserTests, ParserTryParseVariableStatement) {
-	std::vector<Token> tokens = Tokeniser::parse("ui8 test = 100", "testing.tree");
+TEST_F(ParserTests, ParserTryParseExternalFuncCallStatement) {
+	std::vector<Token> tokens = Tokeniser::parse(R"(e:printf("Hello, %s", "Forest!");)", "testing.tree");
 	parser.mCurrentToken = tokens.begin();
 	parser.mTokensEnd = tokens.end();
 
 	std::optional<Statement> statement = parser.expectStatement();
 	ASSERT_TRUE(statement.has_value());
 
-	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_ASSIGNMENT);
-	EXPECT_STREQ(statement.value().mContent->mValue.mText.c_str(), "100");
+	EXPECT_EQ(statement.value().mType, Statement_Type::FUNC_CALL);
+	EXPECT_FALSE(statement.value().loopStatement.has_value());
+	ASSERT_TRUE(statement.value().funcCall.has_value());
+
+	FuncCallStatement fc = statement.value().funcCall.value();
+	EXPECT_STREQ(fc.mNamespace.c_str(), "");
+	EXPECT_STREQ(fc.mClassName.c_str(), "");
+	EXPECT_STREQ(fc.mFunctionName.c_str(), "printf");
+	EXPECT_TRUE(fc.mIsExternal);
+	ASSERT_EQ(fc.mArgs.size(), 2);
+
+	Expression* arg0 = fc.mArgs[0];
+	EXPECT_EQ(arg0->mValue.mType, TokenType::LITERAL);
+	EXPECT_EQ(arg0->mValue.mSubType, TokenSubType::STRING_LITERAL);
+	EXPECT_STREQ(arg0->mValue.mText.c_str(), "Hello, %s");
+
+	Expression* arg1 = fc.mArgs[1];
+	EXPECT_EQ(arg1->mValue.mType, TokenType::LITERAL);
+	EXPECT_EQ(arg1->mValue.mSubType, TokenSubType::STRING_LITERAL);
+	EXPECT_STREQ(arg1->mValue.mText.c_str(), "Forest!");
+}
+
+TEST_F(ParserTests, ParserTryParseVariableDeclaration) {
+	std::vector<Token> tokens = Tokeniser::parse("ui8 test;", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+	Variable var = statement.value().variable.value();
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECLARATION);
+	ASSERT_EQ(var.mValues.size(), 0);
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+}
+
+TEST_F(ParserTests, ParserTryParseVariableAssignment) {
+	std::vector<Token> tokens = Tokeniser::parse("{ ui8 test; test = 4; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Block> block = parser.expectBlock();
+	ASSERT_TRUE(block.has_value());
+	Block b = block.value();
+	ASSERT_EQ(b.statements.size(), 2);
+	EXPECT_EQ(b.stackMemory, 2);
+
+	Statement statement = block->statements[0];
+	Variable var = statement.variable.value();
+	EXPECT_EQ(statement.mType, Statement_Type::VAR_DECLARATION);
+	ASSERT_EQ(var.mValues.size(), 0);
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+
+	statement = block->statements[1];
+	var = statement.variable.value();
+	EXPECT_EQ(statement.mType, Statement_Type::VAR_ASSIGNMENT);
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+
+	ASSERT_EQ(var.mValues.size(), 1);
+	EXPECT_STREQ(var.mValues[0]->mValue.mText.c_str(), "4");
+}
+
+TEST_F(ParserTests, ParserTryParseUnknownVariableAssignment) {
+	std::vector<Token> tokens = Tokeniser::parse("{ ui8 test; test2 = 4; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::cerr << "Following errors are expected behaviour in trying to parse unknown variable" << std::endl;
+	std::cerr << "--------------------------------------" << std::endl;
+	std::optional<Block> block = parser.expectBlock();
+	ASSERT_TRUE(block.has_value());
+	Block b = block.value();
+	ASSERT_EQ(b.statements.size(), 1);
+	EXPECT_EQ(b.stackMemory, 2);
+
+	Statement statement = block->statements[0];
+	Variable var = statement.variable.value();
+	EXPECT_EQ(statement.mType, Statement_Type::VAR_DECLARATION);
+	ASSERT_EQ(var.mValues.size(), 0);
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+	std::cerr << "--------------------------------------" << std::endl;
+}
+
+TEST_F(ParserTests, ParserTryParseVariableStatement) {
+	std::vector<Token> tokens = Tokeniser::parse("ui8 test = 100;", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECL_ASSIGN);
 	EXPECT_FALSE(statement.value().loopStatement.has_value());
 	EXPECT_FALSE(statement.value().funcCall.has_value());
+
+	ASSERT_TRUE(statement.value().variable.has_value());
+	Variable var = statement.value().variable.value();
+	ASSERT_EQ(var.mValues.size(), 1);
+	EXPECT_STREQ(var.mValues[0]->mValue.mText.c_str(), "100");
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+}
+
+TEST_F(ParserTests, ParserTryParseArrayVariableStatement) {
+	std::vector<Token> tokens = Tokeniser::parse("ui16[3] test = {0, 1, 2};", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECL_ASSIGN);
+	ASSERT_TRUE(statement.value().variable.has_value());
+	Variable var = statement.value().variable.value();
+
+	ASSERT_EQ(var.mValues.size(), 3);
+	EXPECT_STREQ(var.mValues[0]->mValue.mText.c_str(), "0");
+	EXPECT_STREQ(var.mValues[1]->mValue.mText.c_str(), "1");
+	EXPECT_STREQ(var.mValues[2]->mValue.mText.c_str(), "2");
+
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui16[]");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::ARRAY);
+	EXPECT_EQ(var.mType.byteSize, 6);
+}
+
+TEST_F(ParserTests, ParserTryParseArrayVariableStatement2) {
+	std::vector<Token> tokens = Tokeniser::parse("ui16 test[3] = {0, 1, 2};", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECL_ASSIGN);
+	ASSERT_TRUE(statement.value().variable.has_value());
+	Variable var = statement.value().variable.value();
+
+	ASSERT_EQ(var.mValues.size(), 3);
+	EXPECT_STREQ(var.mValues[0]->mValue.mText.c_str(), "0");
+	EXPECT_STREQ(var.mValues[1]->mValue.mText.c_str(), "1");
+	EXPECT_STREQ(var.mValues[2]->mValue.mText.c_str(), "2");
+
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui16[]");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::ARRAY);
+	EXPECT_EQ(var.mType.byteSize, 6);
+}
+
+TEST_F(ParserTests, ParserTryParseSimpleStruct) {
+	std::vector<Token> tokens = Tokeniser::parse("struct Test { ui8 val1; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Struct> s = parser.expectStruct();
+	ASSERT_TRUE(s.has_value());
+
+	Struct st = s.value();
+	EXPECT_STREQ(st.mName.c_str(), "Test");
+	EXPECT_EQ(st.mSize, 1);
+
+	ASSERT_EQ(st.mFields.size(), 1);
+	StructField sf = st.mFields[0];
+
+	EXPECT_EQ(sf.mOffset, 0);
+	EXPECT_EQ(sf.mType.builtinType, Builtin_Type::UI8);
+	EXPECT_STREQ(sf.mType.name.c_str(), "ui8");
+	EXPECT_EQ(sf.mType.byteSize, 1);
+	EXPECT_EQ(sf.mType.subTypes.size(), 0);
+
+	ASSERT_EQ(sf.mNames.size(), 1);
+	EXPECT_STREQ(sf.mNames[0].c_str(), "val1");
+}
+
+TEST_F(ParserTests, ParserTryParseStructWithSharedNames) {
+	std::vector<Token> tokens = Tokeniser::parse("struct Test { ui8 val1|val2|val3; ui16 otherVal; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Struct> s = parser.expectStruct();
+	ASSERT_TRUE(s.has_value());
+
+	Struct st = s.value();
+	EXPECT_STREQ(st.mName.c_str(), "Test");
+	EXPECT_EQ(st.mSize, 3);
+
+	ASSERT_EQ(st.mFields.size(), 2);
+	StructField sf1 = st.mFields[0];
+
+	EXPECT_EQ(sf1.mOffset, 0);
+	EXPECT_EQ(sf1.mType.builtinType, Builtin_Type::UI8);
+	EXPECT_STREQ(sf1.mType.name.c_str(), "ui8");
+	EXPECT_EQ(sf1.mType.byteSize, 1);
+	EXPECT_EQ(sf1.mType.subTypes.size(), 0);
+
+	ASSERT_EQ(sf1.mNames.size(), 3);
+	EXPECT_STREQ(sf1.mNames[0].c_str(), "val1");
+	EXPECT_STREQ(sf1.mNames[1].c_str(), "val2");
+	EXPECT_STREQ(sf1.mNames[2].c_str(), "val3");
+
+	StructField sf2 = st.mFields[1];
+	EXPECT_EQ(sf2.mOffset, 1);
+	EXPECT_EQ(sf2.mType.builtinType, Builtin_Type::UI16);
+	EXPECT_STREQ(sf2.mType.name.c_str(), "ui16");
+	EXPECT_EQ(sf2.mType.byteSize, 2);
+	EXPECT_EQ(sf2.mType.subTypes.size(), 0);
+
+	ASSERT_EQ(sf2.mNames.size(), 1);
+	EXPECT_STREQ(sf2.mNames[0].c_str(), "otherVal");
 }

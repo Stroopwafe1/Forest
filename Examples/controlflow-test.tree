@@ -1,8 +1,14 @@
 i32 main(string[] argv) {
 	loop i, 0..100 {
+		if (i % 2) == 0 {
+			skip;
+		}
+		if i > 50 {
+			break;
+		}
 		stdout.write(i);
 		stdout.write(" ");
 	}
-	stdout.write("\n");
+	stdout.writeln("");
 	return 0;
 }

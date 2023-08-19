@@ -8,3 +8,5 @@ CMakeCache.txt
 *.cmake
 **/Makefile
 .cache/**
+/Source/Source.kdev4
+/Source/.kdev4/

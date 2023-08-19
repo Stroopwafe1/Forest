@@ -12,6 +12,8 @@ namespace forest::parser {
 		Token mValue {};
 
 		~Expression();
+		Expression();
+		Expression(Expression const& rhs);
 		void Collapse();
 	};
 

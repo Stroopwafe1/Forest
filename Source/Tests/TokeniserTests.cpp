@@ -74,6 +74,27 @@ TEST_F(TokeniserTests, TokeniserParseShouldTokeniseFloatLiterals) {
 	EXPECT_STREQ(second.mText.c_str(), "-928.291");
 }
 
+TEST_F(TokeniserTests, TokeniserParseShouldTokeniseAssignmentOperators) {
+	std::string code = "+= -= *= /= %= >>= <<= |= &= ^= != **=";
+	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, filePath);
+
+	ASSERT_EQ(tokens.size(), 12);
+
+	size_t pos = 0;
+	std::string op;
+	std::string delim = " ";
+	int i = 0;
+	while ((pos = code.find(delim)) != std::string::npos) {
+		op = code.substr(0, pos);
+		Token token = tokens[i];
+		EXPECT_EQ(token.mType, TokenType::OPERATOR);
+		EXPECT_STREQ(token.mText.c_str(), op.c_str());
+		i++;
+		code.erase(0, pos + delim.length());
+	}
+
+}
+
 TEST_F(TokeniserTests, TokeniserParseShouldTokeniseRange) {
 	std::string code = "1..4";
 	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, filePath);
@@ -94,6 +115,28 @@ TEST_F(TokeniserTests, TokeniserParseShouldTokeniseRange) {
 	EXPECT_EQ(third.mType, TokenType::LITERAL);
 	EXPECT_EQ(third.mSubType, TokenSubType::INTEGER_LITERAL);
 	EXPECT_STREQ(third.mText.c_str(), "4");
+}
+
+TEST_F(TokeniserTests, TokeniserParseShouldTokeniseNamespace) {
+	std::string code = "ns::function";
+	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, filePath);
+
+	ASSERT_EQ(tokens.size(), 3);
+
+	Token first = tokens[0];
+	EXPECT_EQ(first.mType, TokenType::IDENTIFIER);
+	EXPECT_EQ(first.mSubType, TokenSubType::USER_DEFINED);
+	EXPECT_STREQ(first.mText.c_str(), "ns");
+
+	Token second = tokens[1];
+	EXPECT_EQ(second.mType, TokenType::OPERATOR);
+	EXPECT_EQ(second.mSubType, TokenSubType::NAMESPACE);
+	EXPECT_STREQ(second.mText.c_str(), "::");
+
+	Token third = tokens[2];
+	EXPECT_EQ(third.mType, TokenType::IDENTIFIER);
+	EXPECT_EQ(third.mSubType, TokenSubType::USER_DEFINED);
+	EXPECT_STREQ(third.mText.c_str(), "function");
 }
 
 TEST_F(TokeniserTests, TokeniserEndTokenShouldConvertSubtypes) {
@@ -144,8 +187,8 @@ TEST(TokenTests, TokenGetTypeShouldReturnType) {
 	token.mType = TokenType::SEMICOLON;
 	EXPECT_STREQ(token.getType(), "SEMICOLON");
 
-	token.mType = TokenType::COMMENT;
-	EXPECT_STREQ(token.getType(), "COMMENT");
+	token.mType = TokenType::SINGLELINE_COMMENT;
+	EXPECT_STREQ(token.getType(), "SINGLELINE_COMMENT");
 
 	token.mType = TokenType::POTENTIAL_COMMENT;
 	EXPECT_STREQ(token.getType(), "POTENTIAL_COMMENT");

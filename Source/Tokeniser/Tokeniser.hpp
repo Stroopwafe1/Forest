@@ -12,8 +12,10 @@ namespace forest::parser {
 		LITERAL,
 		OPERATOR,
 		STRING_ESCAPE_SEQUENCE,
+		CHAR_ESCAPE_SEQUENCE,
 		POTENTIAL_COMMENT,
-		COMMENT,
+		SINGLELINE_COMMENT,
+		MULTILINE_COMMENT,
 		SEMICOLON,
 		POTENTIAL_NEGATIVE_NUMBER
 	};
@@ -23,10 +25,12 @@ namespace forest::parser {
 		INTEGER_LITERAL,
 		FLOAT_LITERAL,
 		STRING_LITERAL,
+		CHAR_LITERAL,
 
 		// Maybe operator subtypes too
 		DOT,
 		RANGE,
+		NAMESPACE,
 
 		// Keyword Identifiers
 		RETURN,
@@ -41,8 +45,10 @@ namespace forest::parser {
 		"LITERAL",
 		"OPERATOR",
 		"STRING_ESCAPE_SEQUENCE",
+		"CHAR_ESCAPE_SEQUENCE",
 		"POTENTIAL_COMMENT",
-		"COMMENT",
+		"SINGLELINE_COMMENT",
+		"MULTILINE_COMMENT",
 		"SEMICOLON",
 		"POTENTIAL_NEGATIVE_NUMBER"
 	};
@@ -52,8 +58,10 @@ namespace forest::parser {
 		"INTEGER_LITERAL",
 		"FLOAT_LITERAL",
 		"STRING_LITERAL",
+		"CHAR_LITERAL",
 		"DOT",
 		"RANGE",
+		"NAMESPACE",
 		"RETURN",
 		"BREAK",
 		"SKIP",
