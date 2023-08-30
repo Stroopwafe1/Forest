@@ -594,7 +594,7 @@ TEST_F(ParserTests, ParserTryParseSimpleStruct) {
 	EXPECT_EQ(sf.mType.builtinType, Builtin_Type::UI8);
 	EXPECT_STREQ(sf.mType.name.c_str(), "ui8");
 	EXPECT_EQ(sf.mType.byteSize, 1);
-	EXPECT_EQ(sf.mType.subTypes.size(), 0);
+	EXPECT_TRUE(sf.mType.subTypes.empty());
 
 	ASSERT_EQ(sf.mNames.size(), 1);
 	EXPECT_STREQ(sf.mNames[0].c_str(), "val1");
@@ -619,7 +619,7 @@ TEST_F(ParserTests, ParserTryParseStructWithSharedNames) {
 	EXPECT_EQ(sf1.mType.builtinType, Builtin_Type::UI8);
 	EXPECT_STREQ(sf1.mType.name.c_str(), "ui8");
 	EXPECT_EQ(sf1.mType.byteSize, 1);
-	EXPECT_EQ(sf1.mType.subTypes.size(), 0);
+	EXPECT_TRUE(sf1.mType.subTypes.empty());
 
 	ASSERT_EQ(sf1.mNames.size(), 3);
 	EXPECT_STREQ(sf1.mNames[0].c_str(), "val1");
@@ -631,8 +631,102 @@ TEST_F(ParserTests, ParserTryParseStructWithSharedNames) {
 	EXPECT_EQ(sf2.mType.builtinType, Builtin_Type::UI16);
 	EXPECT_STREQ(sf2.mType.name.c_str(), "ui16");
 	EXPECT_EQ(sf2.mType.byteSize, 2);
-	EXPECT_EQ(sf2.mType.subTypes.size(), 0);
+	EXPECT_TRUE(sf2.mType.subTypes.empty());
 
 	ASSERT_EQ(sf2.mNames.size(), 1);
 	EXPECT_STREQ(sf2.mNames[0].c_str(), "otherVal");
+}
+
+TEST_F(ParserTests, ParserTryParseGoodAlignedStruct) {
+	std::vector<Token> tokens = Tokeniser::parse("aligned struct Test { ui64 val1; ui32 val2; ui8 val3; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Struct> s = parser.expectStruct();
+	ASSERT_TRUE(s.has_value());
+
+	Struct st = s.value();
+	EXPECT_STREQ(st.mName.c_str(), "Test");
+	EXPECT_EQ(st.mSize, 16);
+
+	ASSERT_EQ(st.mFields.size(), 3);
+	StructField sf1 = st.mFields[0];
+
+	EXPECT_EQ(sf1.mOffset, 0);
+	EXPECT_EQ(sf1.mType.builtinType, Builtin_Type::UI64);
+	EXPECT_STREQ(sf1.mType.name.c_str(), "ui64");
+	EXPECT_EQ(sf1.mType.byteSize, 8);
+	EXPECT_TRUE(sf1.mType.subTypes.empty());
+
+	ASSERT_EQ(sf1.mNames.size(), 1);
+	EXPECT_STREQ(sf1.mNames[0].c_str(), "val1");
+
+	StructField sf2 = st.mFields[1];
+
+	EXPECT_EQ(sf2.mOffset, 8);
+	EXPECT_EQ(sf2.mType.builtinType, Builtin_Type::UI32);
+	EXPECT_STREQ(sf2.mType.name.c_str(), "ui32");
+	EXPECT_EQ(sf2.mType.byteSize, 4);
+	EXPECT_TRUE(sf2.mType.subTypes.empty());
+
+	ASSERT_EQ(sf2.mNames.size(), 1);
+	EXPECT_STREQ(sf2.mNames[0].c_str(), "val2");
+
+	StructField sf3 = st.mFields[2];
+
+	EXPECT_EQ(sf3.mOffset, 12);
+	EXPECT_EQ(sf3.mType.builtinType, Builtin_Type::UI8);
+	EXPECT_STREQ(sf3.mType.name.c_str(), "ui8");
+	EXPECT_EQ(sf3.mType.byteSize, 1);
+	EXPECT_TRUE(sf3.mType.subTypes.empty());
+
+	ASSERT_EQ(sf3.mNames.size(), 1);
+	EXPECT_STREQ(sf3.mNames[0].c_str(), "val3");
+}
+
+TEST_F(ParserTests, ParserTryParseBadAlignedStruct) {
+	std::vector<Token> tokens = Tokeniser::parse("aligned struct Test { ui8 val1; ui64 val2; ui8 val3; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Struct> s = parser.expectStruct();
+	ASSERT_TRUE(s.has_value());
+
+	Struct st = s.value();
+	EXPECT_STREQ(st.mName.c_str(), "Test");
+	EXPECT_EQ(st.mSize, 24);
+
+	ASSERT_EQ(st.mFields.size(), 3);
+	StructField sf1 = st.mFields[0];
+
+	EXPECT_EQ(sf1.mOffset, 0);
+	EXPECT_EQ(sf1.mType.builtinType, Builtin_Type::UI8);
+	EXPECT_STREQ(sf1.mType.name.c_str(), "ui8");
+	EXPECT_EQ(sf1.mType.byteSize, 1);
+	EXPECT_TRUE(sf1.mType.subTypes.empty());
+
+	ASSERT_EQ(sf1.mNames.size(), 1);
+	EXPECT_STREQ(sf1.mNames[0].c_str(), "val1");
+
+	StructField sf2 = st.mFields[1];
+
+	EXPECT_EQ(sf2.mOffset, 8);
+	EXPECT_EQ(sf2.mType.builtinType, Builtin_Type::UI64);
+	EXPECT_STREQ(sf2.mType.name.c_str(), "ui64");
+	EXPECT_EQ(sf2.mType.byteSize, 8);
+	EXPECT_TRUE(sf2.mType.subTypes.empty());
+
+	ASSERT_EQ(sf2.mNames.size(), 1);
+	EXPECT_STREQ(sf2.mNames[0].c_str(), "val2");
+
+	StructField sf3 = st.mFields[2];
+
+	EXPECT_EQ(sf3.mOffset, 16);
+	EXPECT_EQ(sf3.mType.builtinType, Builtin_Type::UI8);
+	EXPECT_STREQ(sf3.mType.name.c_str(), "ui8");
+	EXPECT_EQ(sf3.mType.byteSize, 1);
+	EXPECT_TRUE(sf3.mType.subTypes.empty());
+
+	ASSERT_EQ(sf3.mNames.size(), 1);
+	EXPECT_STREQ(sf3.mNames[0].c_str(), "val3");
 }
