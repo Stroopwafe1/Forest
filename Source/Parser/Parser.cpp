@@ -23,7 +23,7 @@ namespace forest::parser {
 				{ "f64", 8},
 				{ "char", 4},
 				{ "bool", 1},
-				{ "string", 8},
+				{ "string", 16},
 		};
 	}
 
@@ -46,7 +46,7 @@ namespace forest::parser {
 						}
 					}
 				}
-			} else if (mCurrentToken->mText == "struct") {
+			} else if (mCurrentToken->mText == "struct" || mCurrentToken->mText == "aligned") {
 				std::optional<Struct> s = expectStruct();
 				if (s.has_value()) {
 					structs.insert({s.value().mName, s.value()});
@@ -318,6 +318,7 @@ namespace forest::parser {
 	}
 
 	std::optional<Struct> Parser::expectStruct() {
+		std::optional<Token> align = expectIdentifier("aligned");
 		std::optional<Token> keyword = expectIdentifier("struct");
 		if (!keyword.has_value()) return std::nullopt;
 		std::vector<Token>::iterator saved = mCurrentToken;
@@ -333,6 +334,7 @@ namespace forest::parser {
 		Struct s;
 		s.mName = sname.value().mText;
 		size_t offset = 0;
+		size_t alignTo = 1;
 
 		while(!expectOperator("}").has_value()) {
 			// Parse fields
@@ -343,6 +345,7 @@ namespace forest::parser {
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
+			Type t = type.value();
 
 			// Parse name(s), fields can have multiple names with the | operator
 			/*
@@ -373,11 +376,28 @@ namespace forest::parser {
 				}
 			}
 
-			sf.mType = type.value();
+			sf.mType = t;
 			sf.mNames = names;
+
+			// Align logic
+			if (align.has_value()) {
+				// If we have to align
+				if (t.alignTo > alignTo) {
+					alignTo = t.alignTo;
+				}
+				size_t padding = (t.alignTo - offset % t.alignTo) % t.alignTo;
+				offset += padding;
+			}
+
 			sf.mOffset = offset;
 			offset += type.value().byteSize;
 			s.mFields.push_back(sf);
+		}
+
+		if (align.has_value()) {
+			// If we have to align
+			// Set offset to be multiple of alignTo
+			offset += (alignTo - offset % alignTo) % alignTo;
 		}
 
 		s.mSize = offset; // This is after all fields calculated their offset, including the last one
@@ -649,7 +669,7 @@ namespace forest::parser {
 				return std::nullopt;
 			}
 
-			Type transformedType = Type {actualType.name + "[]", Builtin_Type::ARRAY, {actualType}, len * actualType.byteSize };
+			Type transformedType = Type {actualType.name + "[]", Builtin_Type::ARRAY, {actualType}, len * actualType.byteSize, actualType.alignTo };
 			actualType = transformedType;
 		}
 
@@ -930,9 +950,9 @@ namespace forest::parser {
 	Type Parser::getTypeFromRange(const Range& range) {
 		// TODO: We cannot know the types at compile time for some expressions
 		if (range.mMinimum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
-			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0};
+			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0, 0};
 		if (range.mMaximum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
-			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0};
+			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0, 0};
 
 		long range_min = std::stol(range.mMinimum->mValue.mText);
 		long range_max = std::stol(range.mMaximum->mValue.mText);
@@ -942,23 +962,23 @@ namespace forest::parser {
 		if (min < 0) {
 			// Has to be signed
 			if (min >= -128 && max <= 127) {
-				return Type { "i8", Builtin_Type::I8, {}, 1 };
+				return Type { "i8", Builtin_Type::I8, {}, 1, 1 };
 			} else if (min >= -32768 && max <= 32767) {
-				return Type { "i16", Builtin_Type::I16, {}, 2 };
+				return Type { "i16", Builtin_Type::I16, {}, 2, 2 };
 			} else if (min >= -2147483648 && max <= 2147483647) {
-				return Type { "i32", Builtin_Type::I32, {}, 4 };
+				return Type { "i32", Builtin_Type::I32, {}, 4, 4 };
 			} else {
-				return Type { "i64", Builtin_Type::I64, {}, 8 };
+				return Type { "i64", Builtin_Type::I64, {}, 8, 4 };
 			}
 		} else {
 			if (max <= 255) {
-				return Type { "ui8", Builtin_Type::UI8, {}, 1 };
+				return Type { "ui8", Builtin_Type::UI8, {}, 1, 1 };
 			} else if (max <= 65535) {
-				return Type { "ui16", Builtin_Type::UI16, {}, 2 };
+				return Type { "ui16", Builtin_Type::UI16, {}, 2, 2 };
 			} else if (max <= 4294967295) {
-				return Type { "ui32", Builtin_Type::UI32, {}, 4 };
+				return Type { "ui32", Builtin_Type::UI32, {}, 4, 4 };
 			} else {
-				return Type { "ui64", Builtin_Type::UI64, {}, 8 };
+				return Type { "ui64", Builtin_Type::UI64, {}, 8, 4 };
 			}
 		}
 	}
@@ -982,7 +1002,7 @@ namespace forest::parser {
 				const auto& found = sizeCache.find(id->mText);
 				if (found != sizeCache.end())
 					size = found->second;
-				return Type {id->mText, getTypeFromName(id->mText), {}, size};
+				return Type {id->mText, getTypeFromName(id->mText), {}, size, size};
 			} else {
 				// Child element
 				std::optional<Type> childType = expectType();
@@ -1004,9 +1024,9 @@ namespace forest::parser {
 							len = stol(length.value().mText);
 						}
 					}
-					return Type{"array<>", Builtin_Type::ARRAY, types, len * childType.value().byteSize};
+					return Type{"array<>", Builtin_Type::ARRAY, types, len * childType.value().byteSize, childType.value().alignTo};
 				} else if (id->mText == "ref") {
-					return Type{"ref<>", Builtin_Type::REF, types, 8};
+					return Type{"ref<>", Builtin_Type::REF, types, 8, 8};
 				} else {
 					// TODO: This byteSize value is not correct
 					// Basically, we have a generic class here, so we should fetch its size + size of generic argument * how many times it's used, or if just a reference, 8
@@ -1016,7 +1036,7 @@ namespace forest::parser {
 					 * 	T[] val3 // This would add size of generic argument * size of array
 					 * }
 					 */
-					return Type{id->mText + "<>", Builtin_Type::UNDEFINED, types, 0};
+					return Type{id->mText + "<>", Builtin_Type::UNDEFINED, types, 0, 0};
 				}
 			}
 		} else {
@@ -1033,7 +1053,7 @@ namespace forest::parser {
 			}
 
 			std::vector<Type> types;
-			Type t = Type {id->mText, getTypeFromName(id->mText), {}, 0};
+			Type t = Type {id->mText, getTypeFromName(id->mText), {}, 0, 0};
 
 			size_t size = 8;
 			const auto& found = sizeCache.find(id->mText);
@@ -1041,12 +1061,13 @@ namespace forest::parser {
 				size = found->second;
 			}
 			t.byteSize = size;
+			t.alignTo = size;
 
 			types.emplace_back(t);
-			return Type {id->mText + "[]", Builtin_Type::ARRAY, types, len * size};
+			return Type {id->mText + "[]", Builtin_Type::ARRAY, types, len * size, t.alignTo};
 		}
 
-		return Type {id->mText, getTypeFromName(id->mText), {}, sizeCache[id->mText]};
+		return Type {id->mText, getTypeFromName(id->mText), {}, sizeCache[id->mText], sizeCache[id->mText]};
 	}
 
 	Expression* Parser::expectExpression(Statement& statementContext, bool collapse) {

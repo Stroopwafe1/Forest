@@ -58,18 +58,22 @@ namespace forest::parser {
 		Builtin_Type builtinType{};
 		std::vector<Type> subTypes{};
 		size_t byteSize{};
+		size_t alignTo{};
+
 		Type() = default;
-		Type(const std::string& _name, const Builtin_Type& builtin, const std::vector<Type>& subs, const size_t& bytes) {
+		Type(const std::string& _name, const Builtin_Type& builtin, const std::vector<Type>& subs, const size_t& bytes, const size_t& align) {
 			name = _name;
 			builtinType = builtin;
 			subTypes = subs;
 			byteSize = bytes;
+			alignTo = align;
 		}
 
 		Type(Type const& rhs) {
 			name = rhs.name;
 			builtinType = rhs.builtinType;
 			byteSize = rhs.byteSize;
+			alignTo = rhs.alignTo;
 			for (const Type& type: rhs.subTypes) {
 				Type t = Type(type);
 				subTypes.push_back(t);
