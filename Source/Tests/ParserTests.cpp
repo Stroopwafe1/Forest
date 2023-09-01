@@ -409,6 +409,37 @@ TEST_F(ParserTests, ParserTryParseFuncCallStatement) {
 	EXPECT_STREQ(arg->mValue.mText.c_str(), "20");
 }
 
+TEST_F(ParserTests, ParserTryParseVarAssignmentFuncCallStatement) {
+	std::vector<Token> tokens = Tokeniser::parse("ui8 val = stdlib::stdout.write(20);", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECL_ASSIGN);
+	EXPECT_FALSE(statement.value().loopStatement.has_value());
+	EXPECT_FALSE(statement.value().funcCall.has_value());
+
+	ASSERT_TRUE(statement.value().variable.has_value());
+	Variable var = statement.value().variable.value();
+	EXPECT_STREQ(var.mName.c_str(), "val");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+
+	ASSERT_EQ(var.mValues.size(), 1);
+	Expression* node = var.mValues[0];
+	ASSERT_EQ(node->mChildren.size(), 7);
+	EXPECT_STREQ(node->mValue.mText.c_str(), "(");
+	EXPECT_STREQ(node->mChildren[0]->mValue.mText.c_str(), "stdlib");
+	EXPECT_STREQ(node->mChildren[1]->mValue.mText.c_str(), "::");
+	EXPECT_STREQ(node->mChildren[2]->mValue.mText.c_str(), "stdout");
+	EXPECT_STREQ(node->mChildren[3]->mValue.mText.c_str(), ".");
+	EXPECT_STREQ(node->mChildren[4]->mValue.mText.c_str(), "write");
+	EXPECT_STREQ(node->mChildren[5]->mValue.mText.c_str(), "(");
+	EXPECT_STREQ(node->mChildren[6]->mValue.mText.c_str(), "20");
+}
+
 TEST_F(ParserTests, ParserTryParseExternalFuncCallStatement) {
 	std::vector<Token> tokens = Tokeniser::parse(R"(e:printf("Hello, %s", "Forest!");)", "testing.tree");
 	parser.mCurrentToken = tokens.begin();

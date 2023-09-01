@@ -1136,7 +1136,6 @@ namespace forest::parser {
 				} else if (nextToken.has_value() && nextToken.value().mText == "(") {
 					// Can only be function call, would be regular operator if this is meant to be a variable
 					// ui8 foo = bar(
-					// TODO: Make function calls more generic than standard library function
 					std::optional<Token> funcCall = expectOperator("(");
 					Statement newStatement;
 					newStatement.mType = Statement_Type::FUNC_CALL;
@@ -1148,10 +1147,40 @@ namespace forest::parser {
 					// While nodes.back.mValue startswith ':' or '.' , popback op, popback identifier
 					// This gives us namespace::class.e:function(
 					// While operator ')' is nothing, and comma exists, expect expression (Look at funcCall parsing)
-					Expression* right = expectExpression(newStatement);
-					expectOperator(")"); // We discard this value because we don't need it
+					while (!nodes.empty() && (nodes.back()->mValue.mText[0] == ':' || nodes.back()->mValue.mText[0] == '.')) {
+						Expression* op = nodes.back();
+						nodes.pop_back();
+						Expression* id = nodes.back();
+						nodes.pop_back();
+						node->mChildren.insert(node->mChildren.begin(), op);
+						node->mChildren.insert(node->mChildren.begin(), id);
+					}
+
 					node->mChildren.push_back(left);
-					node->mChildren.push_back(right);
+
+					// We do this to separate between function identifier and arguments
+					Expression* copy = new Expression;
+					copy->mValue = node->mValue;
+					node->mChildren.push_back(copy);
+
+					while (!expectOperator(")").has_value()) {
+						Expression* expression = expectExpression(newStatement);
+
+						node->mChildren.push_back(expression);
+						if (expression->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+							std::stringstream alias;
+							alias << "str" << literals.size();
+
+							literals.push_back(Literal{alias.str(), expression->mValue.mText, uint32_t(expression->mValue.mText.size())});
+						}
+
+						std::optional<Token> closingParenthesis = expectOperator(")");
+						if (closingParenthesis.has_value())
+							break;
+
+						std::optional<Token> comma = expectOperator(",");
+					}
+					expectOperator(")"); // We discard this value because we don't need it
 					nodes.push_back(node);
 				} else {
 					Expression* node = new Expression;
