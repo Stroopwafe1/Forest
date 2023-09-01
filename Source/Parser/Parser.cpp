@@ -863,8 +863,8 @@ namespace forest::parser {
 					nameNode->mValue.mText = v.mName;
 					Expression* opNode = new Expression;
 					opNode->mValue = op;
-					opNode->mLeft = nameNode;
-					opNode->mRight = expression;
+					opNode->mChildren.push_back(nameNode);
+					opNode->mChildren.push_back(expression);
 					values.push_back(opNode);
 				} else {
 					values.push_back(expression);
@@ -1108,8 +1108,8 @@ namespace forest::parser {
 						return nullptr;
 					}
 
-					op->mLeft = left;
-					op->mRight = right;
+					op->mChildren.push_back(left);
+					op->mChildren.push_back(right);
 					nodes.push_back(op);
 				}
 			} else if (mCurrentToken->mType == TokenType::IDENTIFIER) {
@@ -1130,8 +1130,8 @@ namespace forest::parser {
 					left->mValue = identifier.value();
 					Expression* right = expectExpression(newStatement);
 					expectOperator("]"); // We discard this value because we don't need it
-					node->mLeft = left;
-					node->mRight = right;
+					node->mChildren.push_back(left);
+					node->mChildren.push_back(right);
 					nodes.push_back(node);
 				} else if (nextToken.has_value() && nextToken.value().mText == "(") {
 					// Can only be function call, would be regular operator if this is meant to be a variable
@@ -1144,10 +1144,14 @@ namespace forest::parser {
 					node->mValue = funcCall.value();
 					Expression* left = new Expression;
 					left->mValue = identifier.value();
+
+					// While nodes.back.mValue startswith ':' or '.' , popback op, popback identifier
+					// This gives us namespace::class.e:function(
+					// While operator ')' is nothing, and comma exists, expect expression (Look at funcCall parsing)
 					Expression* right = expectExpression(newStatement);
 					expectOperator(")"); // We discard this value because we don't need it
-					node->mLeft = left;
-					node->mRight = right;
+					node->mChildren.push_back(left);
+					node->mChildren.push_back(right);
 					nodes.push_back(node);
 				} else {
 					Expression* node = new Expression;
@@ -1182,8 +1186,8 @@ namespace forest::parser {
 				return nullptr;
 			}
 
-			op->mLeft = left;
-			op->mRight = right;
+			op->mChildren.push_back(left);
+			op->mChildren.push_back(right);
 			nodes.push_back(op);
 		}
 
