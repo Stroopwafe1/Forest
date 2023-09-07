@@ -998,7 +998,7 @@ namespace forest::parser {
 		if (!openingBracket.has_value()) {
 			std::optional<Token> openingSharp = expectOperator("<");
 			if (!openingSharp.has_value()) {
-				size_t size = 0;
+				size_t size = 1;
 				const auto& found = sizeCache.find(id->mText);
 				if (found != sizeCache.end())
 					size = found->second;
@@ -1011,6 +1011,11 @@ namespace forest::parser {
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
+				if (!expectOperator(">").has_value()) {
+					std::cerr << "Expected a closing '>' for the opening '<' at " << openingSharp.value() << std::endl;
+					mCurrentToken = saved;
+					return std::nullopt;
+				};
 				std::vector<Type> types;
 				types.push_back(childType.value());
 				if (id->mText == "array") {
@@ -1036,6 +1041,7 @@ namespace forest::parser {
 					 * 	T[] val3 // This would add size of generic argument * size of array
 					 * }
 					 */
+					throw std::runtime_error("Not implemented yet");
 					return Type{id->mText + "<>", Builtin_Type::UNDEFINED, types, 0, 0};
 				}
 			}
@@ -1144,6 +1150,10 @@ namespace forest::parser {
 					Expression* left = new Expression;
 					left->mValue = identifier.value();
 
+					bool isExternal = false;
+					std::string ns;
+					std::string klass;
+
 					// While nodes.back.mValue startswith ':' or '.' , popback op, popback identifier
 					// This gives us namespace::class.e:function(
 					// While operator ')' is nothing, and comma exists, expect expression (Look at funcCall parsing)
@@ -1152,9 +1162,19 @@ namespace forest::parser {
 						nodes.pop_back();
 						Expression* id = nodes.back();
 						nodes.pop_back();
+						if (id->mValue.mText == "e" && op->mValue.mText == ":") {
+							isExternal = true;
+						}
+						if (op->mValue.mText == "::")
+							ns = id->mValue.mText;
+						if (op->mValue.mText == ".")
+							klass = id->mValue.mText;
 						node->mChildren.insert(node->mChildren.begin(), op);
 						node->mChildren.insert(node->mChildren.begin(), id);
 					}
+
+					if (isExternal)
+						externalFunctions.push_back(FuncCallStatement {ns, klass, left->mValue.mText, {}, true}); // We don't care about the arguments, just the name
 
 					node->mChildren.push_back(left);
 

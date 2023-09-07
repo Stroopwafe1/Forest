@@ -20,7 +20,6 @@ int main(int argc, char** argv) {
 	//fs::path filePath = argc == 1 || argc > 2 ? "../Examples/array-test.tree" : argv[1];
 	//fs::path filePath = argc == 1 || argc > 2 ? "../Examples/rule110.tree" : argv[1];
 	fs::path filePath = argc == 1 || argc > 2 ? "../Examples/controlflow-test.tree" : argv[1];
-	fs::path fileName = filePath.stem();
 
 	if (argc >= 2) {
 		// Run with arguments
@@ -57,7 +56,7 @@ int main(int argc, char** argv) {
 	}
 
 	X86_64LinuxYasmCompiler compiler;
-	compiler.compile(fileName, p, main);
+	compiler.compile(filePath, p);
 
 	return 0;
 }
