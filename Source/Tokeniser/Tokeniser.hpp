@@ -26,11 +26,14 @@ namespace forest::parser {
 		FLOAT_LITERAL,
 		STRING_LITERAL,
 		CHAR_LITERAL,
+		BOOLEAN_LITERAL,
 
 		// Maybe operator subtypes too
 		DOT,
 		RANGE,
 		NAMESPACE,
+		OP_UNARY,
+		OP_BINARY,
 
 		// Keyword Identifiers
 		RETURN,
@@ -59,9 +62,12 @@ namespace forest::parser {
 		"FLOAT_LITERAL",
 		"STRING_LITERAL",
 		"CHAR_LITERAL",
+		"BOOLEAN_LITERAL",
 		"DOT",
 		"RANGE",
 		"NAMESPACE",
+		"OP_UNARY",
+		"OP_BINARY",
 		"RETURN",
 		"BREAK",
 		"SKIP",
@@ -82,6 +88,7 @@ namespace forest::parser {
 
 		void debugPrint() const;
 		const char* getType() const;
+		std::string toLower() const;
 		friend std::ostream& operator<<(std::ostream&, const Token&);
 	};
 

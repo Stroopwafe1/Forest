@@ -759,23 +759,20 @@ namespace forest::parser {
 			if (arrayBracket.has_value()) {
 				std::optional<Token> length = expectLiteral();
 				if (!length.has_value()) {
-					std::cerr << "Expected a value to index array variable " << name.value() << " at " << *mCurrentToken
-							  << std::endl;
+					std::cerr << "Expected a value to index array variable " << name.value() << " at " << *mCurrentToken << std::endl;
 					return std::nullopt;
 				}
 
 				std::optional<Token> closingBracket = expectOperator("]");
 				if (!closingBracket.has_value()) {
-					std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value()
-							  << " in variable assignment" << std::endl;
+					std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in variable assignment" << std::endl;
 					return std::nullopt;
 				}
 				v.mName += "." + length.value().mText;
 			} else {
 				redefinition = true;
 			}
-		}
-		if (v.mType.builtinType == Builtin_Type::STRUCT) {
+		} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
 			// Access property
 			std::optional<Token> dot = expectOperator(".");
 			if (!dot.has_value()) {
@@ -968,7 +965,7 @@ namespace forest::parser {
 			} else if (min >= -2147483648 && max <= 2147483647) {
 				return Type { "i32", Builtin_Type::I32, {}, 4, 4 };
 			} else {
-				return Type { "i64", Builtin_Type::I64, {}, 8, 4 };
+				return Type { "i64", Builtin_Type::I64, {}, 8, 8 };
 			}
 		} else {
 			if (max <= 255) {
@@ -978,7 +975,7 @@ namespace forest::parser {
 			} else if (max <= 4294967295) {
 				return Type { "ui32", Builtin_Type::UI32, {}, 4, 4 };
 			} else {
-				return Type { "ui64", Builtin_Type::UI64, {}, 8, 4 };
+				return Type { "ui64", Builtin_Type::UI64, {}, 8, 8 };
 			}
 		}
 	}
@@ -1108,8 +1105,7 @@ namespace forest::parser {
 					nodes.pop_back();
 
 					if (op->mValue.mType != TokenType::OPERATOR) {
-						std::cerr << "Expected an operator while parsing the expression at " << op->mValue
-								  << " but got '" << op->mValue.mText << "' instead." << std::endl;
+						std::cerr << "Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
 						mCurrentToken = saved;
 						return nullptr;
 					}
@@ -1117,7 +1113,25 @@ namespace forest::parser {
 					op->mChildren.push_back(left);
 					op->mChildren.push_back(right);
 					nodes.push_back(op);
-				}
+				} else if (nodes.size() == 2) {
+					// This should be a unary
+					Expression* val1 = nodes.back();
+					nodes.pop_back();
+					Expression* val2 = nodes.back();
+					nodes.pop_back();
+					// We need to see which of these is the operator
+					if (val1->mValue.mType == TokenType::OPERATOR) {
+						val1->mChildren.push_back(val2);
+						nodes.push_back(val1);
+					} else if (val2->mValue.mType == TokenType::OPERATOR) {
+						val2->mChildren.push_back(val1);
+						nodes.push_back(val2);
+					} else {
+						std::cerr << "Expected an operator inside unary expression at " << val1->mValue << std::endl;
+						mCurrentToken = saved;
+						return nullptr;
+					}
+				} // Else we just have a value wrapped with () which is fine -> (5) is still 5
 			} else if (mCurrentToken->mType == TokenType::IDENTIFIER) {
 				std::optional<Token> nextToken = peekNextToken();
 				std::optional<Token> identifier = expectIdentifier();
@@ -1238,7 +1252,25 @@ namespace forest::parser {
 			op->mChildren.push_back(left);
 			op->mChildren.push_back(right);
 			nodes.push_back(op);
-		}
+		} else if (nodes.size() == 2) {
+			// This should be a unary
+			Expression* val1 = nodes.back();
+			nodes.pop_back();
+			Expression* val2 = nodes.back();
+			nodes.pop_back();
+			// We need to see which of these is the operator
+			if (val1->mValue.mType == TokenType::OPERATOR) {
+				val1->mChildren.push_back(val2);
+				nodes.push_back(val1);
+			} else if (val2->mValue.mType == TokenType::OPERATOR) {
+				val2->mChildren.push_back(val1);
+				nodes.push_back(val2);
+			} else {
+				std::cerr << "Expected an operator inside unary expression at " << val1->mValue << std::endl;
+				mCurrentToken = saved;
+				return nullptr;
+			}
+		} // Else we just have a value wrapped with () which is fine -> (5) is still 5
 
 		if (nodes.empty()) {
 			std::cerr << "Zero nodes found while parsing expression at " << *mCurrentToken << std::endl;

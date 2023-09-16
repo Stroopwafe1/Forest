@@ -665,6 +665,107 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			}
 		}
 		return ExpressionPrinted{};
+	} else if (expression->mValue.mSubType == TokenSubType::OP_UNARY) {
+		if (expression->mValue.mText == "\\") {
+			Expression* child = expression->mChildren[0];
+			if (child->mValue.mType == TokenType::IDENTIFIER) {
+				SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
+				leftSize = left.size;
+				outfile << "\tlea rax, " << sizes[left.size] << " " << left.location() << std::endl;
+			} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+				outfile << "\tlea rax, " << p.findLiteralByContent(child->mValue.mText).value().mAlias << std::endl;
+			} else if (child->mValue.mType == TokenType::LITERAL) {
+				throw std::runtime_error("Cannot get reference of a literal value");
+			} else {
+				throw std::runtime_error("Unexpected getting a reference");
+			}
+		} else if (expression->mValue.mText == "@") {
+			ExpressionPrinted valPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
+			if (!valPrinted.printed) {
+				Expression* child = expression->mChildren[0];
+				if (child->mValue.mType == TokenType::IDENTIFIER) {
+					SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
+					leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
+					leftSize = left.size;
+					const char* reg = "r10";
+					const char* moveAction = getMoveAction(3, leftSize, leftSign);
+					outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << std::endl;
+					outfile << "\tmov rax, [r10]" << std::endl;
+				} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+					throw std::runtime_error("Cannot dereference a string literal value");
+				} else if (child->mValue.mType == TokenType::LITERAL) {
+					outfile << "\tmov r10, " << child->mValue.mText << std::endl;
+					outfile << "\tmov rax, [r10]" << std::endl;
+				} else {
+					throw std::runtime_error("Unexpected dereference");
+				}
+			} else {
+				outfile << "\tmov r10, rax" << std::endl;
+				outfile << "\tmov rax, [r10]" << std::endl;
+			}
+		} else if (expression->mValue.mText == "!") {
+			ExpressionPrinted valPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
+			if (valPrinted.printed) {
+				// NOTE: If we knew the type that is in rax, we could possibly only do a xor, which is a bit more efficient
+				outfile << "\tcmp rax, 0" << std::endl;
+				outfile << "\tsete al" << std::endl;
+				outfile << "\tmovzx rax, al" << std::endl;
+			} else {
+				Expression* child = expression->mChildren[0];
+				if (child->mValue.mType == TokenType::IDENTIFIER) {
+					SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
+					leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
+					leftSize = left.size;
+					if (left.type.builtinType == Builtin_Type::BOOL) {
+						const char* reg = "rax";
+						const char* moveAction = getMoveAction(3, leftSize, leftSign);
+						outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << std::endl;
+						outfile << "\txor rax, 1" << std::endl;
+					} else {
+						outfile << "\tcmp " << sizes[left.size] << " " << left.location() << ", 0" << std::endl;
+						outfile << "\tsete al" << std::endl;
+						outfile << "\tmovzx rax, al" << std::endl;
+					}
+				} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+					throw std::runtime_error("Cannot `!` a string literal value");
+				} else if (child->mValue.mType == TokenType::LITERAL) {
+					outfile << "\tmov rax, " << child->mValue.mText << std::endl;
+					if (child->mValue.mSubType == TokenSubType::BOOLEAN_LITERAL)
+						outfile << "\txor rax, 1" << std::endl;
+					// Else, flip all the bits. If someone wants to use ints as bools, they will have to `!intVal & 1` instead of `!intVal`.
+					else {
+						outfile << "\tcmp rax, 0" << std::endl;
+						outfile << "\tsete al" << std::endl;
+						outfile << "\tmovzx rax, al" << std::endl;
+					}
+				} else {
+					throw std::runtime_error("Unexpected `!`");
+				}
+			}
+		} else if (expression->mValue.mText == "~") {
+			ExpressionPrinted valPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
+			if (valPrinted.printed)
+				outfile << "\tnot rax" << std::endl;
+			else {
+				Expression* child = expression->mChildren[0];
+				if (child->mValue.mType == TokenType::IDENTIFIER) {
+					SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
+					leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
+					leftSize = left.size;
+					const char* reg = "rax";
+					const char* moveAction = getMoveAction(3, leftSize, leftSign);
+					outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << std::endl;
+					outfile << "\tnot rax" << std::endl;
+				} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+					throw std::runtime_error("Cannot `~` a string literal value");
+				} else if (child->mValue.mType == TokenType::LITERAL) {
+					outfile << "\tmov rax, " << child->mValue.mText << std::endl;
+					outfile << "\tnot rax" << std::endl;
+				} else {
+					throw std::runtime_error("Unexpected `!`");
+				}
+			}
+		}
 	}
 
 	ExpressionPrinted leftPrinted = printExpression(outfile, p, expression->mChildren[0], -1);

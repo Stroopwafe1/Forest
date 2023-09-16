@@ -75,10 +75,31 @@ TEST_F(TokeniserTests, TokeniserParseShouldTokeniseFloatLiterals) {
 }
 
 TEST_F(TokeniserTests, TokeniserParseShouldTokeniseAssignmentOperators) {
-	std::string code = "+= -= *= /= %= >>= <<= |= &= ^= != **=";
+	std::string code = "+= -= *= /= %= >>= <<= |= &= ^= != ~= **=";
 	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, filePath);
 
-	ASSERT_EQ(tokens.size(), 12);
+	ASSERT_EQ(tokens.size(), 13);
+
+	size_t pos = 0;
+	std::string op;
+	std::string delim = " ";
+	int i = 0;
+	while ((pos = code.find(delim)) != std::string::npos) {
+		op = code.substr(0, pos);
+		Token token = tokens[i];
+		EXPECT_EQ(token.mType, TokenType::OPERATOR);
+		EXPECT_STREQ(token.mText.c_str(), op.c_str());
+		i++;
+		code.erase(0, pos + delim.length());
+	}
+
+}
+
+TEST_F(TokeniserTests, TokeniserParseShouldTokeniseOperators) {
+	std::string code = "+ ++ - -- * ** / ( ) | || & && % >> << ^ ! ~";
+	std::vector<Token> tokens = forest::parser::Tokeniser::parse(code, filePath);
+
+	ASSERT_EQ(tokens.size(), 19);
 
 	size_t pos = 0;
 	std::string op;
@@ -168,6 +189,17 @@ TEST_F(TokeniserTests, TokeniserEndTokenShouldConvertSubtypes) {
 	EXPECT_EQ(skipToken.mType, TokenType::IDENTIFIER);
 	EXPECT_EQ(skipToken.mSubType, TokenSubType::SKIP);
 	EXPECT_STREQ(skipToken.mText.c_str(), "skip");
+
+	token.mType = TokenType::IDENTIFIER;
+	token.mText = "true";
+
+	forest::parser::Tokeniser::endToken(token, tokens);
+	ASSERT_EQ(tokens.size(), 3);
+
+	Token trueToken = tokens[2];
+	EXPECT_EQ(trueToken.mType, TokenType::LITERAL);
+	EXPECT_EQ(trueToken.mSubType, TokenSubType::BOOLEAN_LITERAL);
+	EXPECT_STREQ(trueToken.mText.c_str(), "1");
 }
 
 TEST(TokenTests, TokenGetTypeShouldReturnType) {
@@ -198,4 +230,12 @@ TEST(TokenTests, TokenGetTypeShouldReturnType) {
 
 	token.mType = TokenType::STRING_ESCAPE_SEQUENCE;
 	EXPECT_STREQ(token.getType(), "STRING_ESCAPE_SEQUENCE");
+}
+
+TEST(TokenTests, TokenToLowerShouldBeLowered) {
+	Token token;
+	token.mText = "TRUE";
+
+	EXPECT_STREQ(token.toLower().c_str(), "true");
+
 }
