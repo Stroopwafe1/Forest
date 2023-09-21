@@ -208,21 +208,21 @@ TEST_F(ParserTests, ParserTryParseExpression4Minus3Plus1) {
 	EXPECT_EQ(expression->mValue.mType, TokenType::OPERATOR);
 	EXPECT_STREQ(expression->mValue.mText.c_str(), "+");
 
-	Token left = expression->mLeft->mValue;
+	Token left = expression->mChildren[0]->mValue;
 	EXPECT_EQ(left.mType, TokenType::OPERATOR);
 	EXPECT_STREQ(left.mText.c_str(), "-");
 
-	Token leftleft = expression->mLeft->mLeft->mValue;
+	Token leftleft = expression->mChildren[0]->mChildren[0]->mValue;
 	EXPECT_EQ(leftleft.mType, TokenType::LITERAL);
 	EXPECT_EQ(leftleft.mSubType, TokenSubType::INTEGER_LITERAL);
 	EXPECT_STREQ(leftleft.mText.c_str(), "4");
 
-	Token leftright = expression->mLeft->mRight->mValue;
+	Token leftright = expression->mChildren[0]->mChildren[1]->mValue;
 	EXPECT_EQ(leftright.mType, TokenType::LITERAL);
 	EXPECT_EQ(leftright.mSubType, TokenSubType::INTEGER_LITERAL);
 	EXPECT_STREQ(leftright.mText.c_str(), "3");
 
-	Token right = expression->mRight->mValue;
+	Token right = expression->mChildren[1]->mValue;
 	EXPECT_EQ(right.mType, TokenType::LITERAL);
 	EXPECT_EQ(right.mSubType, TokenSubType::INTEGER_LITERAL);
 	EXPECT_STREQ(right.mText.c_str(), "1");
@@ -244,21 +244,21 @@ TEST_F(ParserTests, ParserTryParseExpression4Minus3Plus1V2) {
 	EXPECT_EQ(expression->mValue.mType, TokenType::OPERATOR);
 	EXPECT_STREQ(expression->mValue.mText.c_str(), "-");
 
-	Token left = expression->mLeft->mValue;
+	Token left = expression->mChildren[0]->mValue;
 	EXPECT_EQ(left.mType, TokenType::LITERAL);
 	EXPECT_EQ(left.mSubType, TokenSubType::INTEGER_LITERAL);
 	EXPECT_STREQ(left.mText.c_str(), "4");
 
-	Token right = expression->mRight->mValue;
+	Token right = expression->mChildren[1]->mValue;
 	EXPECT_EQ(right.mType, TokenType::OPERATOR);
 	EXPECT_STREQ(right.mText.c_str(), "+");
 
-	Token rightleft = expression->mRight->mLeft->mValue;
+	Token rightleft = expression->mChildren[1]->mChildren[0]->mValue;
 	EXPECT_EQ(rightleft.mType, TokenType::LITERAL);
 	EXPECT_EQ(rightleft.mSubType, TokenSubType::INTEGER_LITERAL);
 	EXPECT_STREQ(rightleft.mText.c_str(), "3");
 
-	Token rightright = expression->mRight->mRight->mValue;
+	Token rightright = expression->mChildren[1]->mChildren[1]->mValue;
 	EXPECT_EQ(rightright.mType, TokenType::LITERAL);
 	EXPECT_EQ(rightright.mSubType, TokenSubType::INTEGER_LITERAL);
 	EXPECT_STREQ(rightright.mText.c_str(), "1");
@@ -279,8 +279,8 @@ TEST_F(ParserTests, ParserExpressionCollapse4Minus1) {
 	expression->Collapse();
 
 	ASSERT_NE(expression, nullptr);
-	ASSERT_EQ(expression->mLeft, nullptr);
-	ASSERT_EQ(expression->mRight, nullptr);
+	ASSERT_EQ(expression->mChildren[0], nullptr);
+	ASSERT_EQ(expression->mChildren[1], nullptr);
 
 	EXPECT_EQ(expression->mValue.mType, TokenType::LITERAL);
 	EXPECT_EQ(expression->mValue.mSubType, TokenSubType::INTEGER_LITERAL);
@@ -299,8 +299,8 @@ TEST_F(ParserTests, ParserExpressionCollapse4Minus3Plus1) {
 	expression->Collapse();
 
 	ASSERT_NE(expression, nullptr);
-	ASSERT_EQ(expression->mLeft, nullptr);
-	ASSERT_EQ(expression->mRight, nullptr);
+	ASSERT_EQ(expression->mChildren[0], nullptr);
+	ASSERT_EQ(expression->mChildren[1], nullptr);
 
 	EXPECT_EQ(expression->mValue.mType, TokenType::LITERAL);
 	EXPECT_EQ(expression->mValue.mSubType, TokenSubType::INTEGER_LITERAL);
@@ -319,8 +319,8 @@ TEST_F(ParserTests, ParserExpressionCollapse4Modulo3) {
 	expression->Collapse();
 
 	ASSERT_NE(expression, nullptr);
-	ASSERT_EQ(expression->mLeft, nullptr);
-	ASSERT_EQ(expression->mRight, nullptr);
+	ASSERT_EQ(expression->mChildren[0], nullptr);
+	ASSERT_EQ(expression->mChildren[1], nullptr);
 
 	EXPECT_EQ(expression->mValue.mType, TokenType::LITERAL);
 	EXPECT_EQ(expression->mValue.mSubType, TokenSubType::INTEGER_LITERAL);
@@ -339,8 +339,8 @@ TEST_F(ParserTests, ParserExpressionCollapse3TimesString) {
 	expression->Collapse();
 
 	ASSERT_NE(expression, nullptr);
-	ASSERT_EQ(expression->mLeft, nullptr);
-	ASSERT_EQ(expression->mRight, nullptr);
+	ASSERT_EQ(expression->mChildren[0], nullptr);
+	ASSERT_EQ(expression->mChildren[1], nullptr);
 
 	EXPECT_EQ(expression->mValue.mType, TokenType::LITERAL);
 	EXPECT_EQ(expression->mValue.mSubType, TokenSubType::STRING_LITERAL);
@@ -407,6 +407,37 @@ TEST_F(ParserTests, ParserTryParseFuncCallStatement) {
 	EXPECT_EQ(arg->mValue.mType, TokenType::LITERAL);
 	EXPECT_EQ(arg->mValue.mSubType, TokenSubType::INTEGER_LITERAL);
 	EXPECT_STREQ(arg->mValue.mText.c_str(), "20");
+}
+
+TEST_F(ParserTests, ParserTryParseVarAssignmentFuncCallStatement) {
+	std::vector<Token> tokens = Tokeniser::parse("ui8 val = stdlib::stdout.write(20);", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::optional<Statement> statement = parser.expectStatement();
+	ASSERT_TRUE(statement.has_value());
+
+	EXPECT_EQ(statement.value().mType, Statement_Type::VAR_DECL_ASSIGN);
+	EXPECT_FALSE(statement.value().loopStatement.has_value());
+	EXPECT_FALSE(statement.value().funcCall.has_value());
+
+	ASSERT_TRUE(statement.value().variable.has_value());
+	Variable var = statement.value().variable.value();
+	EXPECT_STREQ(var.mName.c_str(), "val");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+
+	ASSERT_EQ(var.mValues.size(), 1);
+	Expression* node = var.mValues[0];
+	ASSERT_EQ(node->mChildren.size(), 7);
+	EXPECT_STREQ(node->mValue.mText.c_str(), "(");
+	EXPECT_STREQ(node->mChildren[0]->mValue.mText.c_str(), "stdlib");
+	EXPECT_STREQ(node->mChildren[1]->mValue.mText.c_str(), "::");
+	EXPECT_STREQ(node->mChildren[2]->mValue.mText.c_str(), "stdout");
+	EXPECT_STREQ(node->mChildren[3]->mValue.mText.c_str(), ".");
+	EXPECT_STREQ(node->mChildren[4]->mValue.mText.c_str(), "write");
+	EXPECT_STREQ(node->mChildren[5]->mValue.mText.c_str(), "(");
+	EXPECT_STREQ(node->mChildren[6]->mValue.mText.c_str(), "20");
 }
 
 TEST_F(ParserTests, ParserTryParseExternalFuncCallStatement) {

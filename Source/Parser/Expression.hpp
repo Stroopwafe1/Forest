@@ -7,8 +7,7 @@ namespace forest::parser {
 
 	class Expression {
 	public:
-		Expression* mLeft = nullptr;
-		Expression* mRight = nullptr;
+		std::vector<Expression*> mChildren;
 		Token mValue {};
 
 		~Expression();

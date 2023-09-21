@@ -37,7 +37,7 @@ struct ExpressionPrinted {
 
 class X86_64LinuxYasmCompiler {
 public:
-	void compile(fs::path& fileName, const Programme& p, const Function& main);
+	void compile(fs::path& filePath, const Programme& p);
 
 private:
 	uint32_t labelCount = 0;

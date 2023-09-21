@@ -3,153 +3,154 @@
 namespace forest::parser {
 
 	Expression::~Expression() {
-		delete mLeft;
-		delete mRight;
+		for (const auto& exp : mChildren) {
+			delete exp;
+		}
+		mChildren.clear();
 	}
 
 
 	Expression::Expression() {
 		mValue = {};
-		mLeft = nullptr;
-		mRight = nullptr;
+		mChildren = {};
 	}
 
 	Expression::Expression(const Expression& rhs) {
 		mValue = rhs.mValue;
-		if (rhs.mLeft != nullptr)
-			mLeft = new Expression(*rhs.mLeft);
-		else
-			mLeft = nullptr;
-		if (rhs.mRight != nullptr)
-			mRight = new Expression(*rhs.mRight);
-		else
-			mRight = nullptr;
+		for (const auto& exp : rhs.mChildren) {
+			Expression* newExp = new Expression(*exp);
+			mChildren.push_back(newExp);
+		}
 	}
 
 	void Expression::Collapse() {
-		if (mLeft == nullptr && mRight == nullptr) {
-			return;
-		}
-		if (mValue.mType != TokenType::OPERATOR) {
+		if (mChildren.empty()) {
 			return;
 		}
 
-		mLeft->Collapse();
-		mRight->Collapse();
-		if (mLeft->mValue.mType != TokenType::LITERAL || mRight->mValue.mType != TokenType::LITERAL) {
+		if (mValue.mType != TokenType::OPERATOR ) {
+			return;
+		}
+
+		Expression* leftExp = mChildren[0];
+		Expression* rightExp = mChildren[1];
+
+		leftExp->Collapse();
+		rightExp->Collapse();
+		if (leftExp->mValue.mType != TokenType::LITERAL || rightExp->mValue.mType != TokenType::LITERAL) {
 			return;
 		}
 
 		if (mValue.mText == "-") {
-			if (mLeft->mValue.mSubType == TokenSubType::STRING_LITERAL || mRight->mValue.mSubType == TokenSubType::STRING_LITERAL) return;
-			if (mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL && mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-				int64_t left = std::stol(mLeft->mValue.mText);
-				int64_t right = std::stol(mRight->mValue.mText);
+			if (leftExp->mValue.mSubType == TokenSubType::STRING_LITERAL || rightExp->mValue.mSubType == TokenSubType::STRING_LITERAL) return;
+			if (leftExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL && rightExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+				int64_t left = std::stol(leftExp->mValue.mText);
+				int64_t right = std::stol(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::INTEGER_LITERAL;
 				mValue.mText = std::to_string(left - right);
-			} else if (mLeft->mValue.mSubType == TokenSubType::FLOAT_LITERAL || mRight->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
-				double left = std::stod(mLeft->mValue.mText);
-				double right = std::stod(mRight->mValue.mText);
+			} else if (leftExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL || rightExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
+				double left = std::stod(leftExp->mValue.mText);
+				double right = std::stod(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::FLOAT_LITERAL;
 				mValue.mText = std::to_string(left - right);
 			}
 		} else if (mValue.mText == "+") {
-			if (mLeft->mValue.mSubType == TokenSubType::STRING_LITERAL || mRight->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+			if (leftExp->mValue.mSubType == TokenSubType::STRING_LITERAL || rightExp->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::STRING_LITERAL;
-				mValue.mText = mLeft->mValue.mText + mRight->mValue.mText;
-			} else if (mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL && mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-				int64_t left = std::stol(mLeft->mValue.mText);
-				int64_t right = std::stol(mRight->mValue.mText);
+				mValue.mText = leftExp->mValue.mText + rightExp->mValue.mText;
+			} else if (leftExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL && rightExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+				int64_t left = std::stol(leftExp->mValue.mText);
+				int64_t right = std::stol(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::INTEGER_LITERAL;
 				mValue.mText = std::to_string(left + right);
-			} else if (mLeft->mValue.mSubType == TokenSubType::FLOAT_LITERAL || mRight->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
-				double left = std::stod(mLeft->mValue.mText);
-				double right = std::stod(mRight->mValue.mText);
+			} else if (leftExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL || rightExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
+				double left = std::stod(leftExp->mValue.mText);
+				double right = std::stod(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::FLOAT_LITERAL;
 				mValue.mText = std::to_string(left + right);
 			}
 		} else if (mValue.mText == "/") {
-			if (mLeft->mValue.mSubType == TokenSubType::STRING_LITERAL || mRight->mValue.mSubType == TokenSubType::STRING_LITERAL) return;
-			if (mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL && mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-				int64_t left = std::stol(mLeft->mValue.mText);
-				int64_t right = std::stol(mRight->mValue.mText);
+			if (leftExp->mValue.mSubType == TokenSubType::STRING_LITERAL || rightExp->mValue.mSubType == TokenSubType::STRING_LITERAL) return;
+			if (leftExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL && rightExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+				int64_t left = std::stol(leftExp->mValue.mText);
+				int64_t right = std::stol(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::INTEGER_LITERAL;
 				mValue.mText = std::to_string(left / right);
-			} else if (mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL && mRight->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
-				int64_t left = std::stol(mLeft->mValue.mText);
-				double right = std::stod(mRight->mValue.mText);
+			} else if (leftExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL && rightExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
+				int64_t left = std::stol(leftExp->mValue.mText);
+				double right = std::stod(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::FLOAT_LITERAL;
 				mValue.mText = std::to_string(left / right);
-			} else if (mLeft->mValue.mSubType == TokenSubType::FLOAT_LITERAL && mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-				double left = std::stod(mLeft->mValue.mText);
-				int64_t right = std::stol(mRight->mValue.mText);
+			} else if (leftExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL && rightExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+				double left = std::stod(leftExp->mValue.mText);
+				int64_t right = std::stol(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::INTEGER_LITERAL;
 				mValue.mText = std::to_string(left / right);
-			} else if (mLeft->mValue.mSubType == TokenSubType::FLOAT_LITERAL && mRight->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
-				double left = std::stod(mLeft->mValue.mText);
-				double right = std::stod(mRight->mValue.mText);
+			} else if (leftExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL && rightExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
+				double left = std::stod(leftExp->mValue.mText);
+				double right = std::stod(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::FLOAT_LITERAL;
 				mValue.mText = std::to_string(left / right);
 			}
 		} else if (mValue.mText == "*") {
-			if (mLeft->mValue.mSubType == TokenSubType::STRING_LITERAL && mRight->mValue.mSubType == TokenSubType::STRING_LITERAL) return;
-			if (mLeft->mValue.mSubType == TokenSubType::STRING_LITERAL || mRight->mValue.mSubType == TokenSubType::STRING_LITERAL) {
-				if (!(mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL || mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL)) return;
+			if (leftExp->mValue.mSubType == TokenSubType::STRING_LITERAL && rightExp->mValue.mSubType == TokenSubType::STRING_LITERAL) return;
+			if (leftExp->mValue.mSubType == TokenSubType::STRING_LITERAL || rightExp->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+				if (!(leftExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL || rightExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL)) return;
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::STRING_LITERAL;
 
-				if (mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-					int64_t left = std::stol(mLeft->mValue.mText);
+				if (leftExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+					int64_t left = std::stol(leftExp->mValue.mText);
 					mValue.mText = "";
 					for (int i = 0; i < left; i++) {
-						mValue.mText += mRight->mValue.mText;
+						mValue.mText += rightExp->mValue.mText;
 					}
 				} else {
-					int64_t right = std::stol(mRight->mValue.mText);
+					int64_t right = std::stol(rightExp->mValue.mText);
 					mValue.mText = "";
 					for (int i = 0; i < right; i++) {
-						mValue.mText += mLeft->mValue.mText;
+						mValue.mText += leftExp->mValue.mText;
 					}
 				}
-			} else if (mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL && mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-				int64_t left = std::stol(mLeft->mValue.mText);
-				int64_t right = std::stol(mRight->mValue.mText);
+			} else if (leftExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL && rightExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+				int64_t left = std::stol(leftExp->mValue.mText);
+				int64_t right = std::stol(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::INTEGER_LITERAL;
 				mValue.mText = std::to_string(left * right);
-			} else if (mLeft->mValue.mSubType == TokenSubType::FLOAT_LITERAL || mRight->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
-				double left = std::stod(mLeft->mValue.mText);
-				double right = std::stod(mRight->mValue.mText);
+			} else if (leftExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL || rightExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL) {
+				double left = std::stod(leftExp->mValue.mText);
+				double right = std::stod(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::FLOAT_LITERAL;
 				mValue.mText = std::to_string(left * right);
 			}
 		} else if (mValue.mText == "%") {
-			if (mLeft->mValue.mSubType == TokenSubType::STRING_LITERAL || mRight->mValue.mSubType == TokenSubType::STRING_LITERAL) return;
-			if (mLeft->mValue.mSubType == TokenSubType::FLOAT_LITERAL || mRight->mValue.mSubType == TokenSubType::FLOAT_LITERAL) return;
+			if (leftExp->mValue.mSubType == TokenSubType::STRING_LITERAL || rightExp->mValue.mSubType == TokenSubType::STRING_LITERAL) return;
+			if (leftExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL || rightExp->mValue.mSubType == TokenSubType::FLOAT_LITERAL) return;
 
-			if (mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL && mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-				int64_t left = std::stol(mLeft->mValue.mText);
-				int64_t right = std::stol(mRight->mValue.mText);
+			if (leftExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL && rightExp->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+				int64_t left = std::stol(leftExp->mValue.mText);
+				int64_t right = std::stol(rightExp->mValue.mText);
 
 				mValue.mType = TokenType::LITERAL;
 				mValue.mSubType = TokenSubType::INTEGER_LITERAL;
@@ -157,14 +158,10 @@ namespace forest::parser {
 			}
 		}
 
-		if (mLeft != nullptr) {
-			delete mLeft;
-			mLeft = nullptr;
-		}
-		if (mRight != nullptr) {
-			delete mRight;
-			mRight = nullptr;
-		}
+		delete leftExp;
+		mChildren[0] = nullptr;
+		delete rightExp;
+		mChildren[1] = nullptr;
 	}
 
 

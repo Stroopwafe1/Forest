@@ -49,9 +49,12 @@ int X86_64LinuxYasmCompiler::addToSymbols(int* offset, const Variable& variable,
 	return result;
 }
 
-void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, const Function& main) {
-	fs::create_directory("./build");
-	fs::path outPath = "./build";
+void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p) {
+	fs::path fileName = filePath.stem();
+	std::string parentPath = filePath.parent_path().string();
+	fs::path buildPath = filePath.parent_path() / "build";
+	fs::create_directory(buildPath);
+	fs::path outPath = buildPath;
 	outPath /= fileName.concat(".asm");
 	std::ofstream outfile;
 	outfile.open(outPath);
@@ -90,7 +93,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 	// For every variable, keep track of the offset
 	// End with epilogue 'pop rbp'
 
-	const char callingConvention[6][4] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+	const char callingConvention[6][4] = {"di", "si", "d", "c", "8", "9"};
 
 	for (const auto& function : p.functions) {
 		if (function.mName == "main") {
@@ -117,7 +120,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 		} else {
 			for (size_t i = 0; i < function.mArgs.size(); i++) {
 				const auto& arg = function.mArgs[i];
-				std::string reg = i < 6 ? callingConvention[i] : "rbp+";
+				std::string reg = i < 6 ? getRegister(callingConvention[i], getSizeFromByteSize(arg.mType.byteSize)) : "rbp+";
 
 				addToSymbols(&argOffset, Variable{arg.mType, arg.mName, {}}, reg);
 			}
@@ -126,6 +129,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 		printBody(outfile, p, function.mBody, function.mName, &offset);
 
 		if (function.mName != "main") {
+			outfile << ".exit:" << std::endl;
 			outfile << "; =============== EPILOGUE ===============" << std::endl;
 			outfile << "\tpop rbp" << std::endl;
 			outfile << "\tret" << std::endl;
@@ -141,7 +145,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 	assembler << "yasm -f elf64";
 	if (debug)
 		assembler << " -g dwarf2";
-	assembler << " -o ./build/" <<  fileName.stem().string() << ".o ./build/" << fileName.stem().string() << ".asm";
+	assembler << " -o " << buildPath.string() << "/" << fileName.stem().string() << ".o " << buildPath.string() << "/" << fileName.stem().string() << ".asm";
 	//std::cout << assembler.str().c_str() << std::endl;
 	std::system(assembler.str().c_str());
 
@@ -151,7 +155,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 		linker << " -s -z noseparate-code ";
 	else
 		linker << " -g";
-	linker << " -o ./build/" << fileName.stem().string() << " --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ./build/" << fileName.stem().string() << ".o";
+	linker << " -o " << buildPath.string() << "/" << fileName.stem().string() << " --dynamic-linker=/lib64/ld-linux-x86-64.so.2 " << buildPath.string() << "/" << fileName.stem().string() << ".o";
 	for (auto& dependency : p.libDependencies) {
 		linker << " -l" << dependency;
 	}
@@ -159,7 +163,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& fileName, const Programme& p, co
 	std::system(linker.str().c_str());
 
 	std::stringstream run_command;
-	run_command << "./build/" << fileName.stem().string();
+	run_command << buildPath.string() << "/" << fileName.stem().string();
 	std::system(run_command.str().c_str());
 }
 
@@ -241,7 +245,7 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 
 	} else if (arg->mValue.mType == TokenType::LITERAL && arg->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 		outfile << "; =============== FUNC CALL + INT ===============" << std::endl;
-		outfile << "\tmov edi, " << arg->mValue.mText << std::endl;
+		outfile << "\tmov rdi, " << arg->mValue.mText << std::endl;
 		if (fc.mFunctionName == "write") {
 			outfile << "\tcall print_uint32" << std::endl;
 		} else if (fc.mFunctionName == "writeln") {
@@ -252,7 +256,8 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 	} else if (arg->mValue.mType == TokenType::IDENTIFIER) {
 		SymbolInfo& var = symbolTable[arg->mValue.mText];
 		outfile << "; =============== FUNC CALL + VARIABLE ===============" << std::endl;
-		outfile << "\tmovzx edi, " << sizes[var.size] << " " << var.location() << std::endl;
+		const char* moveAction = getMoveAction(3, var.size, false);
+		outfile << "\t" << moveAction << " rdi, " << sizes[var.size] << " " << var.location() << std::endl;
 		if (fc.mFunctionName == "write") {
 			outfile << "\tcall print_uint32" << std::endl;
 		} else if (fc.mFunctionName == "writeln") {
@@ -261,8 +266,8 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 		outfile << "; =============== END FUNC CALL + VARIABLE ===============" << std::endl;
 
 	} else if (arg->mValue.mType == TokenType::OPERATOR && arg->mValue.mText == "[") { // Array indexing
-		SymbolInfo& var = symbolTable[arg->mLeft->mValue.mText];
-		std::string offset = arg->mRight->mValue.mText;
+		SymbolInfo& var = symbolTable[arg->mChildren[0]->mValue.mText];
+		std::string offset = arg->mChildren[1]->mValue.mText;
 		outfile << "\tmov rdi, " << sizes[var.size] << " [" << var.reg;
 		if (var.offset < 0)
 			outfile << offset << "*" << (1 << var.size) ;
@@ -298,7 +303,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << "\tmov rax, 60" << std::endl;
 					outfile << "\tsyscall" << std::endl;
 				} else {
-					outfile << "\tret" << std::endl;
+					outfile << "\tjmp .exit" << std::endl;
 				}
 				break;
 			case Statement_Type::VAR_DECLARATION:
@@ -391,32 +396,32 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					int size = addToSymbols(offset, ls.mIterator.value());
 					addToSymbols(&localOffset, ls.mIterator.value());
 					std::string op = ls.mRange.value().mMinimum < ls.mRange.value().mMaximum ? "inc " : "dec ";
-					std::string label = "label";
+					std::string label = ".label";
 					uint32_t localLabelCount = ++labelCount;
 					label = label.append(std::to_string(localLabelCount));
 					recentLoopLabel = label;
 					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << ls.mRange.value().mMinimum->mValue.mText << std::endl;
 					outfile << label << ":" << std::endl;
 					outfile << "\tcmp " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << ls.mRange.value().mMaximum->mValue.mText << std::endl;
-					outfile << "\tjne inside_label" << localLabelCount << std::endl;
-					outfile << "\tjmp not_label" << localLabelCount << std::endl;
-					outfile << "inside_label" << localLabelCount << ":" << std::endl;
+					outfile << "\tjne .inside_label" << localLabelCount << std::endl;
+					outfile << "\tjmp .not_label" << localLabelCount << std::endl;
+					outfile << ".inside_label" << localLabelCount << ":" << std::endl;
 					printBody(outfile, p, ls.mBody, label, offset);
-					outfile << "skip_label" << localLabelCount << ":" << std::endl;
+					outfile << ".skip_label" << localLabelCount << ":" << std::endl;
 					outfile << "\t" << moveToRegister("rax", symbolTable[ls.mIterator.value().mName]).str();
 					outfile << "\t" << op << "rax" << std::endl;
 					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", al" << std::endl;
-					outfile << "\tjmp label" << localLabelCount << std::endl;
-					outfile << "not_label" << localLabelCount << ":" << std::endl;
+					outfile << "\tjmp .label" << localLabelCount << std::endl;
+					outfile << ".not_label" << localLabelCount << ":" << std::endl;
 				} else {
 					if (statement.mContent == nullptr) {
 						// We have "loop { ... }"
-						std::string label = "label";
+						std::string label = ".label";
 						label = label.append(std::to_string(++labelCount));
 						outfile << label << ":" << std::endl;
 						printBody(outfile, p, ls.mBody, label, offset);
-						outfile << "\tjmp label" << labelCount << std::endl;
-						outfile << "not_label" << labelCount << ":" << std::endl; // Used for break statements
+						outfile << "\tjmp .label" << labelCount << std::endl;
+						outfile << ".not_label" << labelCount << ":" << std::endl; // Used for break statements
 					} else {
 						// we have "until condition { ... }"
 					}
@@ -425,11 +430,11 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 			}
 			case Statement_Type::BREAK:
 				if (!recentLoopLabel.empty())
-					outfile << "\tjmp not_" << recentLoopLabel << std::endl;
+					outfile << "\tjmp .not_" << recentLoopLabel << std::endl;
 				break;
 			case Statement_Type::SKIP:
 				if (!recentLoopLabel.empty())
-					outfile << "\tjmp skip_" << recentLoopLabel << std::endl;
+					outfile << "\tjmp .skip_" << recentLoopLabel << std::endl;
 				break;
 			case Statement_Type::FUNC_CALL: {
 				FuncCallStatement fc = statement.funcCall.value();
@@ -441,6 +446,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << "\tpush rcx" << std::endl;
 					outfile << "\tpush r8" << std::endl;
 					outfile << "\tpush r9" << std::endl;
+					outfile << "\tpush r10" << std::endl;
 				}
 				if (fc.mClassName == "stdout" || fc.mClassName == "stdin") {
 					printFunctionCall(outfile, p, fc);
@@ -465,6 +471,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << "\tcall " << statement.funcCall.value().mFunctionName << std::endl;
 				}
 				if (labelName != "main") {
+					outfile << "\tpop r10" << std::endl;
 					outfile << "\tpop r9" << std::endl;
 					outfile << "\tpop r8" << std::endl;
 					outfile << "\tpop rcx" << std::endl;
@@ -480,23 +487,23 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 			case Statement_Type::IF: {
 				IfStatement is = statement.ifStatement.value();
 				printExpression(outfile, p, statement.mContent, 0);
-				std::string label = "if";
+				std::string label = ".if";
 				uint32_t localIfCount = ++ifCount;
 				label = label.append(std::to_string(localIfCount));
 				outfile << "\ttest rax, rax" << std::endl;
 				outfile << "\tjnz " << label << std::endl;
 				if (is.mElse.has_value())
-					outfile << "\tjmp else_if" <<  localIfCount << std::endl;
+					outfile << "\tjmp .else_if" <<  localIfCount << std::endl;
 				else
-					outfile << "\tjmp end_if" << localIfCount << std::endl;
+					outfile << "\tjmp .end_if" << localIfCount << std::endl;
 				outfile << label << ":" << std::endl;
 				printBody(outfile, p, is.mBody, label, offset);
-				outfile << "\tjmp end_if" << localIfCount << std::endl;
+				outfile << "\tjmp .end_if" << localIfCount << std::endl;
 				if (is.mElse.has_value()) {
-					outfile << "else_if" << localIfCount << ":" << std::endl;
+					outfile << ".else_if" << localIfCount << ":" << std::endl;
 					printBody(outfile, p, is.mElseBody.value(), label, offset);
 				}
-				outfile << "end_if" << localIfCount << ":" << std::endl;
+				outfile << ".end_if" << localIfCount << ":" << std::endl;
 				break;
 			}
 		}
@@ -538,7 +545,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 
 	const char* sizes[] = {"byte", "word", "dword", "qword"};
 
-	if (nodeType == 0 && expression->mLeft == nullptr && expression->mRight == nullptr) {
+	if (nodeType == 0 && expression->mChildren.empty()) {
 		// No expression, just base value
 		if (expression->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 			outfile << "\tmov rax, " << p.findLiteralByContent(expression->mValue.mText).value().mAlias << std::endl;
@@ -557,14 +564,16 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			}
 		}
 	}
+	if (expression->mChildren.empty())
+		return ExpressionPrinted{};
 
-	if (expression->mLeft == nullptr && expression->mRight == nullptr) {
+	if (expression->mChildren[0] == nullptr && expression->mChildren[1] == nullptr) {
 		return ExpressionPrinted{};
 	}
 	if (expression->mValue.mType != TokenType::OPERATOR) {
 		return ExpressionPrinted{};
 	}
-	if (expression->mLeft->mValue.mSubType == TokenSubType::STRING_LITERAL || expression->mRight->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+	if (expression->mChildren[0]->mValue.mSubType == TokenSubType::STRING_LITERAL || expression->mChildren[1]->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 		return ExpressionPrinted{};
 	}
 
@@ -578,69 +587,240 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		// blep = arr[i]
 		//         [
 		//      arr  i
-		printExpression(outfile, p, expression->mRight, 0);
+		printExpression(outfile, p, expression->mChildren[1], 0);
 
-		SymbolInfo& arr = symbolTable[expression->mLeft->mValue.mText];
+		SymbolInfo& arr = symbolTable[expression->mChildren[0]->mValue.mText];
+		// NOTE: Isn't only arrays, but can also be refs, strings, or if we want, numbers indexed to the bits
 		int actualSize = getSizeFromByteSize(arr.type.subTypes[0].byteSize);
-		bool sign = arr.type.subTypes[0].name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
-		const char* moveAction = getMoveAction(3, actualSize, sign);
-		outfile << "\t" << moveAction << " r10, " << sizes[actualSize] << " [" << arr.reg;
-		if (arr.offset > 0)
-			outfile << "+" << arr.offset << "+rax*" << int(arr.type.subTypes[0].byteSize);
-		else if (arr.offset < 0)
-			outfile << "-" << -arr.offset << "+rax*" << int(arr.type.subTypes[0].byteSize);
-		else
-			outfile << "+rax*" << int(arr.type.subTypes[0].byteSize);
-		outfile << "]" << std::endl;
-		outfile << "\tmov rax, r10" << std::endl;
+		if (arr.type.builtinType == Builtin_Type::ARRAY) {
+			bool sign = arr.type.subTypes[0].name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
+			const char* moveAction = getMoveAction(3, actualSize, sign);
+			outfile << "\t" << moveAction << " r10, " << sizes[actualSize] << " [" << arr.reg;
+			if (arr.offset > 0)
+				outfile << "+" << arr.offset << "+rax*" << int(arr.type.subTypes[0].byteSize);
+			else if (arr.offset < 0)
+				outfile << "-" << -arr.offset << "+rax*" << int(arr.type.subTypes[0].byteSize);
+			else
+				outfile << "+rax*" << int(arr.type.subTypes[0].byteSize);
+			outfile << "]" << std::endl;
+			outfile << "\tmov rax, r10" << std::endl;
+		} else if (arr.type.builtinType == Builtin_Type::REF) {
+			const char* moveAction = getMoveAction(3, actualSize, false);
+			outfile << "\tmov rbx, " << arr.type.subTypes[0].byteSize << std::endl;
+			outfile << "\tmul rbx" << std::endl;
+			outfile << "\tmov rbx, qword [" << arr.reg;
+			if (arr.offset > 0)
+				outfile << "+" << arr.offset;
+			else if (arr.offset < 0)
+				outfile << "-" << -arr.offset;
+			outfile << "]" << std::endl;
+			outfile << "\tadd rax, rbx" << std::endl;
+			outfile << "\t" << moveAction << " r10, " <<  sizes[actualSize] << " [rax]" << std::endl;
+			outfile << "\tmov rax, r10" << std::endl;
+		}
 		return ExpressionPrinted{};
+	} else if (expression->mValue.mText == "(") {
+		const char callingConvention[6][4] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+		std::stringstream ss;
+		bool printArgs = false;
+		int i = 0;
+		for (const auto& child : expression->mChildren) {
+			if (child->mValue.mText == "e" || child->mValue.mText == ":") continue;
+			if (child->mValue.mText == "(") {
+				printArgs = true;
+				continue;
+			}
+			if (!printArgs) {
+				if (child->mValue.mType == TokenType::OPERATOR)
+					ss << "_";
+				else
+					ss << child->mValue.mText;
+			} else {
+				outfile << "\tpush rdi" << std::endl;
+				outfile << "\tpush rsi" << std::endl;
+				outfile << "\tpush rdx" << std::endl;
+				outfile << "\tpush rcx" << std::endl;
+				outfile << "\tpush r8" << std::endl;
+				outfile << "\tpush r9" << std::endl;
+				outfile << "\tpush r10" << std::endl;
+				std::string value;
+
+				if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+					value = p.findLiteralByContent(child->mValue.mText)->mAlias;
+				} else {
+					printExpression(outfile, p, child, 0);
+					value = "rax";
+				}
+				if (i <= 6)
+					outfile << "\tmov " << callingConvention[i] << ", " << value << std::endl;
+				else
+					outfile << "\tpush " << value << std::endl;
+				i++;
+				if (ss.str() == "printf") {
+					outfile << "\tmov rax, 0" << std::endl;
+				}
+				outfile << "\tcall " << ss.str() << std::endl;
+
+				outfile << "\tpop r10" << std::endl;
+				outfile << "\tpop r9" << std::endl;
+				outfile << "\tpop r8" << std::endl;
+				outfile << "\tpop rcx" << std::endl;
+				outfile << "\tpop rdx" << std::endl;
+				outfile << "\tpop rsi" << std::endl;
+				outfile << "\tpop rdi" << std::endl;
+			}
+		}
+		return ExpressionPrinted{ true, false, 3 };
+	} else if (expression->mValue.mSubType == TokenSubType::OP_UNARY) {
+		if (expression->mValue.mText == "\\") {
+			Expression* child = expression->mChildren[0];
+			if (child->mValue.mType == TokenType::IDENTIFIER) {
+				SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
+				leftSize = left.size;
+				outfile << "\tlea rax, " << sizes[left.size] << " " << left.location() << std::endl;
+			} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+				outfile << "\tlea rax, " << p.findLiteralByContent(child->mValue.mText).value().mAlias << std::endl;
+			} else if (child->mValue.mType == TokenType::LITERAL) {
+				throw std::runtime_error("Cannot get reference of a literal value");
+			} else {
+				throw std::runtime_error("Unexpected getting a reference");
+			}
+		} else if (expression->mValue.mText == "@") {
+			ExpressionPrinted valPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
+			if (!valPrinted.printed) {
+				Expression* child = expression->mChildren[0];
+				if (child->mValue.mType == TokenType::IDENTIFIER) {
+					SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
+					leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
+					leftSize = left.size;
+					const char* reg = "r10";
+					const char* moveAction = getMoveAction(3, leftSize, leftSign);
+					outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << std::endl;
+					outfile << "\tmov rax, [r10]" << std::endl;
+				} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+					throw std::runtime_error("Cannot dereference a string literal value");
+				} else if (child->mValue.mType == TokenType::LITERAL) {
+					outfile << "\tmov r10, " << child->mValue.mText << std::endl;
+					outfile << "\tmov rax, [r10]" << std::endl;
+				} else {
+					throw std::runtime_error("Unexpected dereference");
+				}
+			} else {
+				outfile << "\tmov r10, rax" << std::endl;
+				outfile << "\tmov rax, [r10]" << std::endl;
+			}
+		} else if (expression->mValue.mText == "!") {
+			ExpressionPrinted valPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
+			if (valPrinted.printed) {
+				// NOTE: If we knew the type that is in rax, we could possibly only do a xor, which is a bit more efficient
+				outfile << "\tcmp rax, 0" << std::endl;
+				outfile << "\tsete al" << std::endl;
+				outfile << "\tmovzx rax, al" << std::endl;
+			} else {
+				Expression* child = expression->mChildren[0];
+				if (child->mValue.mType == TokenType::IDENTIFIER) {
+					SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
+					leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
+					leftSize = left.size;
+					if (left.type.builtinType == Builtin_Type::BOOL) {
+						const char* reg = "rax";
+						const char* moveAction = getMoveAction(3, leftSize, leftSign);
+						outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << std::endl;
+						outfile << "\txor rax, 1" << std::endl;
+					} else {
+						outfile << "\tcmp " << sizes[left.size] << " " << left.location() << ", 0" << std::endl;
+						outfile << "\tsete al" << std::endl;
+						outfile << "\tmovzx rax, al" << std::endl;
+					}
+				} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+					throw std::runtime_error("Cannot `!` a string literal value");
+				} else if (child->mValue.mType == TokenType::LITERAL) {
+					outfile << "\tmov rax, " << child->mValue.mText << std::endl;
+					if (child->mValue.mSubType == TokenSubType::BOOLEAN_LITERAL)
+						outfile << "\txor rax, 1" << std::endl;
+					// Else, flip all the bits. If someone wants to use ints as bools, they will have to `!intVal & 1` instead of `!intVal`.
+					else {
+						outfile << "\tcmp rax, 0" << std::endl;
+						outfile << "\tsete al" << std::endl;
+						outfile << "\tmovzx rax, al" << std::endl;
+					}
+				} else {
+					throw std::runtime_error("Unexpected `!`");
+				}
+			}
+		} else if (expression->mValue.mText == "~") {
+			ExpressionPrinted valPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
+			if (valPrinted.printed)
+				outfile << "\tnot rax" << std::endl;
+			else {
+				Expression* child = expression->mChildren[0];
+				if (child->mValue.mType == TokenType::IDENTIFIER) {
+					SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
+					leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
+					leftSize = left.size;
+					const char* reg = "rax";
+					const char* moveAction = getMoveAction(3, leftSize, leftSign);
+					outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << std::endl;
+					outfile << "\tnot rax" << std::endl;
+				} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+					throw std::runtime_error("Cannot `~` a string literal value");
+				} else if (child->mValue.mType == TokenType::LITERAL) {
+					outfile << "\tmov rax, " << child->mValue.mText << std::endl;
+					outfile << "\tnot rax" << std::endl;
+				} else {
+					throw std::runtime_error("Unexpected `!`");
+				}
+			}
+		}
 	}
 
-	ExpressionPrinted leftPrinted = printExpression(outfile, p, expression->mLeft, -1);
+	ExpressionPrinted leftPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
 	if (leftPrinted.printed) {
 		std::string r1 = "r10";//getRegister("10", leftPrinted.size);
 		std::string r2 = "rax";//getRegister("a", leftPrinted.size);
 		outfile << "\tmov " << r1 << ", " << r2 << std::endl; // Save left
 	}
-	ExpressionPrinted rightPrinted = printExpression(outfile, p, expression->mRight, 1);
+	ExpressionPrinted rightPrinted = printExpression(outfile, p, expression->mChildren[1], 1);
 
-	if (expression->mLeft->mValue.mType == TokenType::IDENTIFIER) {
-		SymbolInfo& left = symbolTable[expression->mLeft->mValue.mText];
+	if (expression->mChildren[0]->mValue.mType == TokenType::IDENTIFIER) {
+		SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
 		leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 		leftSize = left.size;
 		const char* reg = "rax";//getRegister("a", left.size);
 		const char* moveAction = getMoveAction(3, leftSize, leftSign);
 		outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << std::endl;
-	} else if (expression->mLeft->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-		int size = getSizeFromNumber(expression->mLeft->mValue.mText);
+	} else if (expression->mChildren[0]->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+		int size = getSizeFromNumber(expression->mChildren[0]->mValue.mText);
 		if (size < 0) {
 			leftSign = true;
 			size = -size - 1;
 		}
 		leftSize = size;
 		const char* reg = "rax";//getRegister("a", size);
-		outfile << "\tmov " << reg << ", " << expression->mLeft->mValue.mText << std::endl;
+		outfile << "\tmov " << reg << ", " << expression->mChildren[0]->mValue.mText << std::endl;
 	} else {
 		leftSize = leftPrinted.size;
 	}
 
-	if (expression->mRight->mValue.mType == TokenType::IDENTIFIER) {
-		SymbolInfo& right = symbolTable[expression->mRight->mValue.mText];
+	if (expression->mChildren[1]->mValue.mType == TokenType::IDENTIFIER) {
+		SymbolInfo& right = symbolTable[expression->mChildren[1]->mValue.mText];
 		rightSign = right.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 		rightSize = right.size;
 		const char* reg = "rbx";//getRegister("b", right.size);
 		const char* moveAction = getMoveAction(3, rightSize, rightSign);
 		outfile << "\t" << moveAction << " " << reg << ", " << sizes[right.size] << " " << right.location() << std::endl;
-	} else if (expression->mRight->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
-		int size = getSizeFromNumber(expression->mRight->mValue.mText);
+	} else if (expression->mChildren[1]->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+		int size = getSizeFromNumber(expression->mChildren[1]->mValue.mText);
 		if (size < 0) {
 			rightSize = true;
 			size = -size - 1;
 		}
 		rightSize = size;
 		const char* reg = "rbx";//getRegister("b", size);
-		outfile << "\tmov " << reg << ", " << expression->mRight->mValue.mText << std::endl;
+		outfile << "\tmov " << reg << ", " << expression->mChildren[1]->mValue.mText << std::endl;
 	} else {
+		if (rightPrinted.printed)
+			outfile << "\tmov rbx, rax" << std::endl;
 		rightSize = rightPrinted.size;
 	}
 
@@ -659,12 +839,15 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		outfile << "\tadd " << r1 << ", " << r2 << std::endl;
 	} else if (expression->mValue.mText == "-") {
 		int size = getEvenSize(leftSize, rightSize);
-		std::string r1 = getRegister("a", size+1);
-		std::string r2 = getRegister("b", size+1);
-		outfile << "\tsbb " << r1 << ", " << r2 << std::endl;
+		if (size == 3)
+			outfile << "\tsub rax, rbx" << std::endl;
+		else {
+			std::string r1 = getRegister("a", size+1);
+			std::string r2 = getRegister("b", size+1);
+			outfile << "\tsbb " << r1 << ", " << r2 << std::endl;
+		}
 	} else if (expression->mValue.mText == "*") {
 		int size = getEvenSize(leftSize, rightSize);
-		std::string r1 = getRegister("a", size);
 		std::string r2 = getRegister("b", size);
 		if (curr.sign)
 			outfile << "\timul " << sizes[size] << " " << r2 << std::endl;
@@ -876,5 +1059,5 @@ const char* X86_64LinuxYasmCompiler::convertARegSize(int size) {
 	if (size == 1) return "cwd";
 	if (size == 2) return "cdq";
 	if (size == 3) return "cqo";
+	return "UNREACHABLE";
 }
-
