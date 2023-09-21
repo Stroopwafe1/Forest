@@ -93,7 +93,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p) {
 	// For every variable, keep track of the offset
 	// End with epilogue 'pop rbp'
 
-	const char callingConvention[6][4] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+	const char callingConvention[6][4] = {"di", "si", "d", "c", "8", "9"};
 
 	for (const auto& function : p.functions) {
 		if (function.mName == "main") {
@@ -120,7 +120,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p) {
 		} else {
 			for (size_t i = 0; i < function.mArgs.size(); i++) {
 				const auto& arg = function.mArgs[i];
-				std::string reg = i < 6 ? callingConvention[i] : "rbp+";
+				std::string reg = i < 6 ? getRegister(callingConvention[i], getSizeFromByteSize(arg.mType.byteSize)) : "rbp+";
 
 				addToSymbols(&argOffset, Variable{arg.mType, arg.mName, {}}, reg);
 			}
@@ -129,6 +129,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p) {
 		printBody(outfile, p, function.mBody, function.mName, &offset);
 
 		if (function.mName != "main") {
+			outfile << ".exit:" << std::endl;
 			outfile << "; =============== EPILOGUE ===============" << std::endl;
 			outfile << "\tpop rbp" << std::endl;
 			outfile << "\tret" << std::endl;
@@ -244,7 +245,7 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 
 	} else if (arg->mValue.mType == TokenType::LITERAL && arg->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 		outfile << "; =============== FUNC CALL + INT ===============" << std::endl;
-		outfile << "\tmov edi, " << arg->mValue.mText << std::endl;
+		outfile << "\tmov rdi, " << arg->mValue.mText << std::endl;
 		if (fc.mFunctionName == "write") {
 			outfile << "\tcall print_uint32" << std::endl;
 		} else if (fc.mFunctionName == "writeln") {
@@ -255,7 +256,8 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 	} else if (arg->mValue.mType == TokenType::IDENTIFIER) {
 		SymbolInfo& var = symbolTable[arg->mValue.mText];
 		outfile << "; =============== FUNC CALL + VARIABLE ===============" << std::endl;
-		outfile << "\tmovzx edi, " << sizes[var.size] << " " << var.location() << std::endl;
+		const char* moveAction = getMoveAction(3, var.size, false);
+		outfile << "\t" << moveAction << " rdi, " << sizes[var.size] << " " << var.location() << std::endl;
 		if (fc.mFunctionName == "write") {
 			outfile << "\tcall print_uint32" << std::endl;
 		} else if (fc.mFunctionName == "writeln") {
@@ -301,7 +303,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << "\tmov rax, 60" << std::endl;
 					outfile << "\tsyscall" << std::endl;
 				} else {
-					outfile << "\tret" << std::endl;
+					outfile << "\tjmp .exit" << std::endl;
 				}
 				break;
 			case Statement_Type::VAR_DECLARATION:
@@ -394,32 +396,32 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					int size = addToSymbols(offset, ls.mIterator.value());
 					addToSymbols(&localOffset, ls.mIterator.value());
 					std::string op = ls.mRange.value().mMinimum < ls.mRange.value().mMaximum ? "inc " : "dec ";
-					std::string label = "label";
+					std::string label = ".label";
 					uint32_t localLabelCount = ++labelCount;
 					label = label.append(std::to_string(localLabelCount));
 					recentLoopLabel = label;
 					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << ls.mRange.value().mMinimum->mValue.mText << std::endl;
 					outfile << label << ":" << std::endl;
 					outfile << "\tcmp " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << ls.mRange.value().mMaximum->mValue.mText << std::endl;
-					outfile << "\tjne inside_label" << localLabelCount << std::endl;
-					outfile << "\tjmp not_label" << localLabelCount << std::endl;
-					outfile << "inside_label" << localLabelCount << ":" << std::endl;
+					outfile << "\tjne .inside_label" << localLabelCount << std::endl;
+					outfile << "\tjmp .not_label" << localLabelCount << std::endl;
+					outfile << ".inside_label" << localLabelCount << ":" << std::endl;
 					printBody(outfile, p, ls.mBody, label, offset);
-					outfile << "skip_label" << localLabelCount << ":" << std::endl;
+					outfile << ".skip_label" << localLabelCount << ":" << std::endl;
 					outfile << "\t" << moveToRegister("rax", symbolTable[ls.mIterator.value().mName]).str();
 					outfile << "\t" << op << "rax" << std::endl;
 					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", al" << std::endl;
-					outfile << "\tjmp label" << localLabelCount << std::endl;
-					outfile << "not_label" << localLabelCount << ":" << std::endl;
+					outfile << "\tjmp .label" << localLabelCount << std::endl;
+					outfile << ".not_label" << localLabelCount << ":" << std::endl;
 				} else {
 					if (statement.mContent == nullptr) {
 						// We have "loop { ... }"
-						std::string label = "label";
+						std::string label = ".label";
 						label = label.append(std::to_string(++labelCount));
 						outfile << label << ":" << std::endl;
 						printBody(outfile, p, ls.mBody, label, offset);
-						outfile << "\tjmp label" << labelCount << std::endl;
-						outfile << "not_label" << labelCount << ":" << std::endl; // Used for break statements
+						outfile << "\tjmp .label" << labelCount << std::endl;
+						outfile << ".not_label" << labelCount << ":" << std::endl; // Used for break statements
 					} else {
 						// we have "until condition { ... }"
 					}
@@ -428,11 +430,11 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 			}
 			case Statement_Type::BREAK:
 				if (!recentLoopLabel.empty())
-					outfile << "\tjmp not_" << recentLoopLabel << std::endl;
+					outfile << "\tjmp .not_" << recentLoopLabel << std::endl;
 				break;
 			case Statement_Type::SKIP:
 				if (!recentLoopLabel.empty())
-					outfile << "\tjmp skip_" << recentLoopLabel << std::endl;
+					outfile << "\tjmp .skip_" << recentLoopLabel << std::endl;
 				break;
 			case Statement_Type::FUNC_CALL: {
 				FuncCallStatement fc = statement.funcCall.value();
@@ -444,6 +446,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << "\tpush rcx" << std::endl;
 					outfile << "\tpush r8" << std::endl;
 					outfile << "\tpush r9" << std::endl;
+					outfile << "\tpush r10" << std::endl;
 				}
 				if (fc.mClassName == "stdout" || fc.mClassName == "stdin") {
 					printFunctionCall(outfile, p, fc);
@@ -468,6 +471,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << "\tcall " << statement.funcCall.value().mFunctionName << std::endl;
 				}
 				if (labelName != "main") {
+					outfile << "\tpop r10" << std::endl;
 					outfile << "\tpop r9" << std::endl;
 					outfile << "\tpop r8" << std::endl;
 					outfile << "\tpop rcx" << std::endl;
@@ -483,23 +487,23 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 			case Statement_Type::IF: {
 				IfStatement is = statement.ifStatement.value();
 				printExpression(outfile, p, statement.mContent, 0);
-				std::string label = "if";
+				std::string label = ".if";
 				uint32_t localIfCount = ++ifCount;
 				label = label.append(std::to_string(localIfCount));
 				outfile << "\ttest rax, rax" << std::endl;
 				outfile << "\tjnz " << label << std::endl;
 				if (is.mElse.has_value())
-					outfile << "\tjmp else_if" <<  localIfCount << std::endl;
+					outfile << "\tjmp .else_if" <<  localIfCount << std::endl;
 				else
-					outfile << "\tjmp end_if" << localIfCount << std::endl;
+					outfile << "\tjmp .end_if" << localIfCount << std::endl;
 				outfile << label << ":" << std::endl;
 				printBody(outfile, p, is.mBody, label, offset);
-				outfile << "\tjmp end_if" << localIfCount << std::endl;
+				outfile << "\tjmp .end_if" << localIfCount << std::endl;
 				if (is.mElse.has_value()) {
-					outfile << "else_if" << localIfCount << ":" << std::endl;
+					outfile << ".else_if" << localIfCount << ":" << std::endl;
 					printBody(outfile, p, is.mElseBody.value(), label, offset);
 				}
-				outfile << "end_if" << localIfCount << ":" << std::endl;
+				outfile << ".end_if" << localIfCount << ":" << std::endl;
 				break;
 			}
 		}
@@ -638,6 +642,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				outfile << "\tpush rcx" << std::endl;
 				outfile << "\tpush r8" << std::endl;
 				outfile << "\tpush r9" << std::endl;
+				outfile << "\tpush r10" << std::endl;
 				std::string value;
 
 				if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
@@ -656,6 +661,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				}
 				outfile << "\tcall " << ss.str() << std::endl;
 
+				outfile << "\tpop r10" << std::endl;
 				outfile << "\tpop r9" << std::endl;
 				outfile << "\tpop r8" << std::endl;
 				outfile << "\tpop rcx" << std::endl;
@@ -664,7 +670,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				outfile << "\tpop rdi" << std::endl;
 			}
 		}
-		return ExpressionPrinted{};
+		return ExpressionPrinted{ true, false, 3 };
 	} else if (expression->mValue.mSubType == TokenSubType::OP_UNARY) {
 		if (expression->mValue.mText == "\\") {
 			Expression* child = expression->mChildren[0];
@@ -813,6 +819,8 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		const char* reg = "rbx";//getRegister("b", size);
 		outfile << "\tmov " << reg << ", " << expression->mChildren[1]->mValue.mText << std::endl;
 	} else {
+		if (rightPrinted.printed)
+			outfile << "\tmov rbx, rax" << std::endl;
 		rightSize = rightPrinted.size;
 	}
 
@@ -831,9 +839,13 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		outfile << "\tadd " << r1 << ", " << r2 << std::endl;
 	} else if (expression->mValue.mText == "-") {
 		int size = getEvenSize(leftSize, rightSize);
-		std::string r1 = getRegister("a", size+1);
-		std::string r2 = getRegister("b", size+1);
-		outfile << "\tsbb " << r1 << ", " << r2 << std::endl;
+		if (size == 3)
+			outfile << "\tsub rax, rbx" << std::endl;
+		else {
+			std::string r1 = getRegister("a", size+1);
+			std::string r2 = getRegister("b", size+1);
+			outfile << "\tsbb " << r1 << ", " << r2 << std::endl;
+		}
 	} else if (expression->mValue.mText == "*") {
 		int size = getEvenSize(leftSize, rightSize);
 		std::string r2 = getRegister("b", size);

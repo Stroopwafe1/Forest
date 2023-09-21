@@ -115,7 +115,7 @@ The syntax of the language itself
 ### I/O
 - Console:
     - Writing: `stdout.write("text here")` or `stdout.writeln("Text here")` for automatic line breaks
-    - Reading: `stdin.read()` or `stdin.readline()`. `read()` returns a ui32 and `readline()` returns a ui32[] of the bytes that were read (UTF-8 encoding)
+    - Reading: `stdin.read()` or `stdin.readln()`. `read()` returns a ui32 and `readln()` returns a ui32[] of the bytes that were read (UTF-8 encoding)
 - Filesystem: 
     - Writing: `fs.write(path, bytes)`
     - Reading: `ui8[] fs.read(path)`
