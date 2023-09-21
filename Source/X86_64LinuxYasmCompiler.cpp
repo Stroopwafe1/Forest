@@ -430,11 +430,11 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 			}
 			case Statement_Type::BREAK:
 				if (!recentLoopLabel.empty())
-					outfile << "\tjmp .not_" << recentLoopLabel << std::endl;
+					outfile << "\tjmp .not_" << recentLoopLabel.substr(1) << std::endl;
 				break;
 			case Statement_Type::SKIP:
 				if (!recentLoopLabel.empty())
-					outfile << "\tjmp .skip_" << recentLoopLabel << std::endl;
+					outfile << "\tjmp .skip_" << recentLoopLabel.substr(1) << std::endl;
 				break;
 			case Statement_Type::FUNC_CALL: {
 				FuncCallStatement fc = statement.funcCall.value();
