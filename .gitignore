@@ -1,5 +1,6 @@
 .idea/**
 **/build/**
+**/build-release/**
 build-coverage/**
 cmake*/**
 CMakeFiles*/**
@@ -8,5 +9,4 @@ CMakeCache.txt
 *.cmake
 **/Makefile
 .cache/**
-/Source/Source.kdev4
-/Source/.kdev4/
+*.kdev4

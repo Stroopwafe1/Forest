@@ -74,8 +74,6 @@ namespace forest::parser {
 		if (mCurrentToken->mType != TokenType::IDENTIFIER) return std::nullopt;
 		if (!name.empty() && mCurrentToken->mText != name) return std::nullopt;
 
-		// TODO: Also allow for namespace::type identifiers
-
 		return *mCurrentToken++;
 	}
 
@@ -1120,6 +1118,7 @@ namespace forest::parser {
 					Expression* val2 = nodes.back();
 					nodes.pop_back();
 					// We need to see which of these is the operator
+					// And we probably want to make sure that the operator is a unary operator...
 					if (val1->mValue.mType == TokenType::OPERATOR) {
 						val1->mChildren.push_back(val2);
 						nodes.push_back(val1);
