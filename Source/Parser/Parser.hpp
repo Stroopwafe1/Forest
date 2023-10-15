@@ -7,6 +7,7 @@
 #include <optional>
 #include <map>
 #include <stack>
+#include <filesystem>
 #include "Tokeniser.hpp"
 #include "Expression.hpp"
 
@@ -188,11 +189,16 @@ namespace forest::parser {
 		uint32_t mSize;
 	};
 
+	struct Import {
+		std::filesystem::path mPath;
+	};
+
 	struct Programme {
 		std::vector<Function> functions;
 		std::vector<Literal> literals;
 		std::vector<FuncCallStatement> externalFunctions;
 		std::vector<std::string> libDependencies;
+		std::vector<Import> imports;
 		bool requires_libs = false;
 
 		std::optional<Literal> findLiteralByAlias(const std::string& alias) const {
@@ -234,6 +240,7 @@ namespace forest::parser {
 		std::optional<Statement> expectStatement();
 		std::optional<SpecialStatement> expectSpecialStatement();
 		std::optional<Struct> expectStruct();
+		std::optional<Import> expectImport();
 		std::optional<Statement> tryParseFunctionCall();
 		std::optional<Statement> tryParseLoop();
 		std::optional<Statement> tryParseReturnCall();
@@ -255,6 +262,7 @@ namespace forest::parser {
 
 	private:
 		uint32_t biggestAlloc = 0;
+		std::vector<FuncCallStatement> _funcCalls;
 		bool ExpressionShouldContinueParsing(const Statement& statementContext, const std::stack<char>& parenStack) const;
 	};
 
