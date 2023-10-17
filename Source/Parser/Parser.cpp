@@ -680,6 +680,10 @@ namespace forest::parser {
 			mCurrentToken = saved;
 			return std::nullopt;
 		}
+		if (variables.find(name.value().mText) != variables.end()) {
+			std::cerr << "Redeclaration of variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
+			return std::nullopt;
+		}
 
 		std::optional<Token> arrayBracket = expectOperator("[");
 		if (arrayBracket.has_value()) {

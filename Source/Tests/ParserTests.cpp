@@ -486,6 +486,30 @@ TEST_F(ParserTests, ParserTryParseVariableDeclaration) {
 	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
 }
 
+TEST_F(ParserTests, ParserParseDuplicateVariableDeclarationShouldError) {
+	std::vector<Token> tokens = Tokeniser::parse("{ ui8 test; ui8 test; }", "testing.tree");
+	parser.mCurrentToken = tokens.begin();
+	parser.mTokensEnd = tokens.end();
+
+	std::cerr << "Following errors are expected behaviour in trying to parse duplicate variable" << std::endl;
+	std::cerr << "--------------------------------------" << std::endl;
+	std::optional<Block> block = parser.expectBlock();
+	ASSERT_TRUE(block.has_value());
+	Block b = block.value();
+	ASSERT_EQ(b.statements.size(), 1);
+	EXPECT_EQ(b.stackMemory, 2);
+
+	Statement statement = block->statements[0];
+	Variable var = statement.variable.value();
+
+	EXPECT_EQ(statement.mType, Statement_Type::VAR_DECLARATION);
+	ASSERT_EQ(var.mValues.size(), 0);
+	EXPECT_STREQ(var.mName.c_str(), "test");
+	EXPECT_STREQ(var.mType.name.c_str(), "ui8");
+	EXPECT_EQ(var.mType.builtinType, Builtin_Type::UI8);
+	std::cerr << "--------------------------------------" << std::endl;
+}
+
 TEST_F(ParserTests, ParserTryParseVariableAssignment) {
 	std::vector<Token> tokens = Tokeniser::parse("{ ui8 test; test = 4; }", "testing.tree");
 	parser.mCurrentToken = tokens.begin();
