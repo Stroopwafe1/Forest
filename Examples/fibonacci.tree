@@ -1,0 +1,11 @@
+ui64 fibonacci(ui64 n) {
+	if n <= 1 { return 1; }
+	return fibonacci(n - 2) + fibonacci(n - 1);
+}
+
+i32 main(string[] argv) {
+	ui64 fibo = fibonacci(10);
+	//#assert(fibo == 89);
+	stdout.writeln(fibo);
+	return 0;
+}
