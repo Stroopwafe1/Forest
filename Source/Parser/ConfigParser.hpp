@@ -72,14 +72,15 @@ namespace forest::parser {
 
 	struct Configuration {
 		std::string m_Entrypoint{};
-		BuildType m_BuildType;
+		BuildType m_BuildType{};
 	};
 
 	class CompileContext {
 	public:
-		Configuration m_Configuration;
-		std::vector<ConventionEntry>::const_iterator conventionsEnd;
+		Configuration m_Configuration{};
+		std::vector<ConventionEntry>::const_iterator conventionsEnd{};
 
+		CompileContext() = default;
 		CompileContext(std::vector<Token>& tokens);
 		const std::vector<ConventionEntry>::const_iterator getSymbolConvention(const std::string& name) const;
 	private:

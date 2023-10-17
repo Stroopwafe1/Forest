@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include "Parser.hpp"
+#include "ConfigParser.hpp"
 #include <map>
 
 using namespace forest::parser;
@@ -37,7 +38,7 @@ struct ExpressionPrinted {
 
 class X86_64LinuxYasmCompiler {
 public:
-	void compile(fs::path& filePath, const Programme& p);
+	void compile(fs::path& filePath, const Programme& p, const CompileContext& ctx);
 
 private:
 	uint32_t labelCount = 0;

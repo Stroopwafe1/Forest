@@ -1,0 +1,4 @@
+ui8 TestFile() {
+	stdout.writeln("Hello from Test");
+	return 0;
+}

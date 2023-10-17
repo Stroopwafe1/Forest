@@ -1,0 +1,19 @@
+[Configuration]
+BuildType = Debug
+Entrypoint = malloc.tree
+
+[Conventions]
+pub fn = $SymbolName
+pub const var = c_$SYMBOL_NAME
+pub global var = g$SymbolName
+pub static var = s_$symbol_name
+pub const member = m_$SYMBOL_NAME
+pub static member = m_$symbol_name
+pub member = m_$SymbolName
+
+pri fn = __$symbolName
+pri const var = _c$SYMBOL_NAME
+pri static var = _g$SymbolName
+pri const member = _$SYMBOL_NAME
+pri static member = _$symbol_name
+pri member = _$SymbolName

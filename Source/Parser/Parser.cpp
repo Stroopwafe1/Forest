@@ -30,8 +30,9 @@ namespace forest::parser {
 	Programme Parser::parse(std::vector<Token>& tokens) {
 		mCurrentToken = tokens.begin();
 		std::vector<Function> functions;
+		std::vector<Import> imports;
 		mTokensEnd = tokens.end();
-		while (mCurrentToken != tokens.end()) {
+		while (mCurrentToken != mTokensEnd) {
 			if (mCurrentToken->mText == "#") {
 				// Parse special statement
 				// #depends(c)
@@ -52,16 +53,29 @@ namespace forest::parser {
 					structs.insert({s.value().mName, s.value()});
 					sizeCache[s.value().mName] = s.value().mSize;
 				}
-			}
-			std::optional<Function> f = expectFunction();
-			if (!f.has_value()) {
-				break;
+			} else if (mCurrentToken->mText == "use") {
+				std::optional<Import> import = expectImport();
+				if (import.has_value()) {
+					imports.push_back(import.value());
+				}
 			} else {
-				//std::cout << "Successfully parsed function " << f->mName << std::endl;
-				functions.push_back(f.value());
+				std::optional<Function> f = expectFunction();
+				if (!f.has_value()) {
+					break;
+				} else {
+					//std::cout << "Successfully parsed function " << f->mName << std::endl;
+					functions.push_back(f.value());
+				}
 			}
 		}
-		return Programme { functions, literals, externalFunctions, libDependencies, requires_libs };
+
+		for (const auto& fc : _funcCalls) {
+			for (const auto& f : functions) {
+				if (fc.mFunctionName == f.mName) continue;
+				externalFunctions.push_back(fc);
+			}
+		}
+		return Programme { functions, literals, externalFunctions, libDependencies, imports, requires_libs };
 	}
 
 	std::optional<Token> Parser::peekNextToken() {
@@ -302,6 +316,9 @@ namespace forest::parser {
 			actualType = SpecialStatementType::DEPENDENCY;
 		} else if (type.value().mText == "assert") {
 			actualType = SpecialStatementType::ASSERT;
+		} else {
+			std::cerr << "Unexpected special statement '" << type.value().mText << "' at " << *mCurrentToken << std::endl;
+			return std::nullopt;
 		}
 
 		std::optional<Token> paren = expectOperator("(");
@@ -400,6 +417,18 @@ namespace forest::parser {
 
 		s.mSize = offset; // This is after all fields calculated their offset, including the last one
 		return s;
+	}
+
+	std::optional<Import> Parser::expectImport() {
+		std::optional<Token> keyword = expectIdentifier("use");
+		if (!keyword.has_value()) return std::nullopt;
+		std::stringstream ss;
+		while (mCurrentToken->mText != ";") {
+			ss << mCurrentToken->mText;
+			mCurrentToken++;
+		}
+		expectSemicolon(); // Discard this
+		return Import { std::filesystem::path(ss.str()) };
 	}
 
 	std::optional<Statement> Parser::tryParseFunctionCall() {
@@ -511,6 +540,8 @@ namespace forest::parser {
 		returnValue.funcCall = fc;
 		if (fc.mIsExternal)
 			externalFunctions.push_back(fc);
+		if (!(functionName.value().mText == "write" || functionName.value().mText == "writeln"))
+			_funcCalls.push_back(fc);
 		return returnValue;
 	}
 
@@ -647,6 +678,10 @@ namespace forest::parser {
 		if (!name.has_value()) {
 			//std::cerr << "Expected a name for the variable declaration at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
+			return std::nullopt;
+		}
+		if (variables.find(name.value().mText) != variables.end()) {
+			std::cerr << "Redeclaration of variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 

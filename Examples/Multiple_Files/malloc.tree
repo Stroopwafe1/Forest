@@ -1,0 +1,11 @@
+#depends(c)
+use test.tree;
+
+i32 main(string[] argv) {
+	ref<ui8> test = e:malloc(24);
+	e:memset(test, 15, 24); // set all 24 bytes to be 15
+	e:printf("Test[10] = %d\n", test[10]);
+	e:free(test);
+	TestFile();
+	return 0;
+}

@@ -49,7 +49,7 @@ int X86_64LinuxYasmCompiler::addToSymbols(int* offset, const Variable& variable,
 	return result;
 }
 
-void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p) {
+void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, const CompileContext& ctx) {
 	fs::path fileName = filePath.stem();
 	std::string parentPath = filePath.parent_path().string();
 	fs::path buildPath = filePath.parent_path() / "build";
@@ -83,11 +83,9 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p) {
 		}
 	}
 
-	outfile << "\tglobal _start" << std::endl;
 	if (p.requires_libs) {
 		printLibs(outfile);
 	}
-
 	// Loop over functions
 	// Start with prologue 'push rbp', 'mov rbp, rsp'
 	// For every variable, keep track of the offset
@@ -95,11 +93,20 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p) {
 
 	const char callingConvention[6][4] = {"di", "si", "d", "c", "8", "9"};
 
+
 	for (const auto& function : p.functions) {
 		if (function.mName == "main") {
+			outfile << "\tglobal _start" << std::endl;
 			outfile << std::endl << "_start:" << std::endl;
 		} else {
-			outfile << std::endl << function.mName << ":" << std::endl;
+			outfile << std::endl;
+			const auto& convention = ctx.getSymbolConvention(function.mName);
+			if (convention != ctx.conventionsEnd) {
+				if (((*convention).modifiers & Modifiers::PUBLIC) == Modifiers::PUBLIC) {
+					outfile << "global "  << function.mName << std::endl;
+				}
+			}
+			outfile << function.mName << ":" << std::endl;
 		}
 		outfile << "; =============== PROLOGUE ===============" << std::endl;
 		outfile << "\tpush rbp" << std::endl;
@@ -139,32 +146,13 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p) {
 
 	outfile.close();
 
-	bool debug = true;
-
 	std::stringstream assembler;
 	assembler << "yasm -f elf64";
-	if (debug)
+	if (ctx.m_Configuration.m_BuildType == BuildType::DEBUG)
 		assembler << " -g dwarf2";
 	assembler << " -o " << buildPath.string() << "/" << fileName.stem().string() << ".o " << buildPath.string() << "/" << fileName.stem().string() << ".asm";
 	//std::cout << assembler.str().c_str() << std::endl;
 	std::system(assembler.str().c_str());
-
-	std::stringstream linker;
-	linker << "ld";
-	if (!debug)
-		linker << " -s -z noseparate-code ";
-	else
-		linker << " -g";
-	linker << " -o " << buildPath.string() << "/" << fileName.stem().string() << " --dynamic-linker=/lib64/ld-linux-x86-64.so.2 " << buildPath.string() << "/" << fileName.stem().string() << ".o";
-	for (auto& dependency : p.libDependencies) {
-		linker << " -l" << dependency;
-	}
-	//std::cout << linker.str().c_str() << std::endl;
-	std::system(linker.str().c_str());
-
-	std::stringstream run_command;
-	run_command << buildPath.string() << "/" << fileName.stem().string();
-	std::system(run_command.str().c_str());
 }
 
 void X86_64LinuxYasmCompiler::printLibs(std::ofstream& outfile) {
@@ -336,7 +324,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					printExpression(outfile, p, v.mValues[0], 0);
 					int size = addToSymbols(offset, v);
 					addToSymbols(&localOffset, v);
-					outfile << "\tmov " << sizes[size] << " " << symbolTable[v.mName].location() << ", rax" << std::endl;
+					outfile << "\tmov " << sizes[size] << " " << symbolTable[v.mName].location() << ", " << getRegister("a", size) << std::endl;
 				}
 
 				break;
@@ -385,7 +373,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					} else {
 						SymbolInfo& symbol = symbolTable[v.mName];
 						printExpression(outfile, p, v.mValues[0], 0);
-						outfile << "\tmov " << sizes[symbol.size] << " " << symbol.location() << ", rax" << std::endl;
+						outfile << "\tmov " << sizes[symbol.size] << " " << symbol.location() << ", " << getRegister("a", symbol.size) << std::endl;
 					}
 				}
 			}
