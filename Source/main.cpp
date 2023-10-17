@@ -115,8 +115,11 @@ int main(int argc, char** argv) {
 		linker << path << " ";
 	}
 
-	for (auto& dependency : p.libDependencies) {
-		linker << " -l" << dependency;
+	std::vector<std::string> dependencies;
+	for (const auto& programme : programmes) {
+		for (auto& dependency : programme.libDependencies) {
+			linker << " -l" << dependency;
+		}
 	}
 	std::system(linker.str().c_str());
 
