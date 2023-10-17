@@ -13,7 +13,6 @@ namespace forest::parser {
 		PROTECTED = 1 << 2,
 		CONSTANT  = 1 << 3,
 		STATIC    = 1 << 4,
-		GLOBAL    = 1 << 5,
 	};
 
 	inline Modifiers operator|(Modifiers lhs, Modifiers rhs) {

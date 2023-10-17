@@ -210,7 +210,6 @@ namespace forest::parser {
 
 			else if (modOrType.mText == "const") returnVal.modifiers |= Modifiers::CONSTANT;
 			else if (modOrType.mText == "static") returnVal.modifiers |= Modifiers::STATIC;
-			else if (modOrType.mText == "global") returnVal.modifiers |= Modifiers::GLOBAL;
 			else {
 				std::cerr << "Unexpected modifier or symbol type `" << modOrType.mText << "` while parsing conventions at " << modOrType << std::endl;
 				return std::nullopt;

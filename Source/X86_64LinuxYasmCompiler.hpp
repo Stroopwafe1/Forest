@@ -14,6 +14,7 @@ struct SymbolInfo {
 	int offset {};
 	Type type {};
 	int size {};
+	bool isGlobal = false;
 
 	std::string location() const {
 		std::stringstream ss;
@@ -24,7 +25,9 @@ struct SymbolInfo {
 			else if (offset < 0)
 				ss << offset;
 			ss << "]";
-		} else
+		} else if (isGlobal)
+			ss << "[" << reg << "]";
+		else
 			ss << reg;
 		return ss.str();
 	}
@@ -53,7 +56,7 @@ private:
 	 */
 	ExpressionPrinted printExpression(std::ofstream& outfile, const Programme& p, const Expression* expression, uint8_t nodeType);
 	void printConditionalMove(std::ofstream& outfile, int leftSize, int rightSize, const char* instruction);
-	int addToSymbols(int* offset, const Variable& variable, const std::string& reg = "rbp-");
+	int addToSymbols(int* offset, const Variable& variable, const std::string& reg = "rbp-", bool isGlobal = false);
 	std::stringstream moveToRegister(const std::string& reg, const SymbolInfo& symbol);
 	const char* getRegister(const std::string& reg, int size);
 	int getSizeFromNumber(const std::string& text);
@@ -61,6 +64,8 @@ private:
 	const char* getMoveAction(int regSize, int valSize, bool isSigned);
 	int getSizeFromByteSize(size_t byteSize);
 	const char* convertARegSize(int size);
+	const char* getDefineBytes(size_t byteSize);
+	const char* getReserveBytes(size_t byteSize);
 };
 
 

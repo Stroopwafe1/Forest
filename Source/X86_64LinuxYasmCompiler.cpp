@@ -4,10 +4,8 @@
 #include <algorithm>
 #include "X86_64LinuxYasmCompiler.hpp"
 
-int X86_64LinuxYasmCompiler::addToSymbols(int* offset, const Variable& variable, const std::string& reg) {
+int X86_64LinuxYasmCompiler::addToSymbols(int* offset, const Variable& variable, const std::string& reg, bool isGlobal) {
 	int result = 0;
-	std::string checkReg = reg.substr(0, 3);
-	char op = reg.size() == 4 ? reg[3] : '-';
 	switch (variable.mType.builtinType) {
 		case Builtin_Type::UNDEFINED:
 		case Builtin_Type::VOID:
@@ -38,14 +36,19 @@ int X86_64LinuxYasmCompiler::addToSymbols(int* offset, const Variable& variable,
 			result = 3;
 			break;
 	}
-	if (checkReg == "rbp") {
-		if (op == '-')
-			(*offset) -= 1 << result;
-		else
-			(*offset) += 1 << result;
+	if (!isGlobal) {
+		std::string checkReg = reg.substr(0, 3);
+		char op = reg.size() == 4 ? reg[3] : '-';
+		if (checkReg == "rbp") {
+			if (op == '-')
+				(*offset) -= 1 << result;
+			else
+				(*offset) += 1 << result;
+		}
+		symbolTable.insert(std::make_pair(variable.mName, SymbolInfo {checkReg, *offset, variable.mType, result, isGlobal}));
+	} else {
+		symbolTable.insert(std::make_pair(variable.mName, SymbolInfo {variable.mName, 0, variable.mType, result, isGlobal}));
 	}
-	symbolTable.insert(std::make_pair(variable.mName, SymbolInfo {checkReg, *offset, variable.mType, result}));
-
 	return result;
 }
 
@@ -59,17 +62,69 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 	std::ofstream outfile;
 	outfile.open(outPath);
 
+	std::vector<Variable> constantVars;
+	std::vector<Variable> initVars;
+	std::vector<Variable> otherVars;
+
+	for (const auto& kv : p.variables) {
+		auto& c = ctx.getSymbolConvention(kv.first);
+		if (c != ctx.conventionsEnd) {
+			if (((*c).modifiers & Modifiers::CONSTANT) == Modifiers::CONSTANT) {
+				constantVars.push_back(kv.second);
+			} else if (!kv.second.mValues.empty()) {
+				initVars.push_back(kv.second);
+			} else {
+				otherVars.push_back(kv.second);
+			}
+		}
+	}
+
 	labelCount = 0;
 	ifCount = 0;
-	outfile << "section .data" << std::endl;
-	for (const auto& literal : p.literals) {
-		outfile << "\t" << literal.mAlias << ": db \"";
-		if (literal.mContent[literal.mContent.size() - 1] == '\n') {
-			// Replace \n in string with ',0xA' put after the quote
-			outfile << literal.mContent.substr(0, literal.mContent.size() - 1) << "\",0xA,0" << std::endl;
-		} else {
-			// Just write the string normally
-			outfile << literal.mContent << "\"" << ",0" << std::endl;
+	if (!constantVars.empty()) {
+		outfile << "section .rodata" << std::endl;
+		for (const auto& constVar : constantVars) {
+			addToSymbols(nullptr, constVar, constVar.mName, true);
+			outfile << "\t" << constVar.mName << " " << getDefineBytes(constVar.mType.byteSize) << " ";
+			for (int i = 0; i < constVar.mValues.size(); i++) {
+				outfile << constVar.mValues[i]->mValue.mText;
+				if (i != constVar.mValues.size() - 1)
+					outfile << ", ";
+			}
+			outfile << std::endl;
+		}
+	}
+	if (!initVars.empty() || !p.literals.empty()) {
+		outfile << "section .data" << std::endl;
+		for (const auto& literal : p.literals) {
+			outfile << "\t" << literal.mAlias << ": db \"";
+			if (literal.mContent[literal.mContent.size() - 1] == '\n') {
+				// Replace \n in string with ',0xA' put after the quote
+				outfile << literal.mContent.substr(0, literal.mContent.size() - 1) << "\",0xA,0" << std::endl;
+			} else {
+				// Just write the string normally
+				outfile << literal.mContent << "\"" << ",0" << std::endl;
+			}
+		}
+		for (const auto& initVar : initVars) {
+			addToSymbols(nullptr, initVar, initVar.mName, true);
+			outfile << "\t" << initVar.mName << " " << getDefineBytes(initVar.mType.byteSize) << " ";
+			for (int i = 0; i < initVar.mValues.size(); i++) {
+				outfile << initVar.mValues[i]->mValue.mText;
+				if (i != initVar.mValues.size() - 1)
+					outfile << ", ";
+			}
+			outfile << std::endl;
+		}
+	}
+	if (!otherVars.empty()) {
+		outfile << "section .bss" << std::endl;
+		for (const auto& otherVar : otherVars) {
+			addToSymbols(nullptr, otherVar, otherVar.mName, true);
+			if (otherVar.mType.builtinType != Builtin_Type::ARRAY)
+				outfile << "\t" << otherVar.mName << " " << getReserveBytes(otherVar.mType.byteSize) << " " << otherVar.mValues.size() << std::endl;
+			else
+				outfile << "\t" << otherVar.mName << " " << getReserveBytes(otherVar.mType.subTypes[0].byteSize) << " " << otherVar.mType.byteSize /otherVar.mType.subTypes[0].byteSize << std::endl;
 		}
 	}
 	outfile << std::endl;
@@ -116,7 +171,6 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 
 		// Construct symbol table, keeping track of scope
 		// offset from stack, type
-		symbolTable.clear();
 		int offset = -int(function.mBody.biggestAlloc);
 		int argOffset = 0;
 
@@ -1047,5 +1101,27 @@ const char* X86_64LinuxYasmCompiler::convertARegSize(int size) {
 	if (size == 1) return "cwd";
 	if (size == 2) return "cdq";
 	if (size == 3) return "cqo";
+	return "UNREACHABLE";
+}
+
+const char* X86_64LinuxYasmCompiler::getDefineBytes(size_t byteSize) {
+	switch (byteSize) {
+		case 1: return "db";
+		case 2: return "dw";
+		case 4: return "dd";
+		case 8: return "dq";
+		case 16: return "ddq";
+	}
+	return "UNREACHABLE";
+}
+
+const char* X86_64LinuxYasmCompiler::getReserveBytes(size_t byteSize) {
+	switch (byteSize) {
+		case 1: return "resb";
+		case 2: return "resw";
+		case 4: return "resd";
+		case 8: return "resq";
+		case 16: return "resdq";
+	}
 	return "UNREACHABLE";
 }

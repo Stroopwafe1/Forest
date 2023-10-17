@@ -61,7 +61,11 @@ namespace forest::parser {
 			} else {
 				std::optional<Function> f = expectFunction();
 				if (!f.has_value()) {
-					break;
+					std::optional<Statement> var = tryParseVariableDeclaration();
+					// Top level variable declaration
+					if (var.has_value()) {
+						variables.insert(std::make_pair(var.value().variable.value().mName, var.value().variable.value()));
+					}
 				} else {
 					//std::cout << "Successfully parsed function " << f->mName << std::endl;
 					functions.push_back(f.value());
@@ -75,7 +79,7 @@ namespace forest::parser {
 				externalFunctions.push_back(fc);
 			}
 		}
-		return Programme { functions, literals, externalFunctions, libDependencies, imports, requires_libs };
+		return Programme { functions, literals, externalFunctions, libDependencies, imports, variables, requires_libs };
 	}
 
 	std::optional<Token> Parser::peekNextToken() {
