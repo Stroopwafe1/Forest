@@ -16,19 +16,21 @@ struct SymbolInfo {
 	int size {};
 	bool isGlobal = false;
 
-	std::string location() const {
+	std::string location(bool dereference = true) const {
 		std::stringstream ss;
+		if (dereference)
+			ss << "[";
 		if (reg == "rbp") {
-			ss << "[" << reg;
+			ss << reg;
 			if (offset > 0)
 				ss << "+" << offset;
 			else if (offset < 0)
 				ss << offset;
-			ss << "]";
-		} else if (isGlobal)
-			ss << "[" << reg << "]";
-		else
+		} else
 			ss << reg;
+
+		if (dereference)
+			ss << "]";
 		return ss.str();
 	}
 };
@@ -41,6 +43,7 @@ struct ExpressionPrinted {
 
 class X86_64LinuxYasmCompiler {
 public:
+	X86_64LinuxYasmCompiler();
 	void compile(fs::path& filePath, const Programme& p, const CompileContext& ctx);
 
 private:
@@ -48,9 +51,11 @@ private:
 	uint32_t ifCount = 0;
 	std::string recentLoopLabel{};
 	std::map<std::string, SymbolInfo> symbolTable;
+	std::map<std::string, uint32_t> syscallTable;
 	void printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, int* offset);
 	void printLibs(std::ofstream& outfile);
 	void printFunctionCall(std::ofstream& outfile, const Programme& p, const FuncCallStatement& fc);
+	void printSyscall(std::ofstream& outfile, const std::string& syscall);
 	/**
 	 * Will print the expression. The resulting value will be in the a register (rax, eax, ax, al)
 	 */

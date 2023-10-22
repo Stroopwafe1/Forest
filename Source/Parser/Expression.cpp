@@ -35,8 +35,10 @@ namespace forest::parser {
 		Expression* leftExp = mChildren[0];
 		Expression* rightExp = mChildren[1];
 
-		leftExp->Collapse();
-		rightExp->Collapse();
+		if (leftExp != nullptr)
+			leftExp->Collapse();
+		if (rightExp != nullptr)
+			rightExp->Collapse();
 		if (leftExp->mValue.mType != TokenType::LITERAL || rightExp->mValue.mType != TokenType::LITERAL) {
 			return;
 		}

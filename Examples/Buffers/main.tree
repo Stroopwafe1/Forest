@@ -1,0 +1,9 @@
+ui8[100] s_buffer;
+
+i32 main(string[] argv) {
+	ui32 fd = SYS_OPEN("main.tree", 0, 0);
+	SYS_READ(fd, s_buffer, 100);
+	SYS_WRITE(1, s_buffer, 100);
+	SYS_WRITE(1, "\n", 1);
+	return fd;
+}

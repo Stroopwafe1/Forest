@@ -4,6 +4,20 @@
 #include <algorithm>
 #include "X86_64LinuxYasmCompiler.hpp"
 
+X86_64LinuxYasmCompiler::X86_64LinuxYasmCompiler() {
+	syscallTable = {
+	{"SYS_READ", 0},
+	{"SYS_WRITE", 1},
+	{"SYS_OPEN", 2},
+	{"SYS_CLOSE", 3},
+	{"SYS_STAT", 4},
+	{"SYS_FSTAT", 5},
+	{"SYS_LSTAT", 6},
+	};
+	// TODO: Fill this with more;
+}
+
+
 int X86_64LinuxYasmCompiler::addToSymbols(int* offset, const Variable& variable, const std::string& reg, bool isGlobal) {
 	int result = 0;
 	switch (variable.mType.builtinType) {
@@ -328,6 +342,18 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 	}
 }
 
+void X86_64LinuxYasmCompiler::printSyscall(std::ofstream& outfile, const std::string& syscall) {
+	uint32_t call = syscallTable[syscall];
+	if (call <= 6)
+		outfile << "\tmov rax, " << call << std::endl;
+	else {
+		std::string error = "Unexpected syscall '$', please expand syscall table";
+		error.replace(error.find_first_of('$'), 1, std::to_string(call));
+		throw std::runtime_error(error);
+	}
+}
+
+
 void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, int* offset) {
 	const char callingConvention[6][4] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 	const char* sizes[] = {"byte", "word", "dword", "qword"};
@@ -510,7 +536,12 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					if (statement.funcCall.value().mFunctionName == "printf" && statement.funcCall.value().mIsExternal) {
 						outfile << "\tmov rax, 0" << std::endl;
 					}
-					outfile << "\tcall " << statement.funcCall.value().mFunctionName << std::endl;
+					if (statement.funcCall.value().mFunctionName.substr(0, 4) == "SYS_") {
+						printSyscall(outfile, statement.funcCall.value().mFunctionName);
+						outfile << "\tsyscall" << std::endl;
+					} else {
+						outfile << "\tcall " << statement.funcCall.value().mFunctionName << std::endl;
+					}
 				}
 				if (labelName != "main") {
 					outfile << "\tpop r10" << std::endl;
@@ -596,8 +627,15 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		} else if (expression->mValue.mType == TokenType::IDENTIFIER) {
 			SymbolInfo& val = symbolTable[expression->mValue.mText];
 			bool sign = val.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
-			const char* moveAction = getMoveAction(3, val.size, sign);
-			outfile << "\t" << moveAction << " rax, " << sizes[val.size] << " " << val.location() << std::endl;
+			if (val.size == 2) {// dword
+				outfile << "\tmov rax, 0" << std::endl;
+				outfile << "\tmov eax, " << sizes[val.size] << " " << val.location() << std::endl;
+			} else if (val.isGlobal) {
+				outfile << "\tmov rax, " << val.location(false) << std::endl;
+			} else {
+				const char* moveAction = getMoveAction(3, val.size, sign);
+				outfile << "\t" << moveAction << " rax, " << sizes[val.size] << " " << val.location() << std::endl;
+			}
 		} else if (expression->mValue.mType == TokenType::OPERATOR) {
 			if (expression->mValue.mText == "++") {
 				outfile << "\tinc rax" << std::endl;
@@ -615,7 +653,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 	if (expression->mValue.mType != TokenType::OPERATOR) {
 		return ExpressionPrinted{};
 	}
-	if (expression->mChildren[0]->mValue.mSubType == TokenSubType::STRING_LITERAL || expression->mChildren[1]->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+	if (expression->mChildren[0]->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 		return ExpressionPrinted{};
 	}
 
@@ -666,6 +704,13 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		std::stringstream ss;
 		bool printArgs = false;
 		int i = 0;
+		outfile << "\tpush rdi" << std::endl;
+		outfile << "\tpush rsi" << std::endl;
+		outfile << "\tpush rdx" << std::endl;
+		outfile << "\tpush rcx" << std::endl;
+		outfile << "\tpush r8" << std::endl;
+		outfile << "\tpush r9" << std::endl;
+		outfile << "\tpush r10" << std::endl;
 		for (const auto& child : expression->mChildren) {
 			if (child->mValue.mText == "e" || child->mValue.mText == ":") continue;
 			if (child->mValue.mText == "(") {
@@ -678,13 +723,6 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				else
 					ss << child->mValue.mText;
 			} else {
-				outfile << "\tpush rdi" << std::endl;
-				outfile << "\tpush rsi" << std::endl;
-				outfile << "\tpush rdx" << std::endl;
-				outfile << "\tpush rcx" << std::endl;
-				outfile << "\tpush r8" << std::endl;
-				outfile << "\tpush r9" << std::endl;
-				outfile << "\tpush r10" << std::endl;
 				std::string value;
 
 				if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
@@ -698,20 +736,26 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				else
 					outfile << "\tpush " << value << std::endl;
 				i++;
-				if (ss.str() == "printf") {
-					outfile << "\tmov rax, 0" << std::endl;
-				}
-				outfile << "\tcall " << ss.str() << std::endl;
-
-				outfile << "\tpop r10" << std::endl;
-				outfile << "\tpop r9" << std::endl;
-				outfile << "\tpop r8" << std::endl;
-				outfile << "\tpop rcx" << std::endl;
-				outfile << "\tpop rdx" << std::endl;
-				outfile << "\tpop rsi" << std::endl;
-				outfile << "\tpop rdi" << std::endl;
 			}
 		}
+		if (ss.str() == "printf") {
+			outfile << "\tmov rax, 0" << std::endl;
+		}
+		if (ss.str().substr(0, 4) == "SYS_") {
+			printSyscall(outfile, ss.str());
+			outfile << "\tsyscall" << std::endl;
+		} else {
+			outfile << "\tcall " << ss.str() << std::endl;
+		}
+
+		outfile << "\tpop r10" << std::endl;
+		outfile << "\tpop r9" << std::endl;
+		outfile << "\tpop r8" << std::endl;
+		outfile << "\tpop rcx" << std::endl;
+		outfile << "\tpop rdx" << std::endl;
+		outfile << "\tpop rsi" << std::endl;
+		outfile << "\tpop rdi" << std::endl;
+
 		return ExpressionPrinted{ true, false, 3 };
 	} else if (expression->mValue.mSubType == TokenSubType::OP_UNARY) {
 		if (expression->mValue.mText == "\\") {
@@ -719,7 +763,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			if (child->mValue.mType == TokenType::IDENTIFIER) {
 				SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
 				leftSize = left.size;
-				outfile << "\tlea rax, " << sizes[left.size] << " " << left.location() << std::endl;
+				outfile << "\tlea rax, " << left.location(false) << std::endl;
 			} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 				outfile << "\tlea rax, " << p.findLiteralByContent(child->mValue.mText).value().mAlias << std::endl;
 			} else if (child->mValue.mType == TokenType::LITERAL) {
@@ -814,6 +858,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				}
 			}
 		}
+		return ExpressionPrinted{ true, false, 3 };
 	}
 
 	ExpressionPrinted leftPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
