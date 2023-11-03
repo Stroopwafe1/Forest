@@ -765,6 +765,9 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		} else {
 			outfile << "\tcall " << ss.str() << std::endl;
 		}
+		if (nodeType == 1) {
+			outfile << "\tmov rbx, rax; printExpression, nodeType=1, function call" << std::endl;
+		}
 
 		outfile << "\tpop r10" << std::endl;
 		outfile << "\tpop r9" << std::endl;
@@ -930,8 +933,6 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		const char* reg = "rbx";//getRegister("b", size);
 		outfile << "\tmov " << reg << ", " << expression->mChildren[1]->mValue.mText << "; printExpression, right int" << std::endl;
 	} else {
-		if (rightPrinted.printed)
-			outfile << "\tmov rbx, rax; printExpression, right else if right printed" << std::endl;
 		rightSize = rightPrinted.size;
 	}
 
