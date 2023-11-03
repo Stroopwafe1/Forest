@@ -1,6 +1,6 @@
 [Configuration]
 BuildType = Debug
-Entrypoint = malloc.tree
+Entrypoint = main.tree
 
 [Conventions]
 pub fn = $SymbolName

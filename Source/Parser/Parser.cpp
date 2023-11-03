@@ -61,7 +61,11 @@ namespace forest::parser {
 			} else {
 				std::optional<Function> f = expectFunction();
 				if (!f.has_value()) {
-					break;
+					std::optional<Statement> var = tryParseVariableDeclaration();
+					// Top level variable declaration
+					if (var.has_value()) {
+						variables.insert(std::make_pair(var.value().variable.value().mName, var.value().variable.value()));
+					}
 				} else {
 					//std::cout << "Successfully parsed function " << f->mName << std::endl;
 					functions.push_back(f.value());
@@ -70,12 +74,14 @@ namespace forest::parser {
 		}
 
 		for (const auto& fc : _funcCalls) {
+			bool found = false;
 			for (const auto& f : functions) {
-				if (fc.mFunctionName == f.mName) continue;
-				externalFunctions.push_back(fc);
+				if (fc.mFunctionName == f.mName) found = true;
 			}
+			if (!found)
+				externalFunctions.push_back(fc);
 		}
-		return Programme { functions, literals, externalFunctions, libDependencies, imports, requires_libs };
+		return Programme { functions, literals, externalFunctions, libDependencies, imports, variables, requires_libs };
 	}
 
 	std::optional<Token> Parser::peekNextToken() {
@@ -980,7 +986,7 @@ namespace forest::parser {
 	Type Parser::getTypeFromRange(const Range& range) {
 		// TODO: We cannot know the types at compile time for some expressions
 		if (range.mMinimum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
-			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0, 0};
+			return Type {"i64", Builtin_Type::I64, {}, 4, 4}; // We take the default as something that will actually compile
 		if (range.mMaximum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
 			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0, 0};
 
