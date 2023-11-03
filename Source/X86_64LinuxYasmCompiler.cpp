@@ -50,6 +50,8 @@ int X86_64LinuxYasmCompiler::addToSymbols(int* offset, const Variable& variable,
 			result = 3;
 			break;
 	}
+	if (variable.mType.name == "string")
+		result = 3;
 	if (!isGlobal) {
 		std::string checkReg = reg.substr(0, 3);
 		char op = reg.size() == 4 ? reg[3] : '-';
@@ -188,20 +190,27 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 		int offset = -int(function.mBody.biggestAlloc);
 		int argOffset = 0;
 
+		std::vector<std::string> localSymbols;
 		if (function.mName == "main") {
 			const auto& argv = function.mArgs[0];
 			argOffset = 16;
-			addToSymbols(&argOffset, Variable {argv.mType, argv.mName, {} }, "rsp");
+			addToSymbols(&argOffset, Variable {argv.mType.subTypes[0], argv.mName, {} }, "rsp");
+			localSymbols.push_back(argv.mName);
 		} else {
 			for (size_t i = 0; i < function.mArgs.size(); i++) {
 				const auto& arg = function.mArgs[i];
 				std::string reg = i < 6 ? getRegister(callingConvention[i], getSizeFromByteSize(arg.mType.byteSize)) : "rbp+";
 
 				addToSymbols(&argOffset, Variable{arg.mType, arg.mName, {}}, reg);
+				localSymbols.push_back(arg.mName);
 			}
 		}
 
 		printBody(outfile, p, function.mBody, function.mName, &offset);
+
+		for (const auto& symbolName : localSymbols) {
+			symbolTable.erase(symbolName);
+		}
 
 		if (function.mName != "main") {
 			outfile << ".exit:" << std::endl;
@@ -339,6 +348,8 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 			outfile << "\tmov rdx, 1" << std::endl;
 			outfile << "\tsyscall" << std::endl;
 		}
+	} else if (arg->mValue.mType == TokenType::OPERATOR && arg->mValue.mText == ".") { // Struct indexing
+		outfile << "; We don't support struct indexing yet" << std::endl;
 	}
 }
 
@@ -357,7 +368,7 @@ void X86_64LinuxYasmCompiler::printSyscall(std::ofstream& outfile, const std::st
 void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, int* offset) {
 	const char callingConvention[6][4] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 	const char* sizes[] = {"byte", "word", "dword", "qword"};
-	std::map<std::string, SymbolInfo> localSymbols;
+	std::vector<std::string> localSymbols;
 	int localOffset = 0;
 	if (block.stackMemory != 0)
 		outfile << "\tsub rsp, " << block.stackMemory + block.biggestAlloc << std::endl;
@@ -377,6 +388,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 			case Statement_Type::VAR_DECLARATION:
 				addToSymbols(offset, statement.variable.value());
 				addToSymbols(&localOffset, statement.variable.value());
+				localSymbols.push_back(statement.variable.value().mName);
 				break;
 			case Statement_Type::VAR_DECL_ASSIGN: {
 				Variable v = statement.variable.value();
@@ -387,6 +399,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					localOffset -= int(v.mType.byteSize);
 					int size = addToSymbols(offset, v);
 					addToSymbols(&localOffset, v);
+					localSymbols.push_back(v.mName);
 
 					SymbolInfo& arr = symbolTable[v.mName];
 					int actualSize = getSizeFromByteSize(arr.type.subTypes[0].byteSize);
@@ -404,7 +417,8 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					printExpression(outfile, p, v.mValues[0], 0);
 					int size = addToSymbols(offset, v);
 					addToSymbols(&localOffset, v);
-					outfile << "\tmov " << sizes[size] << " " << symbolTable[v.mName].location() << ", " << getRegister("a", size) << std::endl;
+					localSymbols.push_back(v.mName);
+					outfile << "\tmov " << sizes[size] << " " << symbolTable[v.mName].location() << ", " << getRegister("a", size) << "; VAR_DECL_ASSIGN else" << std::endl;
 				}
 
 				break;
@@ -463,6 +477,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				if (ls.mIterator.has_value()) {
 					int size = addToSymbols(offset, ls.mIterator.value());
 					addToSymbols(&localOffset, ls.mIterator.value());
+					localSymbols.push_back(ls.mIterator.value().mName);
 					std::string op = ls.mRange.value().mMinimum < ls.mRange.value().mMaximum ? "inc " : "dec ";
 					std::string label = ".label";
 					uint32_t localLabelCount = ++labelCount;
@@ -584,7 +599,10 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 
 	if (block.stackMemory != 0)
 		outfile << "\tadd rsp, " << block.stackMemory + block.biggestAlloc << std::endl;
-	symbolTable.erase(localSymbols.cbegin(), localSymbols.cend());
+
+	for (const auto& symbolName : localSymbols) {
+		symbolTable.erase(symbolName);
+	}
 }
 
 std::stringstream X86_64LinuxYasmCompiler::moveToRegister(const std::string& reg, const SymbolInfo& symbol) {
@@ -875,7 +893,10 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		leftSize = left.size;
 		const char* reg = "rax";//getRegister("a", left.size);
 		const char* moveAction = getMoveAction(3, leftSize, leftSign);
-		outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << std::endl;
+		if (left.reg == "rbp")
+			outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << "; printExpression, left identifier, rbp" << std::endl;
+		else
+			outfile << "\t" << moveAction << " " << reg << ", " << left.location(false) << "; printExpression, left identifier, not rbp" << std::endl;
 	} else if (expression->mChildren[0]->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 		int size = getSizeFromNumber(expression->mChildren[0]->mValue.mText);
 		if (size < 0) {
@@ -884,7 +905,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		}
 		leftSize = size;
 		const char* reg = "rax";//getRegister("a", size);
-		outfile << "\tmov " << reg << ", " << expression->mChildren[0]->mValue.mText << std::endl;
+		outfile << "\tmov " << reg << ", " << expression->mChildren[0]->mValue.mText << "; printExpression, left int" << std::endl;
 	} else {
 		leftSize = leftPrinted.size;
 	}
@@ -895,7 +916,10 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		rightSize = right.size;
 		const char* reg = "rbx";//getRegister("b", right.size);
 		const char* moveAction = getMoveAction(3, rightSize, rightSign);
-		outfile << "\t" << moveAction << " " << reg << ", " << sizes[right.size] << " " << right.location() << std::endl;
+		if (right.reg == "rbp")
+			outfile << "\t" << moveAction << " " << reg << ", " << sizes[right.size] << " " << right.location() << "; printExpression, right identifier, rbp" << std::endl;
+		else
+			outfile << "\t" << moveAction << " " << reg << ", " << right.location(false) << "; printExpression, right identifier, not rbp" << std::endl;
 	} else if (expression->mChildren[1]->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 		int size = getSizeFromNumber(expression->mChildren[1]->mValue.mText);
 		if (size < 0) {
@@ -904,10 +928,10 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		}
 		rightSize = size;
 		const char* reg = "rbx";//getRegister("b", size);
-		outfile << "\tmov " << reg << ", " << expression->mChildren[1]->mValue.mText << std::endl;
+		outfile << "\tmov " << reg << ", " << expression->mChildren[1]->mValue.mText << "; printExpression, right int" << std::endl;
 	} else {
 		if (rightPrinted.printed)
-			outfile << "\tmov rbx, rax" << std::endl;
+			outfile << "\tmov rbx, rax; printExpression, right else if right printed" << std::endl;
 		rightSize = rightPrinted.size;
 	}
 
@@ -916,7 +940,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 	if (leftPrinted.printed) {
 		std::string r1 = "rax";//getRegister("a", leftPrinted.size);
 		std::string r2 = "r10";//getRegister("10", leftPrinted.size);
-		outfile << "\tmov " << r1 << ", " << r2 << std::endl; // Recover left
+		outfile << "\tmov " << r1 << ", " << r2 << "; printExpression, leftPrinted, recover left" << std::endl; // Recover left
 	}
 
 	if (expression->mValue.mText == "+") {
@@ -986,18 +1010,18 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		outfile << "\txor " << r1 << ", " << r2 << std::endl;
 	} else if (expression->mValue.mText == ">>") {
 		std::string r2 = getRegister("c", 0);
-		outfile << "\tmov rcx, rbx" << std::endl;
+		outfile << "\tmov rcx, rbx; printExpression, shift right" << std::endl;
 		outfile << "\tshr rax" << ", " << r2 << std::endl;
 	} else if (expression->mValue.mText == "<<") {
 		std::string r2 = getRegister("c", 0);
-		outfile << "\tmov rcx, rbx" << std::endl;
+		outfile << "\tmov rcx, rbx; printExpression, shift left" << std::endl;
 		outfile << "\tshl rax" << ", " << r2 << std::endl;
 	}
 
 	if (nodeType == 1) {
 		std::string r1 = getRegister("b", leftSize);
 		std::string r2 = getRegister("a", rightSize);
-		outfile << "\tmov rbx, rax" << std::endl;
+		outfile << "\tmov rbx, rax; printExpression, nodeType=1" << std::endl;
 	}
 
 	curr.size = getEvenSize(leftSize, rightSize);
@@ -1014,7 +1038,7 @@ void X86_64LinuxYasmCompiler::printConditionalMove(std::ofstream& outfile, int l
 	outfile << "\tmov rdx, 1" << std::endl;
 	outfile << "\tcmp " << r1 << ", " << r2 << std::endl;
 	outfile << "\t" << instruction << " rcx, rdx" << std::endl;
-	outfile << "\tmov rax, rcx" << std::endl;
+	outfile << "\tmov rax, rcx; printConditionalMove" << std::endl;
 }
 
 const char* X86_64LinuxYasmCompiler::getRegister(const std::string& reg, int size) {
