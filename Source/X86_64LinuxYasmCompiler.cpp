@@ -483,9 +483,11 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					uint32_t localLabelCount = ++labelCount;
 					label = label.append(std::to_string(localLabelCount));
 					recentLoopLabel = label;
-					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << ls.mRange.value().mMinimum->mValue.mText << std::endl;
+					printExpression(outfile, p, ls.mRange.value().mMinimum, 0);
+					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", rax" << std::endl;
 					outfile << label << ":" << std::endl;
-					outfile << "\tcmp " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << ls.mRange.value().mMaximum->mValue.mText << std::endl;
+					printExpression(outfile, p, ls.mRange.value().mMaximum, 0);
+					outfile << "\tcmp " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", rax" << std::endl;
 					outfile << "\tjne .inside_label" << localLabelCount << std::endl;
 					outfile << "\tjmp .not_label" << localLabelCount << std::endl;
 					outfile << ".inside_label" << localLabelCount << ":" << std::endl;
@@ -493,7 +495,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << ".skip_label" << localLabelCount << ":" << std::endl;
 					outfile << "\t" << moveToRegister("rax", symbolTable[ls.mIterator.value().mName]).str();
 					outfile << "\t" << op << "rax" << std::endl;
-					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", al" << std::endl;
+					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", rax" << std::endl;
 					outfile << "\tjmp .label" << localLabelCount << std::endl;
 					outfile << ".not_label" << localLabelCount << ":" << std::endl;
 				} else {

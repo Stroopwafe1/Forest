@@ -128,10 +128,11 @@ namespace forest::parser {
 						currentToken.mText.append(2, currChar);
 						endToken(currentToken, tokens);
 					} else if (lastToken.mSubType == TokenSubType::DOT) { // A 2nd dot -> range operator
-						currentToken.mText.append(1, currChar);
+						tokens.pop_back();
+						currentToken.mText.append(2, currChar);
 						currentToken.mType = TokenType::OPERATOR;
 						currentToken.mSubType = TokenSubType::RANGE;
-						currentToken.mStartOffset = start;
+						currentToken.mStartOffset = start - 1;
 						currentToken.mEndOffset = end + 1;
 						endToken(currentToken, tokens);
 					} else if (currentToken.mSubType == TokenSubType::INTEGER_LITERAL) {// Integers can't contain dots, so this must be a decimal number.

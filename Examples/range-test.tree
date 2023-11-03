@@ -4,4 +4,5 @@ i32 main(string[] argv) {
 	loop i, start..end {
 		stdout.writeln(i);
 	}
+	return 0;
 }

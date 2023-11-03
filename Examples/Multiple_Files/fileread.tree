@@ -1,0 +1,40 @@
+aligned struct Timespec {
+	i64 tv_sec;
+	i64 tv_nsec;
+};
+
+aligned struct FileMetadata {
+	ui64 device;
+	ui64 inode;
+	ui32 mode;
+	ui64 linkCount;
+	ui32 ownerUserID;
+	ui32 ownerGroupID;
+	ui64 specialFileDevice;
+	i64 size;
+	i64 blockSize;
+	i64 blockCount;
+	Timespec lastAccess;
+	Timespec lastModification;
+	Timespec lastStatusChange;
+};
+
+
+
+i32 main(string[] argv) {
+	FileMetadata meta;
+	bool useFile = true;
+	FileDescriptor fd = fs.open(argv[1]);
+	if (useFile) {
+		fd.getMetadata(\meta);
+	} else {
+		fs.getMetadata(argv[1], \meta);
+	}
+
+	ui8[meta.size] buffer; // Or heap allocated ref<ui8> buffer = new ui8[meta.size];
+	fd.read(meta.size, buffer);
+	string contents = string.fromBuffer(meta.size, buffer);
+	stdout.writeLine(contents);
+	fd.close();
+	return 0;
+}

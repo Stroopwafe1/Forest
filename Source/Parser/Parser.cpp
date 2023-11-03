@@ -986,7 +986,7 @@ namespace forest::parser {
 	Type Parser::getTypeFromRange(const Range& range) {
 		// TODO: We cannot know the types at compile time for some expressions
 		if (range.mMinimum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
-			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0, 0};
+			return Type {"i64", Builtin_Type::I64, {}, 4, 4}; // We take the default as something that will actually compile
 		if (range.mMaximum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
 			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0, 0};
 
