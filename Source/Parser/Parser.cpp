@@ -74,10 +74,12 @@ namespace forest::parser {
 		}
 
 		for (const auto& fc : _funcCalls) {
+			bool found = false;
 			for (const auto& f : functions) {
-				if (fc.mFunctionName == f.mName) continue;
-				externalFunctions.push_back(fc);
+				if (fc.mFunctionName == f.mName) found = true;
 			}
+			if (!found)
+				externalFunctions.push_back(fc);
 		}
 		return Programme { functions, literals, externalFunctions, libDependencies, imports, variables, requires_libs };
 	}
