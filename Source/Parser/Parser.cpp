@@ -23,6 +23,7 @@ namespace forest::parser {
 				{ "f64", 8},
 				{ "char", 4},
 				{ "bool", 1},
+				{ "ref", 4 },
 				{ "string", 16},
 		};
 	}
@@ -647,7 +648,6 @@ namespace forest::parser {
 
 
 	std::optional<Statement> Parser::tryParseControlStatement() {
-		std::vector<Token>::iterator saved = mCurrentToken;
 		Statement statement;
 
 		std::optional<Token> br = expectIdentifier("break");
@@ -757,8 +757,8 @@ namespace forest::parser {
 				}
 			}
 		} else if (actualType.builtinType == Builtin_Type::STRUCT) {
-			// TODO: implement this
-			throw std::runtime_error("Not implemented yet");
+			if (!ParseStructAssignment(name.value().mText, values))
+				return std::nullopt;
 		} else {
 			Expression* expression = expectExpression(statement, true);
 			if (expression != nullptr)
@@ -796,8 +796,10 @@ namespace forest::parser {
 		if (v.mType.builtinType == Builtin_Type::ARRAY) {
 			std::optional<Token> arrayBracket = expectOperator("[");
 			if (arrayBracket.has_value()) {
-				std::optional<Token> length = expectLiteral();
-				if (!length.has_value()) {
+				Statement s;
+				s.mType = Statement_Type::ARRAY_INDEX;
+				Expression* expression = expectExpression(s, true);
+				if (expression == nullptr) {
 					std::cerr << "Expected a value to index array variable " << name.value() << " at " << *mCurrentToken << std::endl;
 					return std::nullopt;
 				}
@@ -807,9 +809,10 @@ namespace forest::parser {
 					std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in variable assignment" << std::endl;
 					return std::nullopt;
 				}
-				v.mName += "." + length.value().mText;
+				statement.mContent = expression;
 			} else {
 				redefinition = true;
+				statement.mContent = nullptr;
 			}
 		} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
 			// Access property
@@ -822,6 +825,13 @@ namespace forest::parser {
 				if (!propName.has_value()) {
 					// Syntax error
 					std::cerr << "Expected a property name for the assignment of struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
+					return std::nullopt;
+				}
+				Struct& s = structs[name.value().mText];
+				int fieldIndex = s.getIndexOfProperty(propName.value().mText);
+				if (fieldIndex == -1) {
+					std::cerr << "Could not find property " << propName.value().mText << " in struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
+					mCurrentToken = saved;
 					return std::nullopt;
 				}
 				v.mName += "." + propName.value().mText;
@@ -870,8 +880,8 @@ namespace forest::parser {
 					}
 				}
 			} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
-				// TODO: implement this
-				throw std::runtime_error("Not implemented yet");
+				if (!ParseStructAssignment(name.value().mText, values))
+					return std::nullopt;
 			} else {
 				Expression* expression = expectExpression(statement, true);
 				if (expression != nullptr)
@@ -886,9 +896,7 @@ namespace forest::parser {
 			} else {
 				Expression* expression = expectExpression(statement);
 				if (expression == nullptr) {
-					std::cerr << "Expected an assignment operator for variable " << name.value() << " at "
-							  << *mCurrentToken
-							  << std::endl;
+					std::cerr << "Expected an assignment operator for variable " << name.value() << " at " << *mCurrentToken << std::endl;
 					return std::nullopt;
 				}
 				// if last character of operator is '=' but not '=' itself, add nodes to expression
@@ -1342,5 +1350,78 @@ namespace forest::parser {
 		return hasNextToken && !((closesIf || closesArrayIndex || closesLoop || closesVarAssignment || closesGeneralExpression) && parenStack.empty());
 	}
 
+	bool Parser::ParseStructAssignment(const std::string& structName, std::vector<Expression*>& values) {
+		std::vector<Token>::iterator saved = mCurrentToken;
+		std::optional<Token> bracket = expectOperator("{");
+		if (!bracket.has_value()) {
+			std::cerr << "Expected a '{' for the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
+			mCurrentToken = saved;
+			return false;
+		}
+
+		Struct& s = structs[structName];
+		Statement statement;
+		statement.mType = Statement_Type::VAR_DECL_ASSIGN;
+		// Insert positions available to the struct. This means we can mix and match between {val1, val2} and {.val1 = value; .val2 = value} like {.val1 = value; val2, .val3 = value}
+		// Without one overriding the other
+		std::vector<int> insertPositions;
+		for (int i = 0; i < s.mFields.size(); i++)
+			insertPositions.push_back(i);
+		while (!expectOperator("}").has_value()) {
+			// Two options: { val1, val2, val3 } OR { .val1 = value; .val2 = value; .val3 = value; };
+			if (expectOperator(".").has_value()) {
+				// We have { .val1 = value; }
+				std::optional<Token> propertyOpt = expectIdentifier();
+				if (!propertyOpt.has_value()) {
+					std::cerr << "Expected a property name for the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
+					mCurrentToken = saved;
+					return false;
+				}
+
+				std::optional<Token> equalOpt = expectOperator("=");
+				if (!equalOpt.has_value()) {
+					std::cerr << "Expected a '=' for the assignment of property " << propertyOpt.value().mText << " of struct " << structName << " at " << *mCurrentToken << std::endl;
+					mCurrentToken = saved;
+					return false;
+				}
+
+				Expression* expression = expectExpression(statement);
+				std::optional<Token> semi = expectSemicolon();
+				if (!semi.has_value()) {
+					std::cerr << "Expected a semicolon to close the assignment of property " << propertyOpt.value().mText << " of struct " << structName << " at " << *mCurrentToken << std::endl;
+					return false;
+				}
+
+				Struct& s = structs[structName];
+				int fieldIndex = s.getIndexOfProperty(propertyOpt.value().mText);
+				if (fieldIndex == -1) {
+					std::cerr << "Could not find property " << propertyOpt.value().mText << " in struct " << structName << " at " << *mCurrentToken << std::endl;
+					mCurrentToken = saved;
+					return false;
+				}
+				values.insert(values.begin() + fieldIndex, expression);
+				insertPositions.erase(insertPositions.begin() + fieldIndex);
+			} else {
+				Expression* expression = expectExpression(statement);
+
+				int insertPos = *(insertPositions.begin());
+				values.insert(values.begin() + insertPos, expression);
+				insertPositions.erase(insertPositions.begin());
+
+				std::optional<Token> closingBracket = expectOperator("}");
+				if (closingBracket.has_value())
+					break;
+
+				std::optional<Token> comma = expectOperator(",");
+				if (!comma.has_value()) {
+					// We didn't encounter the '}', and we didn't get a ','
+					std::cerr << "Expected a ',' while parsing the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
+					mCurrentToken = saved;
+					return false;
+				}
+			}
+		}
+		return true;
+	}
 
 } // forest::parser

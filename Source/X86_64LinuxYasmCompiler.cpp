@@ -212,12 +212,15 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 			symbolTable.erase(symbolName);
 		}
 
+		outfile << ".exit:" << std::endl;
 		if (function.mName != "main") {
-			outfile << ".exit:" << std::endl;
 			outfile << "; =============== EPILOGUE ===============" << std::endl;
 			outfile << "\tpop rbp" << std::endl;
 			outfile << "\tret" << std::endl;
 			outfile << "; =============== END EPILOGUE ===============" << std::endl;
+		} else {
+			outfile << "\tmov rax, 60" << std::endl;;
+			outfile << "\tsyscall" << std::endl;
 		}
 	}
 
@@ -379,11 +382,9 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				printExpression(outfile, p, statement.mContent, 0);
 				if (labelName == "main") {
 					outfile << "\tmov rdi, rax" << std::endl;
-					outfile << "\tmov rax, 60" << std::endl;
-					outfile << "\tsyscall" << std::endl;
-				} else {
-					outfile << "\tjmp .exit" << std::endl;
 				}
+				outfile << "\tjmp .exit" << std::endl;
+
 				break;
 			case Statement_Type::VAR_DECLARATION:
 				addToSymbols(offset, statement.variable.value());
@@ -397,7 +398,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					// Reason for this is because register indexing is not allowed to go -rax, only +rax
 					(*offset) -= int(v.mType.byteSize);
 					localOffset -= int(v.mType.byteSize);
-					int size = addToSymbols(offset, v);
+					addToSymbols(offset, v);
 					addToSymbols(&localOffset, v);
 					localSymbols.push_back(v.mName);
 
@@ -413,6 +414,8 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							outfile << "-" << -(arr.offset + i * int(arr.type.byteSize / v.mValues.size()));
 						outfile << "], " << getRegister("a", actualSize) << std::endl;
 					}
+				} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
+					outfile << "; struct initialisation is not implemented yet" << std::endl;
 				} else {
 					printExpression(outfile, p, v.mValues[0], 0);
 					int size = addToSymbols(offset, v);
@@ -426,26 +429,29 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 			case Statement_Type::VAR_ASSIGNMENT: {
 				Variable v = statement.variable.value();
 				uint64_t index = v.mName.find('.');
-				if (index != std::string::npos) {
+				if (index != std::string::npos || statement.mContent != nullptr) {
 					// Array or struct property
 					if (v.mType.builtinType == Builtin_Type::ARRAY) {
-						std::string arrIndex = v.mName.substr(index);
 						SymbolInfo& arr = symbolTable[v.mName];
 						int actualSize = getSizeFromByteSize(arr.type.subTypes[0].byteSize);
+						printExpression(outfile, p, statement.mContent, 0);
+						// NOTE: I'm choosing to set the index to r11, which might get overwritten. Instead we could also do a push rax/pop r11
+						// If unexpected behaviour is found, go with the more safe route of using the stack
+						outfile << "\tmov r11, rax" << std::endl;
 
 						printExpression(outfile, p, v.mValues[0], 0);
 						outfile << "\tmov " << sizes[actualSize] << " [" << arr.reg;
 						if (arr.offset > 0)
-							outfile << "+" << arr.offset << "+" << arrIndex << "*" << int(arr.type.subTypes[0].byteSize);
+							outfile << "+" << arr.offset << "+r11*" << int(arr.type.subTypes[0].byteSize);
 						else if (arr.offset < 0)
-							outfile << "-" << -arr.offset << "+" << arrIndex << "*" << int(arr.type.subTypes[0].byteSize);
+							outfile << "-" << -arr.offset <<  "+r11*" << int(arr.type.subTypes[0].byteSize);
 						else
-							outfile << "+" << arrIndex << "*" << int(arr.type.subTypes[0].byteSize);
+							outfile << "+r11*" << int(arr.type.subTypes[0].byteSize);
 						outfile << "], " << getRegister("a", actualSize) << std::endl;
 
 					} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
 						std::string propName = v.mName.substr(index);
-
+						outfile << "; struct property assignment is not implemented yet. But we know you want property " << propName << std::endl;
 					}
 				} else {
 					// Redefinition
@@ -463,7 +469,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							outfile << "], " << getRegister("a", actualSize) << std::endl;
 						}
 					} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
-
+						outfile << "; struct initialisation is not implemented yet" << std::endl;
 					} else {
 						SymbolInfo& symbol = symbolTable[v.mName];
 						printExpression(outfile, p, v.mValues[0], 0);
@@ -597,6 +603,9 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				outfile << ".end_if" << localIfCount << ":" << std::endl;
 				break;
 			}
+			case Statement_Type::ARRAY_INDEX:
+				outfile << "; Array indexing compiled. This shouldn't ever happen!" << std::endl;
+				break;
 		}
 	}
 

@@ -92,6 +92,16 @@ namespace forest::parser {
 		std::string mName;
 		std::vector<StructField> mFields;
 		size_t mSize;
+
+		int getIndexOfProperty(const std::string& propertyName) const {
+			for (int i = 0; i < mFields.size(); i++) {
+				const auto& field = mFields.at(i);
+				for (const auto& fieldName : field.mNames) {
+					if (fieldName == propertyName) return i;
+				}
+			}
+			return -1;
+		}
 	};
 
 	struct FuncArg {
@@ -265,6 +275,7 @@ namespace forest::parser {
 		uint32_t biggestAlloc = 0;
 		std::vector<FuncCallStatement> _funcCalls;
 		bool ExpressionShouldContinueParsing(const Statement& statementContext, const std::stack<char>& parenStack) const;
+		bool ParseStructAssignment(const std::string& structName, std::vector<Expression*>& values);
 	};
 
 } // forest::parser
