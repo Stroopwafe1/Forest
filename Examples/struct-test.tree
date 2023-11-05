@@ -1,0 +1,20 @@
+struct Test {
+	ui8 val1;
+	ui8 val2;
+	ui16 val3;
+	ui32 val4;
+	ui64 val5;
+}
+
+i32 main(string[] argv) {
+	Test t = {0, 1, 2, 3, 4};
+	Test t2 = {
+		.val2 = 1;
+		.val1 = 0;
+		.val4 = 3;
+		.val3 = 2;
+		.val5 = 4;
+	};
+	t2.val1 = 5;
+	return t2.val1;
+}

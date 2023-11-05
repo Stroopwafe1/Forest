@@ -78,11 +78,11 @@ namespace forest::parser {
 	public:
 		TokenType mType {TokenType::NOTHING};
 		TokenSubType mSubType {TokenSubType::NOTHING};
-		std::string mText;
+		std::string mText{};
 		size_t mStartOffset{0};
 		size_t mEndOffset{0};
 		size_t mLineNumber{1};
-		std::string file;
+		std::string file{};
 
 		Token();
 

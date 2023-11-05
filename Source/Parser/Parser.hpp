@@ -210,6 +210,7 @@ namespace forest::parser {
 		std::vector<std::string> libDependencies;
 		std::vector<Import> imports;
 		std::map<std::string, Variable> variables;
+		std::map<std::string, Struct> structs;
 		bool requires_libs = false;
 
 		std::optional<Literal> findLiteralByAlias(const std::string& alias) const {

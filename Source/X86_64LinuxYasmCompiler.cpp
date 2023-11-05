@@ -415,7 +415,26 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						outfile << "], " << getRegister("a", actualSize) << std::endl;
 					}
 				} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
-					outfile << "; struct initialisation is not implemented yet" << std::endl;
+					const Struct& s = p.structs.at(v.mType.name);
+					(*offset) -= int(s.mSize);
+					localOffset -= int(s.mSize);
+					addToSymbols(offset, v);
+					addToSymbols(&localOffset, v);
+					localSymbols.push_back(v.mName);
+					SymbolInfo& var = symbolTable[v.mName];
+
+					for (int i = 0; i < s.mFields.size(); i++) {
+						Expression* exp = v.mValues.at(i);
+						if (exp == nullptr) continue;
+						printExpression(outfile, p, exp, 0);
+						int actualSize = getSizeFromByteSize(s.mFields[i].mType.byteSize); // TODO: This won't work for nested structs
+						outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
+						if (var.offset > 0)
+							outfile << "+" << var.offset - s.mFields[i].mOffset;
+						else
+							outfile << "-" << -(var.offset + s.mFields[i].mOffset);
+						outfile << "], " << getRegister("a", actualSize) << std::endl;
+					}
 				} else {
 					printExpression(outfile, p, v.mValues[0], 0);
 					int size = addToSymbols(offset, v);
@@ -450,8 +469,21 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						outfile << "], " << getRegister("a", actualSize) << std::endl;
 
 					} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
-						std::string propName = v.mName.substr(index);
-						outfile << "; struct property assignment is not implemented yet. But we know you want property " << propName << std::endl;
+						std::string propName = v.mName.substr(index + 1);
+						std::string varName = v.mName.substr(0, index);
+						SymbolInfo& var = symbolTable[varName];
+						const Struct& s = p.structs.at(v.mType.name);
+						int fieldIndex = s.getIndexOfProperty(propName);
+						const StructField& sf = s.mFields[fieldIndex];
+						int actualSize = getSizeFromByteSize(sf.mType.byteSize);
+
+						printExpression(outfile, p, v.mValues[0], 0);
+						outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
+						if (var.offset > 0)
+							outfile << "+" << var.offset - sf.mOffset;
+						else
+							outfile << "-" << -(var.offset + sf.mOffset);
+						outfile << "], " << getRegister("a", actualSize) << std::endl;
 					}
 				} else {
 					// Redefinition
@@ -469,7 +501,26 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							outfile << "], " << getRegister("a", actualSize) << std::endl;
 						}
 					} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
-						outfile << "; struct initialisation is not implemented yet" << std::endl;
+						const Struct& s = p.structs.at(v.mType.name);
+						(*offset) -= int(s.mSize);
+						localOffset -= int(s.mSize);
+						addToSymbols(offset, v);
+						addToSymbols(&localOffset, v);
+						localSymbols.push_back(v.mName);
+						SymbolInfo& var = symbolTable[v.mName];
+
+						for (int i = 0; i < s.mFields.size(); i++) {
+							Expression* exp = v.mValues.at(i);
+							if (exp == nullptr) continue;
+							printExpression(outfile, p, exp, 0);
+							int actualSize = getSizeFromByteSize(s.mFields[i].mType.byteSize); // TODO: This won't work for nested structs
+							outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
+							if (var.offset > 0)
+								outfile << "+" << var.offset - s.mFields[i].mOffset;
+							else
+								outfile << "-" << -(var.offset + s.mFields[i].mOffset);
+							outfile << "], " << getRegister("a", actualSize) << std::endl;
+						}
 					} else {
 						SymbolInfo& symbol = symbolTable[v.mName];
 						printExpression(outfile, p, v.mValues[0], 0);
@@ -892,6 +943,22 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			}
 		}
 		return ExpressionPrinted{ true, false, 3 };
+	} else if (expression->mValue.mText == ".") {
+		// We have a struct property
+		SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText]; // Left is variable name
+		std::string propName = expression->mChildren[1]->mValue.mText; // Right is property name
+		const Struct& s = p.structs.at(left.type.name);
+		int fieldIndex = s.getIndexOfProperty(propName);
+		const StructField& sf = s.mFields[fieldIndex];
+		int actualSize = getSizeFromByteSize(sf.mType.byteSize);
+
+		outfile << "\tmov " << getRegister("a", actualSize) << ", " << sizes[actualSize] << " [" << left.reg;
+		if (left.offset > 0)
+			outfile << "+" << left.offset - sf.mOffset;
+		else
+			outfile << "-" << -(left.offset + sf.mOffset);
+		outfile << "]" << std::endl;
+		return ExpressionPrinted{ true, false, actualSize };
 	}
 
 	ExpressionPrinted leftPrinted = printExpression(outfile, p, expression->mChildren[0], -1);

@@ -82,7 +82,7 @@ namespace forest::parser {
 			if (!found)
 				externalFunctions.push_back(fc);
 		}
-		return Programme { functions, literals, externalFunctions, libDependencies, imports, variables, requires_libs };
+		return Programme { functions, literals, externalFunctions, libDependencies, imports, variables, structs, requires_libs };
 	}
 
 	std::optional<Token> Parser::peekNextToken() {
@@ -757,7 +757,7 @@ namespace forest::parser {
 				}
 			}
 		} else if (actualType.builtinType == Builtin_Type::STRUCT) {
-			if (!ParseStructAssignment(name.value().mText, values))
+			if (!ParseStructAssignment(actualType.name, values))
 				return std::nullopt;
 		} else {
 			Expression* expression = expectExpression(statement, true);
@@ -827,7 +827,7 @@ namespace forest::parser {
 					std::cerr << "Expected a property name for the assignment of struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
 					return std::nullopt;
 				}
-				Struct& s = structs[name.value().mText];
+				Struct& s = structs[v.mType.name];
 				int fieldIndex = s.getIndexOfProperty(propName.value().mText);
 				if (fieldIndex == -1) {
 					std::cerr << "Could not find property " << propName.value().mText << " in struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
@@ -880,7 +880,7 @@ namespace forest::parser {
 					}
 				}
 			} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
-				if (!ParseStructAssignment(name.value().mText, values))
+				if (!ParseStructAssignment(v.mType.name, values))
 					return std::nullopt;
 			} else {
 				Expression* expression = expectExpression(statement, true);
@@ -1359,6 +1359,11 @@ namespace forest::parser {
 			return false;
 		}
 
+		if (!structs.contains(structName)) {
+			std::cerr << "Error occurred trying to parse struct assignment: No struct found with name '" << structName << "' at " << *mCurrentToken << std::endl;
+			mCurrentToken = saved;
+			return false;
+		}
 		Struct& s = structs[structName];
 		Statement statement;
 		statement.mType = Statement_Type::VAR_DECL_ASSIGN;
@@ -1367,6 +1372,7 @@ namespace forest::parser {
 		std::vector<int> insertPositions;
 		for (int i = 0; i < s.mFields.size(); i++)
 			insertPositions.push_back(i);
+		values.resize(s.mFields.size());
 		while (!expectOperator("}").has_value()) {
 			// Two options: { val1, val2, val3 } OR { .val1 = value; .val2 = value; .val3 = value; };
 			if (expectOperator(".").has_value()) {
@@ -1399,13 +1405,13 @@ namespace forest::parser {
 					mCurrentToken = saved;
 					return false;
 				}
-				values.insert(values.begin() + fieldIndex, expression);
+				values[fieldIndex] = expression;
 				insertPositions.erase(insertPositions.begin() + fieldIndex);
 			} else {
 				Expression* expression = expectExpression(statement);
 
 				int insertPos = *(insertPositions.begin());
-				values.insert(values.begin() + insertPos, expression);
+				values[insertPos] = expression;
 				insertPositions.erase(insertPositions.begin());
 
 				std::optional<Token> closingBracket = expectOperator("}");
