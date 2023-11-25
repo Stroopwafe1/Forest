@@ -52,7 +52,8 @@ private:
 	std::string recentLoopLabel{};
 	std::map<std::string, SymbolInfo> symbolTable;
 	std::map<std::string, uint32_t> syscallTable;
-	void printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, int* offset);
+	std::string currentClass{};
+	void printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, int* offset, int* allocs);
 	void printLibs(std::ofstream& outfile);
 	void printFunctionCall(std::ofstream& outfile, const Programme& p, const FuncCallStatement& fc);
 	void printSyscall(std::ofstream& outfile, const std::string& syscall);
@@ -68,6 +69,7 @@ private:
 	int getEvenSize(int size1, int size2);
 	const char* getMoveAction(int regSize, int valSize, bool isSigned);
 	int getSizeFromByteSize(size_t byteSize);
+	int getSizeFromType(const Type& type);
 	const char* convertARegSize(int size);
 	const char* getDefineBytes(size_t byteSize);
 	const char* getReserveBytes(size_t byteSize);

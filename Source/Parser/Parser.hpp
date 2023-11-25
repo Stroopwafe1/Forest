@@ -32,6 +32,7 @@ namespace forest::parser {
 		ARRAY,
 		VOID,
 		STRUCT,
+		CLASS,
 	};
 
 	enum class Statement_Type {
@@ -92,6 +93,16 @@ namespace forest::parser {
 		std::string mName;
 		std::vector<StructField> mFields;
 		size_t mSize;
+
+		int getIndexOfProperty(const std::string& propertyName) const {
+			for (int i = 0; i < mFields.size(); i++) {
+				const auto& field = mFields.at(i);
+				for (const auto& fieldName : field.mNames) {
+					if (fieldName == propertyName) return i;
+				}
+			}
+			return -1;
+		}
 	};
 
 	struct FuncArg {
@@ -100,10 +111,10 @@ namespace forest::parser {
 	};
 
 	struct FuncCallStatement {
-		std::string mNamespace;
-		std::string mClassName;
-		std::string mFunctionName;
-		std::vector<Expression*> mArgs;
+		std::string mNamespace{};
+		std::string mClassName{};
+		std::string mFunctionName{};
+		std::vector<Expression*> mArgs{};
 		bool mIsExternal = false;
 
 		bool operator ==(const FuncCallStatement& other) const {
@@ -183,6 +194,23 @@ namespace forest::parser {
 		Block mBody;
 	};
 
+	struct Class {
+		std::string mName;
+		std::vector<StructField> mFields;
+		std::vector<Function> mFunctions;
+		size_t mSize;
+
+		int getIndexOfProperty(const std::string& propertyName) const {
+			for (int i = 0; i < mFields.size(); i++) {
+				const auto& field = mFields.at(i);
+				for (const auto& fieldName : field.mNames) {
+					if (fieldName == propertyName) return i;
+				}
+			}
+			return -1;
+		}
+	};
+
 	struct Literal {
 		std::string mAlias;
 		std::string mContent;
@@ -200,6 +228,8 @@ namespace forest::parser {
 		std::vector<std::string> libDependencies;
 		std::vector<Import> imports;
 		std::map<std::string, Variable> variables;
+		std::map<std::string, Struct> structs;
+		std::map<std::string, Class> classes;
 		bool requires_libs = false;
 
 		std::optional<Literal> findLiteralByAlias(const std::string& alias) const {
@@ -241,6 +271,7 @@ namespace forest::parser {
 		std::optional<Statement> expectStatement();
 		std::optional<SpecialStatement> expectSpecialStatement();
 		std::optional<Struct> expectStruct();
+		std::optional<Class> expectClass();
 		std::optional<Import> expectImport();
 		std::optional<Statement> tryParseFunctionCall();
 		std::optional<Statement> tryParseLoop();
@@ -257,6 +288,7 @@ namespace forest::parser {
 		std::vector<FuncCallStatement> externalFunctions;
 		std::vector<std::string> libDependencies;
 		std::map<std::string, Struct> structs;
+		std::map<std::string, Class> classes;
 		std::map<std::string, Variable> variables;
 		std::map<std::string, size_t> sizeCache;
 		bool requires_libs = false;
@@ -265,6 +297,8 @@ namespace forest::parser {
 		uint32_t biggestAlloc = 0;
 		std::vector<FuncCallStatement> _funcCalls;
 		bool ExpressionShouldContinueParsing(const Statement& statementContext, const std::stack<char>& parenStack) const;
+		bool ParseStructAssignment(const std::string& structName, std::vector<Expression*>& values);
+		bool ParseClassAssignment(const std::string& className, std::vector<Expression*>& values);
 	};
 
 } // forest::parser
