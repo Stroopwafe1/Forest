@@ -1,0 +1,18 @@
+class Test {
+	ui8 val1;
+	ui8 val2;
+	ui16 val3;
+	ui32 val4;
+	ui64 val5;
+
+	ui64 Sum() {
+		return ((val1 + val2) + (val3 + val4)) + val5;
+	}
+}
+
+i32 main(string[] argv) {
+	Test t = {0, 1, 2, 3, 4};
+	t.val1 = 5;
+	ui64 summed = t.Sum();
+	return summed;
+}
