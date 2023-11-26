@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <stack>
+#include <fstream>
 #include "Parser.hpp"
 #include "Tokeniser.hpp"
 
@@ -55,15 +56,29 @@ namespace forest::parser {
 					sizeCache[s.value().mName] = s.value().mSize;
 				}
 			} else if (mCurrentToken->mText == "class" || mCurrentToken->mText == "aligned") {
+				std::vector<Token>::iterator current = mCurrentToken;
 				std::optional<Class> c = expectClass();
 				if (c.has_value()) {
-					classes.insert({c.value().mName, c.value()});
-					sizeCache[c.value().mName] = c.value().mSize;
+					Class& klass = c.value();
+					if (tokens.begin()->file != current->file)
+						klass.mFunctions.clear(); // We don't want to compile the functions of an external class to this translation unit
+					classes.insert({klass.mName, klass});
+					sizeCache[klass.mName] = klass.mSize;
 				}
 			} else if (mCurrentToken->mText == "use") {
 				std::optional<Import> import = expectImport();
 				if (import.has_value()) {
 					imports.push_back(import.value());
+					std::filesystem::path filePath = tokens.begin()->file;
+					std::filesystem::path tempPath = filePath.replace_filename(import.value().mPath);
+					std::ifstream file;
+					std::stringstream buffer;
+					file.open(tempPath);
+					buffer << file.rdbuf();
+					file.close();
+					std::vector<Token> importTokens = Tokeniser::parse(buffer.str(), tempPath);
+					tokens.insert(mCurrentToken, importTokens.begin(), importTokens.end());
+					mTokensEnd = tokens.end();
 				}
 			} else {
 				std::optional<Function> f = expectFunction();
@@ -71,11 +86,13 @@ namespace forest::parser {
 					std::optional<Statement> var = tryParseVariableDeclaration();
 					// Top level variable declaration
 					if (var.has_value()) {
-						variables.insert(std::make_pair(var.value().variable.value().mName, var.value().variable.value()));
+						if (tokens.begin()->file == mCurrentToken->file || mCurrentToken == mTokensEnd)
+							variables.insert(std::make_pair(var.value().variable.value().mName, var.value().variable.value()));
 					}
 				} else {
 					//std::cout << "Successfully parsed function " << f->mName << std::endl;
-					functions.push_back(f.value());
+					if (tokens.begin()->file == mCurrentToken->file || mCurrentToken == mTokensEnd)
+						functions.push_back(f.value());
 				}
 			}
 		}
@@ -94,6 +111,8 @@ namespace forest::parser {
 			if (!found)
 				externalFunctions.push_back(fc);
 		}
+		for (const auto& c : classes)
+			std::cout << "Class " << c.first << ": " << c.second.mName << std::endl;
 		return Programme { functions, literals, externalFunctions, libDependencies, imports, variables, structs, classes, requires_libs };
 	}
 
@@ -460,6 +479,7 @@ namespace forest::parser {
 		c.mName = sname.value().mText;
 		size_t offset = 0;
 		size_t alignTo = 1;
+		std::vector<std::string> localVars;
 
 		while(!expectOperator("}").has_value()) {
 			// Parse fields
@@ -522,12 +542,18 @@ namespace forest::parser {
 			sf.mOffset = offset;
 			offset += type.value().byteSize;
 			c.mFields.push_back(sf);
+			for (const auto& name : sf.mNames)
+				variables.insert({name, Variable(sf.mType, name, {})}); // Add the field to the variables so it can be seen by functions
 		}
 
 		if (align.has_value()) {
 			// If we have to align
 			// Set offset to be multiple of alignTo
 			offset += (alignTo - offset % alignTo) % alignTo;
+		}
+
+		for (const auto& name: localVars) {
+			variables.erase(name); // Erase the field from the variables because it's no longer in scope
 		}
 
 		c.mSize = offset; // This is after all fields calculated their offset, including the last one
@@ -538,12 +564,12 @@ namespace forest::parser {
 		std::optional<Token> keyword = expectIdentifier("use");
 		if (!keyword.has_value()) return std::nullopt;
 		std::stringstream ss;
-		while (mCurrentToken->mText != ";") {
+		while (mCurrentToken->mText != ";" && mCurrentToken != mTokensEnd) {
 			ss << mCurrentToken->mText;
 			mCurrentToken++;
 		}
 		expectSemicolon(); // Discard this
-		return Import { std::filesystem::path(ss.str()) };
+		return Import { ss.str() };
 	}
 
 	std::optional<Statement> Parser::tryParseFunctionCall() {
@@ -655,8 +681,11 @@ namespace forest::parser {
 		returnValue.funcCall = fc;
 		if (fc.mIsExternal)
 			externalFunctions.push_back(fc);
-		if (!(functionName.value().mText == "write" || functionName.value().mText == "writeln"))
+		if (!(functionName.value().mText == "write" || functionName.value().mText == "writeln")) {
+			const Variable& klass = variables[className.value().mText];
+			fc.mClassName = klass.mType.name;
 			_funcCalls.push_back(fc);
+		}
 		return returnValue;
 	}
 

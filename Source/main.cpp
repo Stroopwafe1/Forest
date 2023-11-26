@@ -75,6 +75,7 @@ int main(int argc, char** argv) {
 		std::cerr << "Expected a function called 'main' to be in file: " << filePath << std::endl;
 		return 1;
 	}
+	fs::path originalPath = filePath;
 
 	X86_64LinuxYasmCompiler compiler;
 	compiler.compile(filePath, p, ctx);
@@ -110,7 +111,7 @@ int main(int argc, char** argv) {
 	else
 		linker << " -g";
 
-	linker << " -o " << buildPath.string() << "/" << filePath.stem().string() << " --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ";
+	linker << " -o " << buildPath.string() << "/" << originalPath.stem().string() << " --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ";
 	for (const auto& path : paths) {
 		linker << path << " ";
 	}
@@ -124,7 +125,7 @@ int main(int argc, char** argv) {
 	std::system(linker.str().c_str());
 
 	std::stringstream run_command;
-	run_command << buildPath.string() << "/" << filePath.stem().string();
+	run_command << buildPath.string() << "/" << originalPath.stem().string();
 	std::system(run_command.str().c_str());
 
 	return 0;

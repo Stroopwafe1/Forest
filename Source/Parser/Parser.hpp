@@ -218,7 +218,7 @@ namespace forest::parser {
 	};
 
 	struct Import {
-		std::filesystem::path mPath;
+		std::string mPath;
 	};
 
 	struct Programme {
