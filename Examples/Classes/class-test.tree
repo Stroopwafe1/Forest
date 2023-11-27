@@ -1,3 +1,5 @@
+use extra-classes.tree;
+
 class Test {
 	ui8 val1;
 	ui8 val2;
@@ -14,5 +16,8 @@ i32 main(string[] argv) {
 	Test t = {0, 1, 2, 3, 4};
 	t.val1 = 5;
 	ui64 summed = t.Sum();
+	ExtraTest et = {5};
+	et.Add5();
+	summed += et.val;
 	return summed;
 }

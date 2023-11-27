@@ -118,7 +118,12 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 	std::vector<FuncCallStatement> external;
 	for (const auto& funcCall : p.externalFunctions) {
 		if (std::find(external.begin(), external.end(), funcCall) == external.end()) {
-			outfile << "\textern " << funcCall.mFunctionName << std::endl;
+			outfile << "\textern ";
+			if (!funcCall.mNamespace.empty())
+				outfile << funcCall.mNamespace << "_";
+			if (!funcCall.mClassName.empty())
+				outfile << funcCall.mClassName << "_";
+			outfile << funcCall.mFunctionName << std::endl;
 			external.push_back(funcCall);
 		}
 	}
@@ -597,9 +602,18 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							outfile << "], " << getRegister("a", actualSize) << std::endl;
 						}
 					} else {
-						SymbolInfo& symbol = symbolTable[v.mName];
-						printExpression(outfile, p, v.mValues[0], 0);
-						outfile << "\tmov " << sizes[symbol.size] << " " << symbol.location() << ", " << getRegister("a", symbol.size) << std::endl;
+						if (!symbolTable.contains(v.mName)) {
+							// Class property
+							printExpression(outfile, p, v.mValues[0], 0);
+							const Class& klass = p.classes.at(currentClass);
+							int propIndex = klass.getIndexOfProperty(v.mName);
+							int leftSize = getSizeFromType(klass.mFields[propIndex].mType);
+							outfile << "\tmov " << sizes[leftSize] << " [rdi+" << klass.mFields[propIndex].mOffset << "], " << getRegister("a", leftSize) << std::endl;
+						} else {
+							SymbolInfo& symbol = symbolTable[v.mName];
+							printExpression(outfile, p, v.mValues[0], 0);
+							outfile << "\tmov " << sizes[symbol.size] << " " << symbol.location() << ", " << getRegister("a", symbol.size) << std::endl;
+						}
 					}
 				}
 			}
@@ -669,28 +683,47 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				if (fc.mClassName == "stdout" || fc.mClassName == "stdin") {
 					printFunctionCall(outfile, p, fc);
 				} else {
-					for (int i = statement.funcCall.value().mArgs.size() - 1; i >= 0; i--) {
-						std::string value;
-						Expression* expr = statement.funcCall.value().mArgs[i];
-						if (expr->mValue.mSubType == TokenSubType::STRING_LITERAL) {
-							value = p.findLiteralByContent(expr->mValue.mText)->mAlias;
-						} else {
-							printExpression(outfile, p, expr, 0);
-							value = "rax";
+					if (fc.mArgs.empty() && !fc.mClassName.empty()) {
+						const SymbolInfo& symbol = symbolTable[fc.mClassName];
+						outfile << "\tlea rax, " << symbol.location(true) << std::endl;
+						outfile << "\tmov " << callingConvention[0] << ", rax" << std::endl;
+					} else {
+						for (int i = fc.mArgs.size() - 1; i >= 0; i--) {
+							if (i == 0 && !fc.mClassName.empty()) {
+								const SymbolInfo& symbol = symbolTable[fc.mClassName];
+								outfile << "\tlea rax, " << symbol.location(true) << std::endl;
+								outfile << "\tmov " << callingConvention[0] << ", rax" << std::endl;
+								continue;
+							}
+							std::string value;
+							Expression* expr = fc.mArgs[i];
+							if (expr->mValue.mSubType == TokenSubType::STRING_LITERAL) {
+								value = p.findLiteralByContent(expr->mValue.mText)->mAlias;
+							} else {
+								printExpression(outfile, p, expr, 0);
+								value = "rax";
+							}
+							if (i <= 6)
+								outfile << "\tmov " << callingConvention[i] << ", " << value << std::endl;
+							else
+								outfile << "\tpush " << value << std::endl;
 						}
-						if (i <= 6)
-							outfile << "\tmov " << callingConvention[i] << ", " << value << std::endl;
-						else
-							outfile << "\tpush " << value << std::endl;
 					}
-					if (statement.funcCall.value().mFunctionName == "printf" && statement.funcCall.value().mIsExternal) {
+					if (fc.mFunctionName == "printf" && fc.mIsExternal) {
 						outfile << "\tmov rax, 0" << std::endl;
 					}
-					if (statement.funcCall.value().mFunctionName.substr(0, 4) == "SYS_") {
-						printSyscall(outfile, statement.funcCall.value().mFunctionName);
+					if (fc.mFunctionName.substr(0, 4) == "SYS_") {
+						printSyscall(outfile, fc.mFunctionName);
 						outfile << "\tsyscall" << std::endl;
 					} else {
-						outfile << "\tcall " << statement.funcCall.value().mFunctionName << std::endl;
+						outfile << "\tcall ";
+						if (!fc.mNamespace.empty())
+							outfile << fc.mNamespace << "_";
+						if (!fc.mClassName.empty()) {
+							const SymbolInfo& symbol = symbolTable[fc.mClassName];
+							outfile << symbol.type.name << "_";
+						}
+						outfile << statement.funcCall.value().mFunctionName << std::endl;
 					}
 				}
 				if (labelName != "main") {
@@ -906,7 +939,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				if (i <= 6)
 					outfile << "\tmov " << callingConvention[i] << ", " << value << std::endl;
 				else
-					outfile << "\tpush " << value << std::endl;
+					outfile << "\tpush " << value << std::endl; // TODO: This is a bug, values should be pushed onto the stack in reverse order
 				i++;
 			}
 		}

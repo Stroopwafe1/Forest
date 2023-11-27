@@ -1,0 +1,7 @@
+class ExtraTest {
+	ui16 val;
+
+	void Add5() {
+		val += 5;
+	}
+}
