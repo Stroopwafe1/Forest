@@ -87,7 +87,7 @@ namespace forest::parser {
 					std::optional<Statement> var = tryParseVariableDeclaration();
 					// Top level variable declaration
 					if (var.has_value()) {
-						if (tokens.begin()->file == mCurrentToken->file || mCurrentToken == mTokensEnd)
+						if (tokens.begin()->file == current->file || mCurrentToken == mTokensEnd)
 							variables.insert(std::make_pair(var.value().variable.value().mName, var.value().variable.value()));
 					}
 				} else {
