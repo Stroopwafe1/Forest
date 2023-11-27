@@ -651,6 +651,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						std::string label = ".label";
 						label = label.append(std::to_string(++labelCount));
 						outfile << label << ":" << std::endl;
+						recentLoopLabel = label;
 						printBody(outfile, p, ls.mBody, label, offset, allocs);
 						outfile << "\tjmp .label" << labelCount << std::endl;
 						outfile << ".not_label" << labelCount << ":" << std::endl; // Used for break statements

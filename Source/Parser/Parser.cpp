@@ -270,13 +270,16 @@ namespace forest::parser {
 				localVars.push_back(variable.mName);
 			} else if (statement.value().mType == Statement_Type::LOOP) {
 				LoopStatement ls = statement.value().loopStatement.value();
-				size_t byteSize = ls.mIterator.value().mType.byteSize;
-				stackMem += byteSize;
-				if (byteSize > biggestAlloc)
-					biggestAlloc = byteSize;
+				if (ls.mIterator.has_value()) {
+					size_t byteSize = ls.mIterator.value().mType.byteSize;
+					stackMem += byteSize;
+					if (byteSize > biggestAlloc)
+						biggestAlloc = byteSize;
 
-				variables.insert({ls.mIterator.value().mName, ls.mIterator.value() });
-				localVars.push_back(ls.mIterator.value().mName);
+					variables.insert({ls.mIterator.value().mName, ls.mIterator.value() });
+					localVars.push_back(ls.mIterator.value().mName);
+				}
+
 			}
 
 			statements.push_back(statement.value());
@@ -746,6 +749,9 @@ namespace forest::parser {
 			Range r = Range { min, max };
 			ls.mRange = r;
 			ls.mIterator = Variable { getTypeFromRange(r), iterator.value().mText, {} };
+		} else {
+			ls.mIterator = std::nullopt;
+			ls.mRange = std::nullopt;
 		}
 		std::optional<Block> body = expectBlock();
 		if (!body.has_value()) {
