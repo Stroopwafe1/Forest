@@ -83,6 +83,7 @@ namespace forest::parser {
 			} else {
 				std::optional<Function> f = expectFunction();
 				if (!f.has_value()) {
+					std::vector<Token>::iterator current = mCurrentToken;
 					std::optional<Statement> var = tryParseVariableDeclaration();
 					// Top level variable declaration
 					if (var.has_value()) {
