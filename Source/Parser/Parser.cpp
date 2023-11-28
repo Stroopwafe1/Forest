@@ -199,6 +199,9 @@ namespace forest::parser {
 			}
 		}
 
+		for (const auto& arg : args) {
+			variables.insert({arg.mName, Variable {arg.mType, arg.mName, {}}});
+		}
 		// Parse function body, which is the same as parsing a scoped block.
 		// We have a start, but it's nowhere near accurate
 		std::optional<Block> body = expectBlock();
@@ -206,6 +209,10 @@ namespace forest::parser {
 			std::cerr << "Error: Could not parse function body of function '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
 			exit(1);
 		}
+		for (const auto& arg : args) {
+			variables.erase(arg.mName);
+		}
+
 		std::vector<Statement> statements = body.value().statements;
 
 		if (type.value().builtinType != Builtin_Type::VOID) {
@@ -1059,6 +1066,7 @@ namespace forest::parser {
 		} else {
 			if (op.mText == "++" || op.mText == "--") {
 				// Don't parse expression
+				// TODO: These aren't handled correctly, also in compilation... Fix it
 				Expression* opNode = new Expression;
 				opNode->mValue = op;
 				values.push_back(opNode);
@@ -1164,9 +1172,9 @@ namespace forest::parser {
 	Type Parser::getTypeFromRange(const Range& range) {
 		// TODO: We cannot know the types at compile time for some expressions
 		if (range.mMinimum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
-			return Type {"i64", Builtin_Type::I64, {}, 4, 4}; // We take the default as something that will actually compile
+			return Type {"ui64", Builtin_Type::UI64, {}, 4, 4}; // We take the default as something that will actually compile
 		if (range.mMaximum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
-			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0, 0};
+			return Type {"ui64", Builtin_Type::UI64, {}, 4, 4};
 
 		long range_min = std::stol(range.mMinimum->mValue.mText);
 		long range_max = std::stol(range.mMaximum->mValue.mText);
@@ -1207,6 +1215,11 @@ namespace forest::parser {
 		// Identifier<Type>
 		std::optional<Token> id = expectIdentifier();
 		if (!id.has_value()) return std::nullopt;
+		if (variables.find(id.value().mText) != variables.end()) {
+			// Our identifier was a variable, this statement is not a declaration
+			//std::cout << "[INFO]: ExpectType identifier was found in the variables" << std::endl;
+			return std::nullopt;
+		}
 
 		std::optional<Token> openingBracket = expectOperator("[");
 		if (!openingBracket.has_value()) {
