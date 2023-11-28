@@ -401,9 +401,9 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				printExpression(outfile, p, statement.mContent, 0);
 				if (labelName == "main") {
 					outfile << "\tmov rdi, rax" << std::endl;
-				}
-				if (i != block.statements.size() - 1) {
-					outfile << "\tadd rsp, " << *allocs << std::endl;
+				} else {
+					if (*allocs > 0)
+						outfile << "\tadd rsp, " << *allocs << std::endl;
 					outfile << "\tjmp .exit" << std::endl;
 				}
 
@@ -612,7 +612,8 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						} else {
 							SymbolInfo& symbol = symbolTable[v.mName];
 							printExpression(outfile, p, v.mValues[0], 0);
-							outfile << "\tmov " << sizes[symbol.size] << " " << symbol.location() << ", " << getRegister("a", symbol.size) << std::endl;
+							bool dereferenceNeeded = symbol.reg == "rbp" || symbol.type.builtinType == Builtin_Type::REF;
+							outfile << "\tmov " << sizes[symbol.size] << " " << symbol.location(dereferenceNeeded) << ", " << getRegister("a", symbol.size) << std::endl;
 						}
 					}
 				}
@@ -645,6 +646,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << reg << std::endl;
 					outfile << "\tjmp .label" << localLabelCount << std::endl;
 					outfile << ".not_label" << localLabelCount << ":" << std::endl;
+					symbolTable.erase(ls.mIterator.value().mName);
 				} else {
 					if (statement.mContent == nullptr) {
 						// We have "loop { ... }"
@@ -742,6 +744,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				outfile << "\tnop" << std::endl;
 				break;
 			case Statement_Type::IF: {
+				// TODO: If statements with a function call for expression don't work
 				IfStatement is = statement.ifStatement.value();
 				printExpression(outfile, p, statement.mContent, 0);
 				std::string label = ".if";
@@ -1224,7 +1227,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		else {
 			std::string r1 = getRegister("a", size+1);
 			std::string r2 = getRegister("b", size+1);
-			outfile << "\tsbb " << r1 << ", " << r2 << std::endl;
+			outfile << "\tsub " << r1 << ", " << r2 << std::endl;
 		}
 	} else if (expression->mValue.mText == "*") {
 		int size = getEvenSize(leftSize, rightSize);
@@ -1237,6 +1240,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		int size = getEvenSize(leftSize, rightSize);
 		std::string r1 = getRegister("a", size);
 		std::string r2 = getRegister("b", size);
+		outfile << "\t" << convertARegSize(size) << std::endl;
 		if (curr.sign)
 			outfile << "\tidiv " << r1 << ", " << r2 << std::endl;
 		else
