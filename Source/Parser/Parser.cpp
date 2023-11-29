@@ -296,7 +296,7 @@ namespace forest::parser {
 			variables.erase(name);
 		}
 
-		stackMem += biggestAlloc;
+		stackMem += biggestAlloc * 2;
 		return Block { statements, stackMem, biggestAlloc };
 	}
 
@@ -655,6 +655,10 @@ namespace forest::parser {
 				alias << "str" << literals.size();
 
 				literals.push_back(Literal{alias.str(), expression->mValue.mText, uint32_t(expression->mValue.mText.size())});
+				if (className.value().mText == "stdout" && functionName.value().mText == "writeln") {
+					literals.at(literals.size() - 1).mContent.append("\n");
+					literals.at(literals.size() - 1).mSize += 1;
+				}
 			}
 
 			std::optional<Token> closingParenthesis = expectOperator(")");
@@ -680,13 +684,6 @@ namespace forest::parser {
 			// ^ Commented out because it did parse the function call correctly, it just didn't end with a semi.
 			// We want it to keep giving parser errors for the rest of the code, not try to parse something else.
 			return std::nullopt;
-		}
-
-		if (className.value().mText == "stdout" && functionName.value().mText == "writeln") {
-			if (!literals.empty()) {
-				literals.at(literals.size() - 1).mContent.append("\n");
-				literals.at(literals.size() - 1).mSize += 1;
-			}
 		}
 
 		returnValue.funcCall = fc;
