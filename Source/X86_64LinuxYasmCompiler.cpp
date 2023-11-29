@@ -252,7 +252,6 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 }
 
 void X86_64LinuxYasmCompiler::printLibs(std::ofstream& outfile) {
-	outfile << "section .text" << std::endl;
 	outfile << "global print_ui64" << std::endl;
 	outfile << "print_ui64:" << std::endl;
 	outfile << "\tpush rbp" << std::endl;
