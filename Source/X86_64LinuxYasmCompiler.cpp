@@ -208,8 +208,8 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 		std::vector<std::string> localSymbols;
 		if (function.mName == "main") {
 			const auto& argv = function.mArgs[0];
-			argOffset = 16;
-			addToSymbols(&argOffset, Variable {argv.mType.subTypes[0], argv.mName, {} }, "rsp");
+			argOffset = 15;
+			addToSymbols(&argOffset, Variable {argv.mType, argv.mName, {} }, "rbp+");
 			localSymbols.push_back(argv.mName);
 		} else {
 			for (size_t i = 0; i < function.mArgs.size(); i++) {
@@ -256,7 +256,7 @@ void X86_64LinuxYasmCompiler::printLibs(std::ofstream& outfile) {
 	outfile << "print_ui64:" << std::endl;
 	outfile << "\tpush rbp" << std::endl;
 	outfile << "\tmov rsi, rsp" << std::endl;
-	outfile << "\tsub rsp, 21" << std::endl;
+	outfile << "\tsub rsp, 22" << std::endl;
 	outfile << "\tmov rax, rdi" << std::endl;
 	outfile << "\tmov rbx, 0xA" << std::endl;
 	outfile << "\txor rcx, rcx" << std::endl;
@@ -274,17 +274,18 @@ void X86_64LinuxYasmCompiler::printLibs(std::ofstream& outfile) {
 	outfile << "\tmov rdi, 1" << std::endl;
 	outfile << "\tmov rdx, rcx" << std::endl;
 	outfile << "\tsyscall" << std::endl;
-	outfile << "\tadd rsp, 21" << std::endl;
+	outfile << "\tadd rsp, 22" << std::endl;
 	outfile << "\tpop rbp" << std::endl;
 	outfile << "\tret" << std::endl;
 	outfile << "global print_ui64_newline" << std::endl;
 	outfile << "print_ui64_newline:" << std::endl;
 	outfile << "\tpush rbp" << std::endl;
 	outfile << "\tmov rsi, rsp" << std::endl;
-	outfile << "\tsub rsp, 21" << std::endl;
+	outfile << "\tsub rsp, 22" << std::endl;
 	outfile << "\tmov rax, rdi" << std::endl;
 	outfile << "\tmov rbx, 0xA" << std::endl;
 	outfile << "\txor rcx, rcx" << std::endl;
+	outfile << "\tdec rsi" << std::endl;
 	outfile << "\tmov byte [rsi], bl" << std::endl;
 	outfile << "\tinc rcx" << std::endl;
 	outfile << "\tjmp to_string_ui64" << std::endl;
@@ -630,25 +631,27 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					int size = addToSymbols(offset, ls.mIterator.value());
 					addToSymbols(&localOffset, ls.mIterator.value());
 					localSymbols.push_back(ls.mIterator.value().mName);
-					std::string op = ls.mRange.value().mMinimum < ls.mRange.value().mMaximum ? "inc " : "dec ";
+					SymbolInfo& symbol = symbolTable[ls.mIterator.value().mName];
+					std::string op = "inc "; // TODO: Find better way of detecting whether to increment or decrement
 					std::string label = ".label";
 					uint32_t localLabelCount = ++labelCount;
 					label = label.append(std::to_string(localLabelCount));
 					recentLoopLabel = label;
 					printExpression(outfile, p, ls.mRange.value().mMinimum, 0);
 					const char* reg = getRegister("a", size);
-					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << reg << std::endl;
+					bool dereferenceNeeded = symbol.reg == "rbp" || symbol.type.builtinType == Builtin_Type::REF;
+					outfile << "\tmov " << sizes[size] << " " << symbol.location(dereferenceNeeded) << ", " << reg << std::endl;
 					outfile << label << ":" << std::endl;
 					printExpression(outfile, p, ls.mRange.value().mMaximum, 0);
-					outfile << "\tcmp " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << reg << std::endl;
+					outfile << "\tcmp " << sizes[size] << " " << symbol.location(dereferenceNeeded) << ", " << reg << std::endl;
 					outfile << "\tjne .inside_label" << localLabelCount << std::endl;
 					outfile << "\tjmp .not_label" << localLabelCount << std::endl;
 					outfile << ".inside_label" << localLabelCount << ":" << std::endl;
 					printBody(outfile, p, ls.mBody, label, offset, allocs);
 					outfile << ".skip_label" << localLabelCount << ":" << std::endl;
-					outfile << "\tmov " << reg << ", " << sizes[size] << " "  << symbolTable[ls.mIterator.value().mName].location() << std::endl;
+					outfile << "\tmov " << reg << ", " << sizes[size] << " "  << symbol.location(dereferenceNeeded) << std::endl;
 					outfile << "\t" << op << "rax" << std::endl;
-					outfile << "\tmov " << sizes[size] << " " << symbolTable[ls.mIterator.value().mName].location() << ", " << reg << std::endl;
+					outfile << "\tmov " << sizes[size] << " " << symbol.location(dereferenceNeeded) << ", " << reg << std::endl;
 					outfile << "\tjmp .label" << localLabelCount << std::endl;
 					outfile << ".not_label" << localLabelCount << ":" << std::endl;
 					symbolTable.erase(ls.mIterator.value().mName);
@@ -835,7 +838,8 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				outfile << "\tmov rax, " << val.location(false) << std::endl;
 			} else {
 				const char* moveAction = getMoveAction(3, val.size, sign);
-				outfile << "\t" << moveAction << " rax, " << sizes[val.size] << " " << val.location() << std::endl;
+				bool dereferenceNeeded = val.reg == "rbp" || val.type.builtinType == Builtin_Type::REF;
+				outfile << "\t" << moveAction << " rax, " << sizes[val.size] << " " << val.location(dereferenceNeeded) << std::endl;
 			}
 		} else if (expression->mValue.mType == TokenType::OPERATOR) {
 			if (expression->mValue.mText == "++") {
@@ -1162,14 +1166,14 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			int propIndex = klass.getIndexOfProperty(expression->mChildren[0]->mValue.mText);
 			leftSign = klass.mFields[propIndex].mType.name[0] == 'i';
 			leftSize = getSizeFromType(klass.mFields[propIndex].mType);
-			const char* reg = leftSize < 2 ? "rax" : getRegister("a", leftSize);
+			const char* reg = leftSize < 2 || leftSign ? "rax" : getRegister("a", leftSize);
 			const char* moveAction = getMoveAction(3, leftSize, leftSign);
 			outfile << "\t" << moveAction << " " << reg << ", " << sizes[leftSize] << " [rdi+" << klass.mFields[propIndex].mOffset << "]" << "; printExpression, left identifier, class property" << std::endl;
 		} else {
 			SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
 			leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 			leftSize = left.size;
-			const char* reg = leftSize < 2 ? "rax" : getRegister("a", leftSize);
+			const char* reg = leftSize < 2 || leftSign ? "rax" : getRegister("a", leftSize);
 			const char* moveAction = getMoveAction(3, leftSize, leftSign);
 			if (left.reg == "rbp")
 				outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << "; printExpression, left identifier, rbp" << std::endl;
@@ -1195,14 +1199,14 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			int propIndex = klass.getIndexOfProperty(expression->mChildren[1]->mValue.mText);
 			rightSign = klass.mFields[propIndex].mType.name[0] == 'i';
 			rightSize = getSizeFromType(klass.mFields[propIndex].mType);
-			const char* reg = rightSize < 2 ? "rbx" : getRegister("b", rightSize);
+			const char* reg = rightSize < 2 || rightSign ? "rbx" : getRegister("b", rightSize);
 			const char* moveAction = getMoveAction(3, rightSize, rightSign);
 			outfile << "\t" << moveAction << " " << reg << ", " << sizes[rightSize] << " [rdi+" << klass.mFields[propIndex].mOffset << "]" << "; printExpression, right identifier, class property" << std::endl;
 		} else {
 			SymbolInfo& right = symbolTable[expression->mChildren[1]->mValue.mText];
 			rightSign = right.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 			rightSize = right.size;
-			const char* reg = rightSize < 2 ? "rbx" : getRegister("b", rightSize);
+			const char* reg = rightSize < 2 || rightSign ? "rbx" : getRegister("b", rightSize);
 			const char* moveAction = getMoveAction(3, rightSize, rightSign);
 			if (right.reg == "rbp")
 				outfile << "\t" << moveAction << " " << reg << ", " << sizes[right.size] << " " << right.location() << "; printExpression, right identifier, rbp" << std::endl;
@@ -1454,7 +1458,7 @@ int X86_64LinuxYasmCompiler::getSizeFromByteSize(size_t byteSize) {
 		case 2: return 1;
 		case 4: return 2;
 		case 8: return 3;
-		default: return -1;
+		default: return 3;
 	}
 }
 

@@ -25,6 +25,7 @@ namespace forest::parser {
 				{ "char", 4},
 				{ "bool", 1},
 				{ "ref", 8 },
+				{ "cstring", 8},
 				{ "string", 16},
 		};
 	}
