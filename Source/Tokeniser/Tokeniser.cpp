@@ -12,6 +12,7 @@ namespace forest::parser {
 		
 		int start = 0;
 		int end = 0;
+		Tokeniser::mLine = 1;
 		for (size_t i = 0; i < inProgram.size(); i++) {
 			char currChar = inProgram[i];
 			start++;
@@ -56,11 +57,17 @@ namespace forest::parser {
 				currentToken.mType = TokenType::OPERATOR;
 				currentToken.mSubType = TokenSubType::OP_BINARY;
 				endToken(currentToken, tokens);
-			} else if (currentToken.mType == TokenType::MULTILINE_COMMENT && currChar != '*' && inProgram[i+1] != '/') {
-				currentToken.mText.append(1, currChar);
-				continue;
 			} else if (currentToken.mType == TokenType::MULTILINE_COMMENT && currChar == '*' && inProgram[i+1] == '/') {
 				endToken(currentToken, tokens);
+				i++; // Skip '/'
+				continue;
+			} else if (currentToken.mType == TokenType::MULTILINE_COMMENT) {
+				currentToken.mText.append(1, currChar);
+				if (currChar == '\n') {
+					Tokeniser::mLine++;
+					start = 0;
+					end = 0;
+				}
 				continue;
 			} else if (currentToken.mType == TokenType::SINGLELINE_COMMENT && currChar != '\n') {
 				currentToken.mText.append(1, currChar);
@@ -420,8 +427,8 @@ namespace forest::parser {
 					break;
 				case '\r':
 				case '\n':
+					Tokeniser::mLine++;
 					endToken(currentToken, tokens);
-					currentToken.mLineNumber++;
 					start = 0;
 					end = 0;
 					break;
@@ -485,7 +492,7 @@ namespace forest::parser {
 			}
 
 			tokens.push_back(currentToken);
-		} else if (currentToken.mType == TokenType::SINGLELINE_COMMENT) {
+		} else if (currentToken.mType == TokenType::SINGLELINE_COMMENT || currentToken.mType == TokenType::MULTILINE_COMMENT) {
 			std::cout << "Ignoring comment: " << currentToken.mText << std::endl;
 		} else if (currentToken.mType != TokenType::NOTHING) {
 			tokens.push_back(currentToken);
@@ -493,6 +500,7 @@ namespace forest::parser {
 
 		currentToken.mType = TokenType::NOTHING;
 		currentToken.mSubType = TokenSubType::NOTHING;
+		currentToken.mLineNumber = Tokeniser::mLine;
 		currentToken.mText.erase();
 	}
 

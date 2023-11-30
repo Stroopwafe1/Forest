@@ -25,6 +25,7 @@ namespace forest::parser {
 				{ "char", 4},
 				{ "bool", 1},
 				{ "ref", 8 },
+				{ "cstring", 8},
 				{ "string", 16},
 		};
 	}
@@ -199,6 +200,9 @@ namespace forest::parser {
 			}
 		}
 
+		for (const auto& arg : args) {
+			variables.insert({arg.mName, Variable {arg.mType, arg.mName, {}}});
+		}
 		// Parse function body, which is the same as parsing a scoped block.
 		// We have a start, but it's nowhere near accurate
 		std::optional<Block> body = expectBlock();
@@ -206,6 +210,10 @@ namespace forest::parser {
 			std::cerr << "Error: Could not parse function body of function '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
 			exit(1);
 		}
+		for (const auto& arg : args) {
+			variables.erase(arg.mName);
+		}
+
 		std::vector<Statement> statements = body.value().statements;
 
 		if (type.value().builtinType != Builtin_Type::VOID) {
@@ -270,13 +278,16 @@ namespace forest::parser {
 				localVars.push_back(variable.mName);
 			} else if (statement.value().mType == Statement_Type::LOOP) {
 				LoopStatement ls = statement.value().loopStatement.value();
-				size_t byteSize = ls.mIterator.value().mType.byteSize;
-				stackMem += byteSize;
-				if (byteSize > biggestAlloc)
-					biggestAlloc = byteSize;
+				if (ls.mIterator.has_value()) {
+					size_t byteSize = ls.mIterator.value().mType.byteSize;
+					stackMem += byteSize;
+					if (byteSize > biggestAlloc)
+						biggestAlloc = byteSize;
 
-				variables.insert({ls.mIterator.value().mName, ls.mIterator.value() });
-				localVars.push_back(ls.mIterator.value().mName);
+					variables.insert({ls.mIterator.value().mName, ls.mIterator.value() });
+					localVars.push_back(ls.mIterator.value().mName);
+				}
+
 			}
 
 			statements.push_back(statement.value());
@@ -286,7 +297,7 @@ namespace forest::parser {
 			variables.erase(name);
 		}
 
-		stackMem += biggestAlloc;
+		stackMem += biggestAlloc * 2;
 		return Block { statements, stackMem, biggestAlloc };
 	}
 
@@ -645,6 +656,10 @@ namespace forest::parser {
 				alias << "str" << literals.size();
 
 				literals.push_back(Literal{alias.str(), expression->mValue.mText, uint32_t(expression->mValue.mText.size())});
+				if (className.value().mText == "stdout" && functionName.value().mText == "writeln") {
+					literals.at(literals.size() - 1).mContent.append("\n");
+					literals.at(literals.size() - 1).mSize += 1;
+				}
 			}
 
 			std::optional<Token> closingParenthesis = expectOperator(")");
@@ -670,13 +685,6 @@ namespace forest::parser {
 			// ^ Commented out because it did parse the function call correctly, it just didn't end with a semi.
 			// We want it to keep giving parser errors for the rest of the code, not try to parse something else.
 			return std::nullopt;
-		}
-
-		if (className.value().mText == "stdout" && functionName.value().mText == "writeln") {
-			if (!literals.empty()) {
-				literals.at(literals.size() - 1).mContent.append("\n");
-				literals.at(literals.size() - 1).mSize += 1;
-			}
 		}
 
 		returnValue.funcCall = fc;
@@ -746,6 +754,9 @@ namespace forest::parser {
 			Range r = Range { min, max };
 			ls.mRange = r;
 			ls.mIterator = Variable { getTypeFromRange(r), iterator.value().mText, {} };
+		} else {
+			ls.mIterator = std::nullopt;
+			ls.mRange = std::nullopt;
 		}
 		std::optional<Block> body = expectBlock();
 		if (!body.has_value()) {
@@ -1053,6 +1064,7 @@ namespace forest::parser {
 		} else {
 			if (op.mText == "++" || op.mText == "--") {
 				// Don't parse expression
+				// TODO: These aren't handled correctly, also in compilation... Fix it
 				Expression* opNode = new Expression;
 				opNode->mValue = op;
 				values.push_back(opNode);
@@ -1158,9 +1170,9 @@ namespace forest::parser {
 	Type Parser::getTypeFromRange(const Range& range) {
 		// TODO: We cannot know the types at compile time for some expressions
 		if (range.mMinimum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
-			return Type {"i64", Builtin_Type::I64, {}, 4, 4}; // We take the default as something that will actually compile
+			return Type {"ui64", Builtin_Type::UI64, {}, 4, 4}; // We take the default as something that will actually compile
 		if (range.mMaximum->mValue.mSubType != TokenSubType::INTEGER_LITERAL)
-			return Type {"undefined", Builtin_Type::UNDEFINED, {}, 0, 0};
+			return Type {"ui64", Builtin_Type::UI64, {}, 4, 4};
 
 		long range_min = std::stol(range.mMinimum->mValue.mText);
 		long range_max = std::stol(range.mMaximum->mValue.mText);
@@ -1201,6 +1213,11 @@ namespace forest::parser {
 		// Identifier<Type>
 		std::optional<Token> id = expectIdentifier();
 		if (!id.has_value()) return std::nullopt;
+		if (variables.find(id.value().mText) != variables.end()) {
+			// Our identifier was a variable, this statement is not a declaration
+			//std::cout << "[INFO]: ExpectType identifier was found in the variables" << std::endl;
+			return std::nullopt;
+		}
 
 		std::optional<Token> openingBracket = expectOperator("[");
 		if (!openingBracket.has_value()) {

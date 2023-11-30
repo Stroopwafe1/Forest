@@ -97,6 +97,7 @@ namespace forest::parser {
 		static std::vector<Token> parse(const std::string& inProgram, const std::string& fileName);
 
 		static void endToken(Token& token, std::vector<Token>& tokens);
+		inline static size_t mLine;
 	};
 
 	std::ostream& operator<<(std::ostream&, const Token&);

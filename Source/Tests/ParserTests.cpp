@@ -39,6 +39,9 @@ TEST_F(ParserTests, ParserParseBareMainShouldParse) {
 	FuncArg arg = function.mArgs[0];
 	EXPECT_EQ(arg.mType.builtinType, Builtin_Type::ARRAY);
 	EXPECT_STREQ(arg.mName.c_str(), "argv");
+	ASSERT_EQ(arg.mType.subTypes.size(), 1);
+	Type& sub = arg.mType.subTypes[0];
+	EXPECT_STREQ(sub.name.c_str(), "string");
 
 	Block block = function.mBody;
 	ASSERT_EQ(block.statements.size(), 1);
@@ -497,7 +500,7 @@ TEST_F(ParserTests, ParserParseDuplicateVariableDeclarationShouldError) {
 	ASSERT_TRUE(block.has_value());
 	Block b = block.value();
 	ASSERT_EQ(b.statements.size(), 1);
-	EXPECT_EQ(b.stackMemory, 2);
+	EXPECT_EQ(b.stackMemory, 3);
 
 	Statement statement = block->statements[0];
 	Variable var = statement.variable.value();
@@ -519,7 +522,7 @@ TEST_F(ParserTests, ParserTryParseVariableAssignment) {
 	ASSERT_TRUE(block.has_value());
 	Block b = block.value();
 	ASSERT_EQ(b.statements.size(), 2);
-	EXPECT_EQ(b.stackMemory, 2);
+	EXPECT_EQ(b.stackMemory, 3);
 
 	Statement statement = block->statements[0];
 	Variable var = statement.variable.value();
@@ -551,7 +554,7 @@ TEST_F(ParserTests, ParserTryParseUnknownVariableAssignment) {
 	ASSERT_TRUE(block.has_value());
 	Block b = block.value();
 	ASSERT_EQ(b.statements.size(), 1);
-	EXPECT_EQ(b.stackMemory, 2);
+	EXPECT_EQ(b.stackMemory, 3);
 
 	Statement statement = block->statements[0];
 	Variable var = statement.variable.value();
