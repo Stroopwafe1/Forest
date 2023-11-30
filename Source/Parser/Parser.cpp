@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <optional>
 #include <sstream>
@@ -99,22 +100,21 @@ namespace forest::parser {
 			}
 		}
 
+		std::vector<std::string> internals = {"writeln", "write", "read", "readln", "alloc", "dealloc"};
 		for (const auto& fc : _funcCalls) {
 			bool found = false;
 			if (!fc.mClassName.empty()) {
 				for (const auto& f : classes[fc.mClassName].mFunctions) {
-					if (fc.mFunctionName == f.mName) found = true;
+					if (fc.mFunctionName == f.mName || std::find(internals.begin(), internals.end(), fc.mFunctionName) != internals.end()) found = true;
 				}
 			} else {
 				for (const auto& f : functions) {
-					if (fc.mFunctionName == f.mName) found = true;
+					if (fc.mFunctionName == f.mName || std::find(internals.begin(), internals.end(), fc.mFunctionName) != internals.end()) found = true;
 				}
 			}
 			if (!found)
 				externalFunctions.push_back(fc);
 		}
-		for (const auto& c : classes)
-			std::cout << "Class " << c.first << ": " << c.second.mName << std::endl;
 		return Programme { functions, literals, externalFunctions, libDependencies, imports, variables, structs, classes, requires_libs };
 	}
 
@@ -966,6 +966,27 @@ namespace forest::parser {
 				redefinition = true;
 				statement.mContent = nullptr;
 			}
+		} else if (v.mType.builtinType == Builtin_Type::REF) {
+			std::optional<Token> arrayBracket = expectOperator("[");
+			if (arrayBracket.has_value()) {
+				Statement s;
+				s.mType = Statement_Type::ARRAY_INDEX;
+				Expression* expression = expectExpression(s, true);
+				if (expression == nullptr) {
+					std::cerr << "Expected a value to index ref variable " << name.value() << " at " << *mCurrentToken << std::endl;
+					return std::nullopt;
+				}
+
+				std::optional<Token> closingBracket = expectOperator("]");
+				if (!closingBracket.has_value()) {
+					std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in variable assignment" << std::endl;
+					return std::nullopt;
+				}
+				statement.mContent = expression;
+			} else {
+				redefinition = true;
+				statement.mContent = nullptr;
+			}
 		} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
 			// Access property
 			std::optional<Token> dot = expectOperator(".");
@@ -1053,6 +1074,11 @@ namespace forest::parser {
 						return std::nullopt;
 					}
 				}
+			} else if (v.mType.builtinType == Builtin_Type::REF) {
+				Statement s;
+				s.mType = Statement_Type::NOTHING;
+				Expression* expression = expectExpression(s);
+				values.push_back(expression);
 			} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
 				if (!ParseStructAssignment(v.mType.name, values))
 					return std::nullopt;

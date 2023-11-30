@@ -836,11 +836,10 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						SymbolInfo& arr = symbolTable[v.mName];
 						int actualSize = getSizeFromByteSize(arr.type.subTypes[0].byteSize);
 						printExpression(outfile, p, statement.mContent, 0);
-						// NOTE: I'm choosing to set the index to r11, which might get overwritten. Instead we could also do a push rax/pop r11
-						// If unexpected behaviour is found, go with the more safe route of using the stack
-						outfile << "\tmov r11, rax" << std::endl;
+						outfile << "\tpush rax" << std::endl;
 
 						printExpression(outfile, p, v.mValues[0], 0);
+						outfile << "\tpop r11" << std::endl;
 						outfile << "\tmov " << sizes[actualSize] << " [" << arr.reg;
 						if (arr.offset > 0)
 							outfile << "+" << arr.offset << "+r11*" << int(arr.type.subTypes[0].byteSize);
@@ -849,6 +848,24 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						else
 							outfile << "+r11*" << int(arr.type.subTypes[0].byteSize);
 						outfile << "], " << getRegister("a", actualSize) << std::endl;
+
+					} else if (v.mType.builtinType == Builtin_Type::REF) {
+						SymbolInfo& ref = symbolTable[v.mName];
+						int actualSize = getSizeFromByteSize(ref.type.subTypes[0].byteSize);
+						printExpression(outfile, p, statement.mContent, 0);
+
+						outfile << "\tlea r11, " << sizes[actualSize] << " [" << ref.reg;
+						if (ref.offset > 0)
+							outfile << "+" << ref.offset;
+						else if (ref.offset < 0)
+							outfile << "-" << -ref.offset;
+						outfile << "]" << std::endl;
+						outfile << "\tmov r11, qword [r11]" << std::endl;
+						outfile << "\tmov rbx, " << int(ref.type.subTypes[0].byteSize) << std::endl;
+						outfile << "\tmul rbx" << std::endl;
+						outfile << "\tadd r11, rax" << std::endl;
+						printExpression(outfile, p, v.mValues[0], 0);
+						outfile << "\tmov " << sizes[actualSize] << " [r11], " << getRegister("a", actualSize) << std::endl;
 
 					} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
 						std::string propName = v.mName.substr(index + 1);
@@ -1059,6 +1076,9 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					if (fc.mFunctionName.substr(0, 4) == "SYS_") {
 						printSyscall(outfile, fc.mFunctionName);
 						outfile << "\tsyscall" << std::endl;
+					} else if (fc.mFunctionName == "dealloc") {
+						outfile << "\tmov rax, 11" << std::endl;
+						outfile << "\tsyscall" << std::endl;
 					} else {
 						outfile << "\tcall ";
 						if (!fc.mNamespace.empty())
@@ -1238,7 +1258,8 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				outfile << "-" << -arr.offset;
 			outfile << "]" << std::endl;
 			outfile << "\tadd rax, rbx" << std::endl;
-			outfile << "\t" << moveAction << " r10, " <<  sizes[actualSize] << " [rax]" << std::endl;
+			const char* reg = actualSize < 2 ? "r10" : getRegister("10", actualSize);
+			outfile << "\t" << moveAction << " " << reg << ", " <<  sizes[actualSize] << " [rax]" << std::endl;
 			if (nodeType == 1) {
 				outfile << "\tmov rbx, r10; printExpression, nodeType=1, ref index" << std::endl;
 			} else {
@@ -1304,6 +1325,15 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		}
 		if (ss.str().substr(0, 4) == "SYS_") {
 			printSyscall(outfile, ss.str());
+			outfile << "\tsyscall" << std::endl;
+		} else if (ss.str() == "alloc") {
+			outfile << "\tmov rax, 9" << std::endl;
+			outfile << "\tmov rsi, rdi" << std::endl;
+			outfile << "\txor rdi, rdi" << std::endl;
+			outfile << "\tmov rdx, 3" << std::endl;
+			outfile << "\tmov r10, 34" << std::endl;
+			outfile << "\txor r8, r8" << std::endl;
+			outfile << "\txor r9, r9" << std::endl;
 			outfile << "\tsyscall" << std::endl;
 		} else {
 			outfile << "\tcall " << ss.str() << std::endl;
