@@ -968,7 +968,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						} else {
 							SymbolInfo& symbol = symbolTable[v.mName];
 							printExpression(outfile, p, v.mValues[0], 0);
-							bool dereferenceNeeded = symbol.reg == "rbp" || symbol.type.builtinType == Builtin_Type::REF;
+							bool dereferenceNeeded = symbol.reg == "rbp";
 							outfile << "\tmov " << sizes[symbol.size] << " " << symbol.location(dereferenceNeeded) << ", " << getRegister("a", symbol.size) << "; VAR_ASSIGNMENT else variable " << v.mName << std::endl;
 						}
 					}
@@ -989,19 +989,18 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					recentLoopLabel = label;
 					printExpression(outfile, p, ls.mRange.value().mMinimum, 0);
 					const char* reg = getRegister("a", size);
-					bool dereferenceNeeded = symbol.reg == "rbp" || symbol.type.builtinType == Builtin_Type::REF;
-					outfile << "\tmov " << sizes[size] << " " << symbol.location(dereferenceNeeded) << ", " << reg << "; LOOP " << ls.mIterator.value().mName << std::endl;
+					outfile << "\tmov " << sizes[size] << " " << symbol.location() << ", " << reg << "; LOOP " << ls.mIterator.value().mName << std::endl;
 					outfile << label << ":" << std::endl;
 					printExpression(outfile, p, ls.mRange.value().mMaximum, 0);
-					outfile << "\tcmp " << sizes[size] << " " << symbol.location(dereferenceNeeded) << ", " << reg << "; LOOP " << ls.mIterator.value().mName << std::endl;
+					outfile << "\tcmp " << sizes[size] << " " << symbol.location() << ", " << reg << "; LOOP " << ls.mIterator.value().mName << std::endl;
 					outfile << "\tjl .inside_label" << localLabelCount << std::endl;
 					outfile << "\tjmp .not_label" << localLabelCount << std::endl;
 					outfile << ".inside_label" << localLabelCount << ":" << std::endl;
 					printBody(outfile, p, ls.mBody, label, offset, allocs);
 					outfile << ".skip_label" << localLabelCount << ":" << std::endl;
-					outfile << "\tmov " << reg << ", " << sizes[size] << " "  << symbol.location(dereferenceNeeded) << "; LOOP " << ls.mIterator.value().mName << std::endl;
+					outfile << "\tmov " << reg << ", " << sizes[size] << " "  << symbol.location() << "; LOOP " << ls.mIterator.value().mName << std::endl;
 					outfile << "\t" << op << "rax" << std::endl;
-					outfile << "\tmov " << sizes[size] << " " << symbol.location(dereferenceNeeded) << ", " << reg << "; LOOP " << ls.mIterator.value().mName << std::endl;
+					outfile << "\tmov " << sizes[size] << " " << symbol.location() << ", " << reg << "; LOOP " << ls.mIterator.value().mName << std::endl;
 					outfile << "\tjmp .label" << localLabelCount << std::endl;
 					outfile << ".not_label" << localLabelCount << ":" << std::endl;
 					symbolTable.erase(ls.mIterator.value().mName);
@@ -1189,7 +1188,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			} else {
 				const char* moveAction = getMoveAction(3, val.size, sign);
 				const char* reg = (val.size < 2 || sign) ? "rax" : getRegister("a", val.size);
-				bool dereferenceNeeded = val.reg == "rbp" || val.type.builtinType == Builtin_Type::REF;
+				bool dereferenceNeeded = val.reg == "rbp";
 				outfile << "\t" << moveAction << " " << reg << ", " << sizes[val.size] << " " << val.location(dereferenceNeeded) << "; printExpression variable " << expression->mValue.mText << std::endl;
 			}
 		} else if (expression->mValue.mType == TokenType::OPERATOR) {
@@ -1231,7 +1230,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		if (arr.type.builtinType == Builtin_Type::ARRAY) {
 			bool sign = arr.type.subTypes[0].name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 			const char* moveAction = getMoveAction(3, actualSize, sign);
-			const char* reg = actualSize < 2 ? "r11" : getRegister("11", actualSize);
+			const char* reg = actualSize < 2 ? "r12" : getRegister("12", actualSize);
 			outfile << "\t" << moveAction << " " << reg << ", " << sizes[actualSize] << " [" << arr.reg;
 			if (arr.offset > 0)
 				outfile << "+" << arr.offset << "+rax*" << int(arr.type.subTypes[0].byteSize);
@@ -1241,20 +1240,15 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				outfile << "+rax*" << int(arr.type.subTypes[0].byteSize);
 			outfile << "]" << "; printExpression array " << expression->mChildren[0]->mValue.mText << std::endl;
 			if (nodeType == 1) {
-				outfile << "\tmov rbx, r11; printExpression, nodeType=1, array index" << std::endl;
+				outfile << "\tmov rbx, r12; printExpression, nodeType=1, array index" << std::endl;
 			} else {
-				outfile << "\tmov rax, r11" << std::endl;
+				outfile << "\tmov rax, r12" << std::endl;
 			}
 		} else if (arr.type.builtinType == Builtin_Type::REF) {
 			const char* moveAction = getMoveAction(3, actualSize, false);
 			outfile << "\tmov rbx, " << arr.type.subTypes[0].byteSize << std::endl;
 			outfile << "\tmul rbx" << std::endl;
-			outfile << "\tmov rbx, qword [" << arr.reg;
-			if (arr.offset > 0)
-				outfile << "+" << arr.offset;
-			else if (arr.offset < 0)
-				outfile << "-" << -arr.offset;
-			outfile << "]" << std::endl;
+			outfile << "\tmov rbx, qword " << arr.location(false) << std::endl;
 			outfile << "\tadd rax, rbx" << std::endl;
 			const char* reg = actualSize < 2 ? "r11" : getRegister("11", actualSize);
 			outfile << "\t" << moveAction << " " << reg << ", " <<  sizes[actualSize] << " [rax]" << "; printExpression ref " << expression->mChildren[0]->mValue.mText << std::endl;
@@ -1264,7 +1258,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				outfile << "\tmov rax, r11" << std::endl;
 			}
 		}
-		return ExpressionPrinted{};
+		return ExpressionPrinted{true, false, 3};
 	} else if (expression->mValue.mText == "(") {
 		const char callingConvention[6][4] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 		std::stringstream ss;
