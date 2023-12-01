@@ -691,8 +691,10 @@ namespace forest::parser {
 		if (fc.mIsExternal)
 			externalFunctions.push_back(fc);
 		if (!(functionName.value().mText == "write" || functionName.value().mText == "writeln")) {
-			const Variable& klass = variables[className.value().mText];
-			fc.mClassName = klass.mType.name;
+			if (variables.contains(className.value().mText)) {
+				const Variable& klass = variables[className.value().mText];
+				fc.mClassName = klass.mType.name;
+			}
 			_funcCalls.push_back(fc);
 		}
 		return returnValue;
@@ -753,7 +755,9 @@ namespace forest::parser {
 			}
 			Range r = Range { min, max };
 			ls.mRange = r;
-			ls.mIterator = Variable { getTypeFromRange(r), iterator.value().mText, {} };
+			Variable v = Variable { getTypeFromRange(r), iterator.value().mText, {}};
+			variables.insert({v.mName, v});
+			ls.mIterator = v;
 		} else {
 			ls.mIterator = std::nullopt;
 			ls.mRange = std::nullopt;
@@ -763,6 +767,9 @@ namespace forest::parser {
 			std::cerr << "Expected a code block for the loop at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
+		}
+		if (ls.mIterator.has_value()) {
+			variables.erase(ls.mIterator.value().mName);
 		}
 		ls.mBody = body.value();
 		return Statement { Statement_Type::LOOP, content, std::nullopt, ls};

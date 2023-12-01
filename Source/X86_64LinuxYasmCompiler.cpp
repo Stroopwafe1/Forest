@@ -994,7 +994,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					outfile << label << ":" << std::endl;
 					printExpression(outfile, p, ls.mRange.value().mMaximum, 0);
 					outfile << "\tcmp " << sizes[size] << " " << symbol.location(dereferenceNeeded) << ", " << reg << std::endl;
-					outfile << "\tjne .inside_label" << localLabelCount << std::endl;
+					outfile << "\tjl .inside_label" << localLabelCount << std::endl;
 					outfile << "\tjmp .not_label" << localLabelCount << std::endl;
 					outfile << ".inside_label" << localLabelCount << ":" << std::endl;
 					printBody(outfile, p, ls.mBody, label, offset, allocs);
@@ -1233,7 +1233,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		if (arr.type.builtinType == Builtin_Type::ARRAY) {
 			bool sign = arr.type.subTypes[0].name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 			const char* moveAction = getMoveAction(3, actualSize, sign);
-			const char* reg = actualSize < 2 ? "r10" : getRegister("10", actualSize);
+			const char* reg = actualSize < 2 ? "r11" : getRegister("11", actualSize);
 			outfile << "\t" << moveAction << " " << reg << ", " << sizes[actualSize] << " [" << arr.reg;
 			if (arr.offset > 0)
 				outfile << "+" << arr.offset << "+rax*" << int(arr.type.subTypes[0].byteSize);
@@ -1243,9 +1243,9 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				outfile << "+rax*" << int(arr.type.subTypes[0].byteSize);
 			outfile << "]" << std::endl;
 			if (nodeType == 1) {
-				outfile << "\tmov rbx, r10; printExpression, nodeType=1, array index" << std::endl;
+				outfile << "\tmov rbx, r11; printExpression, nodeType=1, array index" << std::endl;
 			} else {
-				outfile << "\tmov rax, r10" << std::endl;
+				outfile << "\tmov rax, r11" << std::endl;
 			}
 		} else if (arr.type.builtinType == Builtin_Type::REF) {
 			const char* moveAction = getMoveAction(3, actualSize, false);
@@ -1258,12 +1258,12 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				outfile << "-" << -arr.offset;
 			outfile << "]" << std::endl;
 			outfile << "\tadd rax, rbx" << std::endl;
-			const char* reg = actualSize < 2 ? "r10" : getRegister("10", actualSize);
+			const char* reg = actualSize < 2 ? "r11" : getRegister("11", actualSize);
 			outfile << "\t" << moveAction << " " << reg << ", " <<  sizes[actualSize] << " [rax]" << std::endl;
 			if (nodeType == 1) {
-				outfile << "\tmov rbx, r10; printExpression, nodeType=1, ref index" << std::endl;
+				outfile << "\tmov rbx, r11; printExpression, nodeType=1, ref index" << std::endl;
 			} else {
-				outfile << "\tmov rax, r10" << std::endl;
+				outfile << "\tmov rax, r11" << std::endl;
 			}
 		}
 		return ExpressionPrinted{};
@@ -1376,21 +1376,21 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 					SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
 					leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 					leftSize = left.size;
-					const char* reg = "r10";
+					const char* reg = "r11";
 					const char* moveAction = getMoveAction(3, leftSize, leftSign);
 					outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << std::endl;
-					outfile << "\tmov rax, [r10]" << std::endl;
+					outfile << "\tmov rax, [r11]" << std::endl;
 				} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 					throw std::runtime_error("Cannot dereference a string literal value");
 				} else if (child->mValue.mType == TokenType::LITERAL) {
-					outfile << "\tmov r10, " << child->mValue.mText << std::endl;
-					outfile << "\tmov rax, [r10]" << std::endl;
+					outfile << "\tmov r11, " << child->mValue.mText << std::endl;
+					outfile << "\tmov rax, [r11]" << std::endl;
 				} else {
 					throw std::runtime_error("Unexpected dereference");
 				}
 			} else {
-				outfile << "\tmov r10, rax" << std::endl;
-				outfile << "\tmov rax, [r10]" << std::endl;
+				outfile << "\tmov r11, rax" << std::endl;
+				outfile << "\tmov rax, [r11]" << std::endl;
 			}
 		} else if (expression->mValue.mText == "!") {
 			ExpressionPrinted valPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
@@ -1516,9 +1516,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 
 	ExpressionPrinted leftPrinted = printExpression(outfile, p, expression->mChildren[0], -1);
 	if (leftPrinted.printed) {
-		std::string r1 = "r10";//getRegister("10", leftPrinted.size);
-		std::string r2 = "rax";//getRegister("a", leftPrinted.size);
-		outfile << "\tmov " << r1 << ", " << r2 << std::endl; // Save left
+		outfile << "\tpush rax; printExpression, leftPrinted, save left" << std::endl; // Save left
 	}
 	ExpressionPrinted rightPrinted = printExpression(outfile, p, expression->mChildren[1], 1);
 
@@ -1592,9 +1590,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 	curr.sign = leftPrinted.sign || rightPrinted.sign || leftSign || rightSign;
 
 	if (leftPrinted.printed) {
-		std::string r1 = "rax";//getRegister("a", leftPrinted.size);
-		std::string r2 = "r10";//getRegister("10", leftPrinted.size);
-		outfile << "\tmov " << r1 << ", " << r2 << "; printExpression, leftPrinted, recover left" << std::endl; // Recover left
+		outfile << "\tpop rax; printExpression, leftPrinted, recover left" << std::endl; // Recover left
 	}
 
 	if (expression->mValue.mText == "+") {
