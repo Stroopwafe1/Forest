@@ -73,6 +73,7 @@ private:
 	const char* convertARegSize(int size);
 	const char* getDefineBytes(size_t byteSize);
 	const char* getReserveBytes(size_t byteSize);
+	const char* escape(const char* input);
 };
 
 

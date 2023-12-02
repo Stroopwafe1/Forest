@@ -486,7 +486,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 			outfile << "\tmov rbp, rsp" << std::endl;
 			outfile << "; =============== END PROLOGUE ===============" << std::endl;
 
-			int offset = -int(function.mBody.biggestAlloc);
+			int offset = 0;
 			int argOffset = 0;
 
 			std::vector<std::string> localSymbols;
@@ -535,7 +535,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 
 		// Construct symbol table, keeping track of scope
 		// offset from stack, type
-		int offset = -int(function.mBody.biggestAlloc);
+		int offset = 0;
 		int argOffset = 0;
 
 		std::vector<std::string> localSymbols;
@@ -794,7 +794,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							outfile << "+" << var.offset - s.mFields[i].mOffset;
 						else
 							outfile << "-" << -(var.offset + s.mFields[i].mOffset);
-						outfile << "], " << getRegister("a", actualSize) << "; VAR_DECL_ASSIGN STRUCT " << v.mType.name << "." << s.mFields[i].mNames[0] << std::endl;
+						outfile << "], " << getRegister("a", actualSize) << "; VAR_DECL_ASSIGN STRUCT " << v.mType.name << " " << v.mName << "." << s.mFields[i].mNames[0] << std::endl;
 					}
 				} else if (v.mType.builtinType == Builtin_Type::CLASS) {
 					const Class& c = p.classes.at(v.mType.name);
@@ -917,11 +917,6 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						}
 					} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
 						const Struct& s = p.structs.at(v.mType.name);
-						(*offset) -= int(s.mSize);
-						localOffset -= int(s.mSize);
-						addToSymbols(offset, v);
-						addToSymbols(&localOffset, v);
-						localSymbols.push_back(v.mName);
 						SymbolInfo& var = symbolTable[v.mName];
 
 						for (int i = 0; i < s.mFields.size(); i++) {
@@ -938,11 +933,6 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						}
 					}  else if (v.mType.builtinType == Builtin_Type::CLASS) {
 						const Class& c = p.classes.at(v.mType.name);
-						(*offset) -= int(c.mSize);
-						localOffset -= int(c.mSize);
-						addToSymbols(offset, v);
-						addToSymbols(&localOffset, v);
-						localSymbols.push_back(v.mName);
 						SymbolInfo& var = symbolTable[v.mName];
 
 						for (int i = 0; i < c.mFields.size(); i++) {
@@ -1178,8 +1168,10 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		// No expression, just base value
 		if (expression->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 			outfile << "\tmov rax, " << p.findLiteralByContent(expression->mValue.mText).value().mAlias << std::endl;
-		} else if (expression->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
+		} else if (expression->mValue.mSubType == TokenSubType::INTEGER_LITERAL || expression->mValue.mSubType == TokenSubType::BOOLEAN_LITERAL) {
 			outfile << "\tmov rax, " << expression->mValue.mText << std::endl;
+		} else if (expression->mValue.mSubType == TokenSubType::CHAR_LITERAL) {
+			outfile << "\tmov rax, " << int(expression->mValue.mText[0]) << "; CHAR_LITERAL '" << escape(&expression->mValue.mText[0]) << "'" << std::endl;
 		} else if (expression->mValue.mType == TokenType::IDENTIFIER) {
 			SymbolInfo& val = symbolTable[expression->mValue.mText];
 			bool sign = val.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
@@ -1439,7 +1431,11 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 					throw std::runtime_error("Cannot `~` a string literal value");
 				} else if (child->mValue.mType == TokenType::LITERAL) {
-					outfile << "\tmov rax, " << child->mValue.mText << std::endl;
+					if (child->mValue.mSubType == TokenSubType::CHAR_LITERAL) {
+						outfile << "\tmov rax, " << int(child->mValue.mText[0]) << std::endl;
+					} else {
+						outfile << "\tmov rax, " << child->mValue.mText << std::endl;
+					}
 					outfile << "\tnot rax" << std::endl;
 				} else {
 					throw std::runtime_error("Unexpected `!`");
@@ -1452,6 +1448,9 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		return ExpressionPrinted{ true, false, 3 };
 	} else if (expression->mValue.mText == ".") {
 		// We have a struct property
+		if (!symbolTable.contains(expression->mChildren[0]->mValue.mText)) {
+			throw std::runtime_error("Trying to get property of unknown symbol " + expression->mChildren[0]->mValue.mText);
+		}
 		SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText]; // Left is variable name
 		std::string propName = expression->mChildren[1]->mValue.mText; // Right is property name
 		std::string structName = left.type.name;
@@ -1541,6 +1540,14 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		leftSize = size;
 		const char* reg = "rax";//getRegister("a", size);
 		outfile << "\tmov " << reg << ", " << expression->mChildren[0]->mValue.mText << "; printExpression, left int" << std::endl;
+	} else if (expression->mChildren[0]->mValue.mSubType == TokenSubType::CHAR_LITERAL) {
+		leftSign = false;
+		leftSize = 1;
+		outfile << "\tmov rax, " << int(expression->mChildren[0]->mValue.mText[0]) << "; printExpression, left char '" << escape(&expression->mChildren[0]->mValue.mText[0]) << "'" << std::endl;
+	} else if (expression->mChildren[0]->mValue.mSubType == TokenSubType::BOOLEAN_LITERAL) {
+		leftSign = false;
+		leftSize = 1;
+		outfile << "\tmov rax, " << expression->mChildren[0]->mValue.mText << "; printExpression, left bool" << std::endl;
 	} else {
 		leftSize = leftPrinted.size;
 	}
@@ -1574,6 +1581,14 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		rightSize = size;
 		const char* reg = "rbx";//getRegister("b", size);
 		outfile << "\tmov " << reg << ", " << expression->mChildren[1]->mValue.mText << "; printExpression, right int" << std::endl;
+	} else if (expression->mChildren[1]->mValue.mSubType == TokenSubType::CHAR_LITERAL) {
+		rightSign = false;
+		rightSize = 1;
+		outfile << "\tmov rbx, " << int(expression->mChildren[1]->mValue.mText[0]) << "; printExpression, right char '" << escape(&expression->mChildren[1]->mValue.mText[0]) << "'" << std::endl;
+	} else if (expression->mChildren[1]->mValue.mSubType == TokenSubType::BOOLEAN_LITERAL) {
+		rightSign = false;
+		rightSize = 1;
+		outfile << "\tmov rbx, " << expression->mChildren[1]->mValue.mText << "; printExpression, right bool" << std::endl;
 	} else {
 		rightSize = rightPrinted.size;
 	}
@@ -1874,4 +1889,21 @@ const char* X86_64LinuxYasmCompiler::getReserveBytes(size_t byteSize) {
 		case 16: return "resdq";
 	}
 	return "UNREACHABLE";
+}
+
+const char* X86_64LinuxYasmCompiler::escape(const char* input) {
+	switch (*input) {
+		case '\a': return "\\a"; break;
+		case '\b': return "\\b"; break;
+		case '\f': return "\\f"; break;
+		case '\n': return "\\n"; break;
+		case '\r': return "\\r"; break;
+		case '\t': return "\\t"; break;
+		case '\v': return "\\v"; break;
+		case '\\': return "\\\\"; break;
+		case '\'': return "\\'"; break;
+		case '\"': return "\\\""; break;
+		case '\?': return "\\\?"; break;
+		default: return input;
+	}
 }
