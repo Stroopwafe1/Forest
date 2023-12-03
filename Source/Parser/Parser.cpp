@@ -1095,7 +1095,10 @@ namespace forest::parser {
 					values.push_back(expression);
 			}
 		} else {
-			if (op.mText == "++" || op.mText == "--") {
+			if (v.mType.builtinType == Builtin_Type::ARRAY && v.mType.subTypes[0].builtinType == Builtin_Type::STRUCT) {
+				if (!ParseStructAssignment(v.mType.subTypes[0].name, values))
+					return std::nullopt;
+			} else if (op.mText == "++" || op.mText == "--") {
 				// Don't parse expression
 				// TODO: These aren't handled correctly, also in compilation... Fix it
 				Expression* opNode = new Expression;

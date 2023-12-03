@@ -508,6 +508,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 
 			outfile << ".exit:" << std::endl;
 			outfile << "; =============== EPILOGUE ===============" << std::endl;
+			outfile << "\tmov rsp, rbp" << std::endl;
 			outfile << "\tpop rbp" << std::endl;
 			outfile << "\tret" << std::endl;
 			outfile << "; =============== END EPILOGUE ===============" << std::endl;
@@ -564,6 +565,7 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 		outfile << ".exit:" << std::endl;
 		if (function.mName != "main") {
 			outfile << "; =============== EPILOGUE ===============" << std::endl;
+			outfile << "\tmov rsp, rbp" << std::endl;
 			outfile << "\tpop rbp" << std::endl;
 			outfile << "\tret" << std::endl;
 			outfile << "; =============== END EPILOGUE ===============" << std::endl;
@@ -958,7 +960,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						} else {
 							SymbolInfo& symbol = symbolTable[v.mName];
 							printExpression(outfile, p, v.mValues[0], 0);
-							bool dereferenceNeeded = symbol.reg == "rbp";
+							bool dereferenceNeeded = symbol.reg == "rbp" || symbol.isGlobal;
 							outfile << "\tmov " << sizes[symbol.size] << " " << symbol.location(dereferenceNeeded) << ", " << getRegister("a", symbol.size) << "; VAR_ASSIGNMENT else variable " << v.mName << std::endl;
 						}
 					}
@@ -1011,12 +1013,14 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				break;
 			}
 			case Statement_Type::BREAK:
-				if (!recentLoopLabel.empty())
+				if (!recentLoopLabel.empty()) {
 					outfile << "\tjmp .not_" << recentLoopLabel.substr(1) << std::endl;
+				}
 				break;
 			case Statement_Type::SKIP:
-				if (!recentLoopLabel.empty())
+				if (!recentLoopLabel.empty()) {
 					outfile << "\tjmp .skip_" << recentLoopLabel.substr(1) << std::endl;
+				}
 				break;
 			case Statement_Type::FUNC_CALL: {
 				FuncCallStatement fc = statement.funcCall.value();
@@ -1175,11 +1179,11 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		} else if (expression->mValue.mType == TokenType::IDENTIFIER) {
 			SymbolInfo& val = symbolTable[expression->mValue.mText];
 			bool sign = val.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
+			const char* moveAction = getMoveAction(3, val.size, sign);
+			const char* reg = (val.size < 2 || sign) ? "rax" : getRegister("a", val.size);
 			if (val.isGlobal) {
-				outfile << "\tmov rax, " << val.location(false) << std::endl;
+				outfile << "\t" << moveAction << " " << reg << ", " << sizes[val.size] << " "  << val.location(true) << "; printExpression global variable " << expression->mValue.mText << std::endl;
 			} else {
-				const char* moveAction = getMoveAction(3, val.size, sign);
-				const char* reg = (val.size < 2 || sign) ? "rax" : getRegister("a", val.size);
 				bool dereferenceNeeded = val.reg == "rbp";
 				outfile << "\t" << moveAction << " " << reg << ", " << sizes[val.size] << " " << val.location(dereferenceNeeded) << "; printExpression variable " << expression->mValue.mText << std::endl;
 			}
@@ -1341,10 +1345,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			if (child->mValue.mType == TokenType::IDENTIFIER) {
 				SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
 				leftSize = left.size;
-				if (left.reg != "rbp")
-					outfile << "\tlea rax, " << left.location(false) << "; printExpression variable " << expression->mChildren[0]->mValue.mText << std::endl;
-				else
-					outfile << "\tlea rax, " << left.location(true) << "; printExpression variable " << expression->mChildren[0]->mValue.mText << std::endl;
+				outfile << "\tlea rax, " << left.location(true) << "; printExpression variable " << expression->mChildren[0]->mValue.mText << std::endl;
 			} else if (child->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 				outfile << "\tlea rax, " << p.findLiteralByContent(child->mValue.mText).value().mAlias << std::endl;
 			} else if (child->mValue.mType == TokenType::LITERAL) {
@@ -1526,10 +1527,11 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			leftSize = left.size;
 			const char* reg = leftSize < 2 || leftSign ? "rax" : getRegister("a", leftSize);
 			const char* moveAction = getMoveAction(3, leftSize, leftSign);
+			bool dereferenceNeeded = left.isGlobal;
 			if (left.reg == "rbp")
 				outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << "; printExpression, left identifier, rbp variable " << expression->mChildren[0]->mValue.mText << std::endl;
 			else
-				outfile << "\t" << moveAction << " " << reg << ", " << left.location(false) << "; printExpression, left identifier, not rbp" << std::endl;
+				outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location(dereferenceNeeded) << "; printExpression, left identifier, not rbp" << std::endl;
 		}
 	} else if (expression->mChildren[0]->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 		int size = getSizeFromNumber(expression->mChildren[0]->mValue.mText);
@@ -1567,10 +1569,11 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			rightSize = right.size;
 			const char* reg = rightSize < 2 || rightSign ? "rbx" : getRegister("b", rightSize);
 			const char* moveAction = getMoveAction(3, rightSize, rightSign);
+			bool dereferenceNeeded = right.isGlobal;
 			if (right.reg == "rbp")
 				outfile << "\t" << moveAction << " " << reg << ", " << sizes[right.size] << " " << right.location() << "; printExpression, right identifier, rbp variable " << expression->mChildren[1]->mValue.mText << std::endl;
 			else
-				outfile << "\t" << moveAction << " " << reg << ", " << right.location(false) << "; printExpression, right identifier, not rbp" << std::endl;
+				outfile << "\t" << moveAction << " " << reg << ", " << sizes[right.size] << " " << right.location(dereferenceNeeded) << "; printExpression, right identifier, not rbp" << std::endl;
 		}
 	} else if (expression->mChildren[1]->mValue.mSubType == TokenSubType::INTEGER_LITERAL) {
 		int size = getSizeFromNumber(expression->mChildren[1]->mValue.mText);
