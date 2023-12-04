@@ -412,8 +412,9 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 			outfile << std::endl;
 		}
 	}
+	outfile << "section .data" << std::endl;
+	outfile << "\tArray_OOB: db \"Array index out of bounds!\",0xA,0" << std::endl;
 	if (!initVars.empty() || !p.literals.empty()) {
-		outfile << "section .data" << std::endl;
 		for (const auto& literal : p.literals) {
 			outfile << "\t" << literal.mAlias << ": db \"";
 			if (literal.mContent[literal.mContent.size() - 1] == '\n') {
@@ -460,6 +461,8 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 			external.push_back(funcCall);
 		}
 	}
+
+	setup(outfile);
 
 	if (p.requires_libs) {
 		printLibs(outfile);
@@ -585,6 +588,19 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 	//std::cout << assembler.str().c_str() << std::endl;
 	std::system(assembler.str().c_str());
 }
+
+void X86_64LinuxYasmCompiler::setup(std::ofstream& outfile) {
+	outfile << "array_out_of_bounds:" << std::endl;
+	outfile << "\tmov rdi, 2" << std::endl;
+	outfile << "\tmov rax, 1" << std::endl;
+	outfile << "\tmov rsi, Array_OOB" << std::endl;
+	outfile << "\tmov rdx, 28" << std::endl;
+	outfile << "\tsyscall" << std::endl;
+	outfile << "\tmov rdi, 1" << std::endl;
+	outfile << "\tmov rax, 60" << std::endl;
+	outfile << "\tsyscall" << std::endl;
+}
+
 
 void X86_64LinuxYasmCompiler::printLibs(std::ofstream& outfile) {
 	outfile << "global print_ui64" << std::endl;
@@ -831,6 +847,8 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						SymbolInfo& arr = symbolTable[v.mName];
 						int actualSize = getSizeFromByteSize(arr.type.subTypes[0].byteSize);
 						printExpression(outfile, p, statement.mContent, 0);
+						outfile << "\tcmp rax, " << arr.type.byteSize / arr.type.subTypes[0].byteSize << "; check bounds";
+						outfile << "\tjge array_out_of_bounds" << std::endl;
 						outfile << "\tpush rax" << std::endl;
 
 						printExpression(outfile, p, v.mValues[0], 0);
@@ -845,6 +863,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						outfile << "], " << getRegister("a", actualSize) << "; VAR_ASSIGNMENT ARRAY " << v.mName << std::endl;
 
 					} else if (v.mType.builtinType == Builtin_Type::REF) {
+						// TODO: Allow for struct refs with property indexing
 						SymbolInfo& ref = symbolTable[v.mName];
 						int actualSize = getSizeFromByteSize(ref.type.subTypes[0].byteSize);
 						printExpression(outfile, p, statement.mContent, 0);
@@ -861,7 +880,6 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						outfile << "\tadd r11, rax" << std::endl;
 						printExpression(outfile, p, v.mValues[0], 0);
 						outfile << "\tmov " << sizes[actualSize] << " [r11], " << getRegister("a", actualSize) << "; VAR_ASSIGNMENT REF " << v.mName << std::endl;
-
 					} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
 						std::string propName = v.mName.substr(index + 1);
 						std::string varName = v.mName.substr(0, index);
@@ -1199,6 +1217,12 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		// NOTE: Isn't only arrays, but can also be refs, strings, or if we want, numbers indexed to the bits
 		int actualSize = getSizeFromByteSize(arr.type.subTypes[0].byteSize);
 		if (arr.type.builtinType == Builtin_Type::ARRAY) {
+			if (arr.offset > 0) {
+				outfile << "\tcmp rax, " << sizes[actualSize] << " " << arr.location() << "; check bounds" << std::endl;
+			} else {
+				outfile << "\tcmp rax, " << arr.type.byteSize / arr.type.subTypes[0].byteSize << "; check bounds" << std::endl;
+			}
+			outfile << "\tjge array_out_of_bounds" << std::endl;
 			bool sign = arr.type.subTypes[0].name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 			const char* moveAction = getMoveAction(3, actualSize, sign);
 			const char* reg = actualSize < 2 ? "r12" : getRegister("12", actualSize);

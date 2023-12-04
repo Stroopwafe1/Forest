@@ -54,6 +54,7 @@ private:
 	std::map<std::string, uint32_t> syscallTable;
 	std::string currentClass{};
 	void printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, int* offset, int* allocs);
+	void setup(std::ofstream& outfile);
 	void printLibs(std::ofstream& outfile);
 	void printFunctionCall(std::ofstream& outfile, const Programme& p, const FuncCallStatement& fc);
 	void printSyscall(std::ofstream& outfile, const std::string& syscall);

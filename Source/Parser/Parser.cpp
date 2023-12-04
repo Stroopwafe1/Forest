@@ -973,28 +973,7 @@ namespace forest::parser {
 				redefinition = true;
 				statement.mContent = nullptr;
 			}
-		} else if (v.mType.builtinType == Builtin_Type::REF) {
-			std::optional<Token> arrayBracket = expectOperator("[");
-			if (arrayBracket.has_value()) {
-				Statement s;
-				s.mType = Statement_Type::ARRAY_INDEX;
-				Expression* expression = expectExpression(s, true);
-				if (expression == nullptr) {
-					std::cerr << "Expected a value to index ref variable " << name.value() << " at " << *mCurrentToken << std::endl;
-					return std::nullopt;
-				}
-
-				std::optional<Token> closingBracket = expectOperator("]");
-				if (!closingBracket.has_value()) {
-					std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in variable assignment" << std::endl;
-					return std::nullopt;
-				}
-				statement.mContent = expression;
-			} else {
-				redefinition = true;
-				statement.mContent = nullptr;
-			}
-		} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
+		} else if (v.mType.builtinType == Builtin_Type::STRUCT || (v.mType.builtinType == Builtin_Type::REF && v.mType.subTypes[0].builtinType == Builtin_Type::STRUCT)) {
 			// Access property
 			std::optional<Token> dot = expectOperator(".");
 			if (!dot.has_value()) {
@@ -1007,7 +986,12 @@ namespace forest::parser {
 					std::cerr << "Expected a property name for the assignment of struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
 					return std::nullopt;
 				}
-				Struct& s = structs[v.mType.name];
+				std::string structName;
+				if (v.mType.builtinType == Builtin_Type::REF && v.mType.subTypes[0].builtinType == Builtin_Type::STRUCT)
+					structName = v.mType.subTypes[0].name;
+				else
+					structName = v.mType.name;
+				Struct& s = structs[structName];
 				int fieldIndex = s.getIndexOfProperty(propName.value().mText);
 				if (fieldIndex == -1) {
 					std::cerr << "Could not find property " << propName.value().mText << " in struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
@@ -1037,6 +1021,27 @@ namespace forest::parser {
 					return std::nullopt;
 				}
 				v.mName += "." + propName.value().mText;
+			}
+		} else if (v.mType.builtinType == Builtin_Type::REF) {
+			std::optional<Token> arrayBracket = expectOperator("[");
+			if (arrayBracket.has_value()) {
+				Statement s;
+				s.mType = Statement_Type::ARRAY_INDEX;
+				Expression* expression = expectExpression(s, true);
+				if (expression == nullptr) {
+					std::cerr << "Expected a value to index ref variable " << name.value() << " at " << *mCurrentToken << std::endl;
+					return std::nullopt;
+				}
+
+				std::optional<Token> closingBracket = expectOperator("]");
+				if (!closingBracket.has_value()) {
+					std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in variable assignment" << std::endl;
+					return std::nullopt;
+				}
+				statement.mContent = expression;
+			} else {
+				redefinition = true;
+				statement.mContent = nullptr;
 			}
 		}
 
