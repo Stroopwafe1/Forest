@@ -627,28 +627,21 @@ void X86_64LinuxYasmCompiler::printLibs(std::ofstream& outfile) {
 
 	outfile << "global printString" << std::endl;
 	outfile << "printString:" << std::endl;
-	outfile << "\tpush rbp" << std::endl;
-	outfile << "\tmov rbp, rsp" << std::endl;
-	outfile << "\tpush rbx" << std::endl;
-	outfile << "\tmov rbx, rdi ; Count characters in string" << std::endl;
-	outfile << "\tmov rdx, 0" << std::endl;
-	outfile << "strCountLoop:" << std::endl;
-	outfile << "\tcmp byte [rbx], 0x0" << std::endl;
-	outfile << "\tje strCountDone" << std::endl;
-	outfile << "\tinc rdx" << std::endl;
-	outfile << "\tinc rbx" << std::endl;
-	outfile << "\tjmp strCountLoop" << std::endl;
-	outfile << "strCountDone:" << std::endl;
-	outfile << "\tcmp rdx, 0" << std::endl;
-	outfile << "\tje prtDone" << std::endl;
-	outfile << "\t; Actually call the syscall now" << std::endl;
-	outfile << "\tmov rax, 1" << std::endl;
 	outfile << "\tmov rsi, rdi" << std::endl;
+	outfile << "\txor rdx, rdx" << std::endl;
+	outfile << ".strCountLoop:" << std::endl;
+	outfile << "\tcmp byte [rdi], 0x0" << std::endl;
+	outfile << "\tje .strCountDone" << std::endl;
+	outfile << "\tinc rdx" << std::endl;
+	outfile << "\tinc rdi" << std::endl;
+	outfile << "\tjmp .strCountLoop" << std::endl;
+	outfile << ".strCountDone:" << std::endl;
+	outfile << "\tcmp rdx, 0" << std::endl;
+	outfile << "\tje .prtDone" << std::endl;
+	outfile << "\tmov rax, 1" << std::endl;
 	outfile << "\tmov rdi, 1" << std::endl;
 	outfile << "\tsyscall" << std::endl;
-	outfile << "prtDone:" << std::endl;
-	outfile << "\tpop rbx" << std::endl;
-	outfile << "\tpop rbp" << std::endl;
+	outfile << ".prtDone:" << std::endl;
 	outfile << "\tret" << std::endl;
 }
 
@@ -1025,15 +1018,6 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 			case Statement_Type::FUNC_CALL: {
 				FuncCallStatement fc = statement.funcCall.value();
 				// If function is stdlib call, need to expand this into something better when stdlib expands
-				if (labelName != "main") {
-					outfile << "\tpush rdi" << std::endl;
-					outfile << "\tpush rsi" << std::endl;
-					outfile << "\tpush rdx" << std::endl;
-					outfile << "\tpush rcx" << std::endl;
-					outfile << "\tpush r8" << std::endl;
-					outfile << "\tpush r9" << std::endl;
-					outfile << "\tpush r10" << std::endl;
-				}
 				if (fc.mClassName == "stdout" || fc.mClassName == "stdin") {
 					printFunctionCall(outfile, p, fc);
 				} else {
@@ -1083,15 +1067,6 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						outfile << statement.funcCall.value().mFunctionName << std::endl;
 					}
 				}
-				if (labelName != "main") {
-					outfile << "\tpop r10" << std::endl;
-					outfile << "\tpop r9" << std::endl;
-					outfile << "\tpop r8" << std::endl;
-					outfile << "\tpop rcx" << std::endl;
-					outfile << "\tpop rdx" << std::endl;
-					outfile << "\tpop rsi" << std::endl;
-					outfile << "\tpop rdi" << std::endl;
-				}
 				break;
 			}
 			case Statement_Type::NOTHING:
@@ -1127,8 +1102,8 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 	}
 
 	if (block.stackMemory != 0) {
-		outfile << "\tadd rsp, " << block.stackMemory + block.biggestAlloc << std::endl;
-		(*allocs) -= (block.stackMemory + block.biggestAlloc);
+		//outfile << "\tadd rsp, " << block.stackMemory + block.biggestAlloc << std::endl;
+		//(*allocs) -= (block.stackMemory + block.biggestAlloc);
 	}
 
 	*offset -= localOffset;
@@ -1260,13 +1235,6 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		std::stringstream ss;
 		bool printArgs = false;
 		int i = 0;
-		outfile << "\tpush rdi" << std::endl;
-		outfile << "\tpush rsi" << std::endl;
-		outfile << "\tpush rdx" << std::endl;
-		outfile << "\tpush rcx" << std::endl;
-		outfile << "\tpush r8" << std::endl;
-		outfile << "\tpush r9" << std::endl;
-		outfile << "\tpush r10" << std::endl;
 		std::string classVariable = "";
 		for (const auto& child : expression->mChildren) {
 			if (child->mValue.mText == "e" || child->mValue.mText == ":") continue;
@@ -1330,14 +1298,6 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			outfile << "\tmov rbx, rax; printExpression, nodeType=1, function call" << std::endl;
 		}
 
-		outfile << "\tpop r10" << std::endl;
-		outfile << "\tpop r9" << std::endl;
-		outfile << "\tpop r8" << std::endl;
-		outfile << "\tpop rcx" << std::endl;
-		outfile << "\tpop rdx" << std::endl;
-		outfile << "\tpop rsi" << std::endl;
-		outfile << "\tpop rdi" << std::endl;
-
 		return ExpressionPrinted{ true, false, 3 };
 	} else if (expression->mValue.mSubType == TokenSubType::OP_UNARY) {
 		if (expression->mValue.mText == "\\") {
@@ -1390,7 +1350,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 					leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 					leftSize = left.size;
 					if (left.type.builtinType == Builtin_Type::BOOL) {
-						const char* reg = "rax";
+						const char* reg = leftSize < 2 ? "rax" : getRegister("a", leftSize);
 						const char* moveAction = getMoveAction(3, leftSize, leftSign);
 						outfile << "\t" << moveAction << " " << reg << ", " << sizes[left.size] << " " << left.location() << "; printExpression !" << expression->mChildren[0]->mValue.mText << std::endl;
 						outfile << "\txor rax, 1" << std::endl;
