@@ -116,9 +116,10 @@ namespace forest::parser {
 		std::string mFunctionName{};
 		std::vector<Expression*> mArgs{};
 		bool mIsExternal = false;
+		bool mIsRecursive = false;
 
 		bool operator ==(const FuncCallStatement& other) const {
-			return mNamespace == other.mNamespace && mClassName == other.mClassName && mFunctionName == other.mFunctionName && mIsExternal == other.mIsExternal;
+			return mNamespace == other.mNamespace && mClassName == other.mClassName && mFunctionName == other.mFunctionName && mIsExternal == other.mIsExternal && mIsRecursive == other.mIsRecursive;
 		}
 	};
 
@@ -296,6 +297,7 @@ namespace forest::parser {
 	private:
 		uint32_t biggestAlloc = 0;
 		std::vector<FuncCallStatement> _funcCalls;
+		std::string _currentFuncName{};
 		bool ExpressionShouldContinueParsing(const Statement& statementContext, const std::stack<char>& parenStack) const;
 		bool ParseStructAssignment(const std::string& structName, std::vector<Expression*>& values);
 		bool ParseClassAssignment(const std::string& className, std::vector<Expression*>& values);

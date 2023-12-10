@@ -49,7 +49,7 @@ public:
 private:
 	uint32_t labelCount = 0;
 	uint32_t ifCount = 0;
-	std::string recentLoopLabel{};
+	std::vector<std::string> loopLabels{};
 	std::map<std::string, SymbolInfo> symbolTable;
 	std::map<std::string, uint32_t> syscallTable;
 	std::string currentClass{};
@@ -71,6 +71,7 @@ private:
 	const char* getMoveAction(int regSize, int valSize, bool isSigned);
 	int getSizeFromByteSize(size_t byteSize);
 	int getSizeFromType(const Type& type);
+	int nearestMultipleOf(int toRound, int multiple);
 	const char* convertARegSize(int size);
 	const char* getDefineBytes(size_t byteSize);
 	const char* getReserveBytes(size_t byteSize);

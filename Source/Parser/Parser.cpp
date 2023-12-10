@@ -203,6 +203,7 @@ namespace forest::parser {
 		for (const auto& arg : args) {
 			variables.insert({arg.mName, Variable {arg.mType, arg.mName, {}}});
 		}
+		_currentFuncName = name.value().mText;
 		// Parse function body, which is the same as parsing a scoped block.
 		// We have a start, but it's nowhere near accurate
 		std::optional<Block> body = expectBlock();
@@ -686,6 +687,8 @@ namespace forest::parser {
 			// We want it to keep giving parser errors for the rest of the code, not try to parse something else.
 			return std::nullopt;
 		}
+		if (functionName.value().mText == _currentFuncName)
+			fc.mIsRecursive = true;
 
 		returnValue.funcCall = fc;
 		if (fc.mIsExternal)
@@ -1392,9 +1395,11 @@ namespace forest::parser {
 					// And we probably want to make sure that the operator is a unary operator...
 					if (val1->mValue.mType == TokenType::OPERATOR) {
 						val1->mChildren.push_back(val2);
+						val1->mValue.mSubType = TokenSubType::OP_UNARY;
 						nodes.push_back(val1);
 					} else if (val2->mValue.mType == TokenType::OPERATOR) {
 						val2->mChildren.push_back(val1);
+						val2->mValue.mSubType = TokenSubType::OP_UNARY;
 						nodes.push_back(val2);
 					} else {
 						std::cerr << "Expected an operator inside unary expression at " << val1->mValue << std::endl;
@@ -1531,9 +1536,11 @@ namespace forest::parser {
 			// We need to see which of these is the operator
 			if (val1->mValue.mType == TokenType::OPERATOR) {
 				val1->mChildren.push_back(val2);
+				val1->mValue.mSubType = TokenSubType::OP_UNARY;
 				nodes.push_back(val1);
 			} else if (val2->mValue.mType == TokenType::OPERATOR) {
 				val2->mChildren.push_back(val1);
+				val2->mValue.mSubType = TokenSubType::OP_UNARY;
 				nodes.push_back(val2);
 			} else {
 				std::cerr << "Expected an operator inside unary expression at " << val1->mValue << std::endl;
