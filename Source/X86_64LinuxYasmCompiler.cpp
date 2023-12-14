@@ -550,11 +550,19 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 			addToSymbols(&argOffset, Variable {argv.mType, argv.mName, {} }, "rbp+");
 			localSymbols.push_back(argv.mName);
 		} else {
+			int size = 0;
+			for (size_t i = 0; i < function.mArgs.size(); i++) {
+				const auto& arg = function.mArgs[i];
+				size += arg.mType.byteSize;
+			}
+			outfile << "\tsub rsp, " << nearestMultipleOf(size, 8) << std::endl;
+			const char* sizes[] = {"byte", "word", "dword", "qword"};
 			for (size_t i = 0; i < function.mArgs.size(); i++) {
 				const auto& arg = function.mArgs[i];
 				std::string reg = i < 6 ? getRegister(callingConvention[i], getSizeFromByteSize(arg.mType.byteSize)) : "rbp+";
 
-				addToSymbols(&argOffset, Variable{arg.mType, arg.mName, {}}, reg);
+				int s = addToSymbols(&offset, Variable{arg.mType, arg.mName, {}});
+				outfile << "\tmov " << sizes[s] << " [rbp" << offset << "], " << reg << std::endl;
 				localSymbols.push_back(arg.mName);
 			}
 		}
@@ -760,12 +768,12 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 }
 
 void X86_64LinuxYasmCompiler::printSyscall(std::ofstream& outfile, const std::string& syscall) {
-	uint32_t call = syscallTable[syscall];
-	if (call <= 6)
+	if (syscallTable.contains(syscall)) {
+		uint32_t call = syscallTable[syscall];
 		outfile << "\tmov rax, " << call << std::endl;
-	else {
+	} else {
 		std::string error = "Unexpected syscall '$', please expand syscall table";
-		error.replace(error.find_first_of('$'), 1, std::to_string(call));
+		error.replace(error.find_first_of('$'), 1, syscall);
 		throw std::runtime_error(error);
 	}
 }
@@ -832,18 +840,33 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					addToSymbols(&localOffset, v);
 					localSymbols.push_back(v.mName);
 					SymbolInfo& var = symbolTable[v.mName];
-
-					for (int i = 0; i < s.mFields.size(); i++) {
-						Expression* exp = v.mValues.at(i);
-						if (exp == nullptr) continue;
-						printExpression(outfile, p, exp, 0);
-						int actualSize = getSizeFromByteSize(s.mFields[i].mType.byteSize); // TODO: This won't work for nested structs
-						outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
-						if (var.offset > 0)
-							outfile << "+" << var.offset - s.mFields[i].mOffset;
-						else
-							outfile << "-" << -(var.offset + s.mFields[i].mOffset);
-						outfile << "], " << getRegister("a", actualSize) << "; VAR_DECL_ASSIGN STRUCT " << v.mType.name << " " << v.mName << "." << s.mFields[i].mNames[0] << std::endl;
+					if (v.mValues.size() == 1 && v.mValues[0]->mValue.mText == "@") {
+						printExpression(outfile, p, v.mValues[0]->mChildren[0], 0);
+						outfile << "\tmov r10, rax" << std::endl;
+						for (int i = 0; i < s.mFields.size(); i++) {
+							int actualSize = getSizeFromByteSize(s.mFields[i].mType.byteSize); // TODO: This won't work for nested structs
+							const char* reg = getRegister("a", actualSize);
+							outfile << "\tmov " << reg << ", " << sizes[actualSize] << " [r10+" << s.mFields[i].mOffset << "]" << std::endl;
+							outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
+							if (var.offset > 0)
+								outfile << "+" << var.offset - s.mFields[i].mOffset;
+							else
+								outfile << "-" << -(var.offset + s.mFields[i].mOffset);
+							outfile << "], " << getRegister("a", actualSize) << "; VAR_DECL_ASSIGN STRUCT " << v.mType.name << " " << v.mName << "." << s.mFields[i].mNames[0] << std::endl;
+						}
+					} else {
+						for (int i = 0; i < s.mFields.size(); i++) {
+							Expression* exp = v.mValues.at(i);
+							if (exp == nullptr) continue;
+							printExpression(outfile, p, exp, 0);
+							int actualSize = getSizeFromByteSize(s.mFields[i].mType.byteSize); // TODO: This won't work for nested structs
+							outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
+							if (var.offset > 0)
+								outfile << "+" << var.offset - s.mFields[i].mOffset;
+							else
+								outfile << "-" << -(var.offset + s.mFields[i].mOffset);
+							outfile << "], " << getRegister("a", actualSize) << "; VAR_DECL_ASSIGN STRUCT " << v.mType.name << " " << v.mName << "." << s.mFields[i].mNames[0] << std::endl;
+						}
 					}
 				} else if (v.mType.builtinType == Builtin_Type::CLASS) {
 					const Class& c = p.classes.at(v.mType.name);
@@ -854,19 +877,39 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					localSymbols.push_back(v.mName);
 					SymbolInfo& var = symbolTable[v.mName];
 
-					for (int i = 0; i < c.mFields.size(); i++) {
-						Expression* exp = v.mValues.at(i);
-						if (exp == nullptr) continue;
-						printExpression(outfile, p, exp, 0);
-						int actualSize = getSizeFromByteSize(c.mFields[i].mType.byteSize); // TODO: This won't work for nested structs
-						outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
-						if (var.offset > 0)
-							outfile << "+" << var.offset - c.mFields[i].mOffset;
-						else
-							outfile << "-" << -(var.offset + c.mFields[i].mOffset);
-						outfile << "], " << getRegister("a", actualSize) << "; VAR_DECL_ASSIGN CLASS " << v.mType.name << "." << c.mFields[i].mNames[0] << std::endl;
+					if (v.mValues.size() == 1 && v.mValues[0]->mValue.mText == "@") {
+						printExpression(outfile, p, v.mValues[0]->mChildren[0], 0);
+						outfile << "\tmov r10, rax" << std::endl;
+						for (int i = 0; i < c.mFields.size(); i++) {
+							int actualSize = getSizeFromByteSize(c.mFields[i].mType.byteSize); // TODO: This won't work for nested structs
+							const char* reg = getRegister("a", actualSize);
+							outfile << "\tmov " << reg << ", " << sizes[actualSize] << " [r10+" << c.mFields[i].mOffset << "]" << std::endl;
+							outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
+							if (var.offset > 0)
+								outfile << "+" << var.offset - c.mFields[i].mOffset;
+							else
+								outfile << "-" << -(var.offset + c.mFields[i].mOffset);
+							outfile << "], " << getRegister("a", actualSize) << "; VAR_DECL_ASSIGN CLASS " << v.mType.name << " " << v.mName << "." << c.mFields[i].mNames[0] << std::endl;
+						}
+					} else {
+						for (int i = 0; i < c.mFields.size(); i++) {
+							Expression* exp = v.mValues.at(i);
+							if (exp == nullptr) continue;
+							printExpression(outfile, p, exp, 0);
+							int actualSize = getSizeFromByteSize(c.mFields[i].mType.byteSize); // TODO: This won't work for nested structs
+							outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
+							if (var.offset > 0)
+								outfile << "+" << var.offset - c.mFields[i].mOffset;
+							else
+								outfile << "-" << -(var.offset + c.mFields[i].mOffset);
+							outfile << "], " << getRegister("a", actualSize) << "; VAR_DECL_ASSIGN CLASS " << v.mType.name << "." << c.mFields[i].mNames[0] << std::endl;
+						}
 					}
 				} else {
+					if (v.mValues.empty()) {
+						std::cerr << "[X86_64 Compiler]: ERROR: Variable '" << v.mName << "' is being declared and assigned with no expression" << std::endl;
+						exit(1);
+					}
 					printExpression(outfile, p, v.mValues[0], 0);
 					int size = addToSymbols(offset, v);
 					addToSymbols(&localOffset, v);
@@ -889,6 +932,10 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						outfile << "\tjge array_out_of_bounds" << std::endl;
 						outfile << "\tpush rax" << std::endl;
 
+						if (v.mValues.empty()) {
+							std::cerr << "[X86_64 Compiler]: ERROR: Array variable '" << v.mName << "' is being assigned with no expression" << std::endl;
+							exit(1);
+						}
 						printExpression(outfile, p, v.mValues[0], 0);
 						outfile << "\tpop r11" << std::endl;
 						outfile << "\tmov " << sizes[actualSize] << " [" << arr.reg;
@@ -917,6 +964,10 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						outfile << "\tmul rbx" << std::endl;
 						outfile << "\tadd r11, rax" << std::endl;
 						outfile << "\tpush r11" << std::endl;
+						if (v.mValues.empty()) {
+							std::cerr << "[X86_64 Compiler]: ERROR: Ref variable '" << v.mName << "' is being assigned with no expression" << std::endl;
+							exit(1);
+						}
 						printExpression(outfile, p, v.mValues[0], 0);
 						outfile << "\tpop r11" << std::endl;
 						outfile << "\tmov " << sizes[actualSize] << " [r11], " << getRegister("a", actualSize) << "; VAR_ASSIGNMENT REF " << v.mName << std::endl;
@@ -929,6 +980,10 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						const StructField& sf = s.mFields[fieldIndex];
 						int actualSize = getSizeFromByteSize(sf.mType.byteSize);
 
+						if (v.mValues.empty()) {
+							std::cerr << "[X86_64 Compiler]: ERROR: Struct property '" << propName << "' of struct variable '" << varName << "' is being assigned with no expression" << std::endl;
+							exit(1);
+						}
 						printExpression(outfile, p, v.mValues[0], 0);
 						outfile << "\tmov " << sizes[actualSize] << " [" << var.reg;
 						if (var.offset > 0)
@@ -1003,6 +1058,10 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 					} else {
 						if (!symbolTable.contains(v.mName)) {
 							// Class property
+							if (v.mValues.empty()) {
+								std::cerr << "[X86_64 Compiler]: ERROR: Class property '" << v.mName << "' is being assigned with no expression" << std::endl;
+								exit(1);
+							}
 							printExpression(outfile, p, v.mValues[0], 0);
 							const Class& klass = p.classes.at(currentClass);
 							int propIndex = klass.getIndexOfProperty(v.mName);
@@ -1010,6 +1069,10 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							outfile << "\tmov " << sizes[leftSize] << " [rdi+" << klass.mFields[propIndex].mOffset << "], " << getRegister("a", leftSize) << "; VAR_ASSIGNMENT else CLASS " << klass.mName << "." << v.mName << std::endl;
 						} else {
 							SymbolInfo& symbol = symbolTable[v.mName];
+							if (v.mValues.empty()) {
+								std::cerr << "[X86_64 Compiler]: ERROR: Variable '" << v.mName << "' is being assigned with no expression" << std::endl;
+								exit(1);
+							}
 							printExpression(outfile, p, v.mValues[0], 0);
 							bool dereferenceNeeded = symbol.reg == "rbp" || symbol.isGlobal;
 							outfile << "\tmov " << sizes[symbol.size] << " " << symbol.location(dereferenceNeeded) << ", " << getRegister("a", symbol.size) << "; VAR_ASSIGNMENT else variable " << v.mName << std::endl;
@@ -1254,7 +1317,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 	if (expression->mChildren.empty())
 		return ExpressionPrinted{};
 
-	if (expression->mChildren[0] == nullptr && expression->mChildren[1] == nullptr) {
+	if (expression->mChildren[0] == nullptr) {
 		return ExpressionPrinted{};
 	}
 	if (expression->mValue.mType != TokenType::OPERATOR) {
@@ -1554,7 +1617,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			structName = left.type.subTypes[0].name; // TODO: We assume only one level deep
 		}
 		int actualSize = 0;
-		if (left.type.builtinType == Builtin_Type::STRUCT) {
+		if (left.type.builtinType == Builtin_Type::STRUCT || (left.type.subTypes[0].builtinType == Builtin_Type::STRUCT)) {
 			const Struct& s = p.structs.at(structName);
 			int fieldIndex = s.getIndexOfProperty(propName);
 			const StructField& sf = s.mFields[fieldIndex];
@@ -1958,7 +2021,7 @@ int X86_64LinuxYasmCompiler::getSizeFromType(const Type& type) {
 }
 
 int X86_64LinuxYasmCompiler::nearestMultipleOf(int toRound, int multiple) {
-	return toRound + multiple - (toRound % multiple);
+	return toRound + (multiple - (toRound % multiple)) % multiple;
 }
 
 const char* X86_64LinuxYasmCompiler::convertARegSize(int size) {

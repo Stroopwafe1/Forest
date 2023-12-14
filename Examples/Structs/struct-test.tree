@@ -1,3 +1,5 @@
+ui8[16] s_buffer;
+
 struct Test {
 	ui8 val1;
 	ui8 val2;
@@ -7,14 +9,15 @@ struct Test {
 }
 
 ui64 Sum(ref<Test> test) {
-	ui64 sum1 = (test.val1) + (test.val2);
-	ui64 sum2 = (test.val3) + (test.val4);
+	Test t = @test;
+	ui64 sum1 = (t.val1) + (t.val2);
+	ui64 sum2 = (t.val3) + (t.val4);
 	ui64 sum3 = sum1 + sum2;
-	ui64 sum4 = sum3 + (test.val5);
+	ui64 sum4 = sum3 + (t.val5);
 	return sum4;
 }
 
-i32 main(string[] argv) {
+ui8 main(string[] argv) {
 	Test t = {0, 1, 2, 3, 4};
 	Test t2 = {
 		.val2 = 1;
@@ -25,5 +28,19 @@ i32 main(string[] argv) {
 	};
 	t2.val1 = 5;
 	ui64 summed = Sum(\t2);
+	stdout.writeln(summed);
+
+	loop i, 0..16 {
+		s_buffer[i] = i;
+	}
+	Test t3 = @(\s_buffer);
+	// t3.val1 = 0x00
+	// t3.val2 = 0x01
+	// t3.val3 = 0x0302
+	// t3.val4 = 0x07060504
+	// t3.val5 = 0x0F_0E_0D_0C_0B_0A_09_08
+	ui64 sum = Sum(\t3);
+	stdout.writeln(sum);
+
 	return summed;
 }
