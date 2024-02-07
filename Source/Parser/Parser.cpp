@@ -1392,18 +1392,23 @@ namespace forest::parser {
 					nodes.pop_back();
 					Expression* op = nodes.back();
 					nodes.pop_back();
-					Expression* left = nodes.back();
-					nodes.pop_back();
+					if (op->mValue.mSubType == TokenSubType::OP_UNARY) {
+						op->mChildren.push_back(right);
+						nodes.push_back(op);
+					} else {
+						Expression* left = nodes.back();
+						nodes.pop_back();
 
-					if (op->mValue.mType != TokenType::OPERATOR) {
-						std::cerr << "[Parser]: Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
-						mCurrentToken = saved;
-						return nullptr;
+						if (op->mValue.mType != TokenType::OPERATOR) {
+							std::cerr << "[Parser]: Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
+							mCurrentToken = saved;
+							return nullptr;
+						}
+
+						op->mChildren.push_back(left);
+						op->mChildren.push_back(right);
+						nodes.push_back(op);
 					}
-
-					op->mChildren.push_back(left);
-					op->mChildren.push_back(right);
-					nodes.push_back(op);
 				} else if (nodes.size() == 2) {
 					// This should be a unary
 					Expression* val1 = nodes.back();

@@ -1176,6 +1176,9 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 						const SymbolInfo& symbol = symbolTable[fc.mClassName];
 						if (symbol.type.builtinType == Builtin_Type::CLASS)
 							outfile << "\tlea rax, " << symbol.location(true) << std::endl;
+						else if ((symbol.type.builtinType == Builtin_Type::REF) && (symbol.type.subTypes[0].builtinType == Builtin_Type::CLASS)) {
+							outfile << "\tmov rax, " << symbol.location(true) << std::endl;
+						}
 						outfile << "\tmov " << callingConvention[0] << ", rax" << std::endl;
 					} else {
 						uint8_t toChange = 0;
@@ -1446,6 +1449,9 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 					const SymbolInfo& symbol = symbolTable[classVariable];
 					if (symbol.type.builtinType == Builtin_Type::CLASS)
 						outfile << "\tlea rax, " << symbol.location(true) << std::endl;
+					else if ((symbol.type.builtinType == Builtin_Type::REF) && (symbol.type.subTypes[0].builtinType == Builtin_Type::CLASS)) {
+						outfile << "\tmov rax, " << symbol.location(true) << std::endl;
+					}
 					outfile << "\tmov " << callingConvention[0] << ", rax" << std::endl;
 					i++;
 				}
@@ -1460,7 +1466,11 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 						continue;
 					}
 					const SymbolInfo& symbol = symbolTable[child->mValue.mText];
-					ss << symbol.type.name;
+					if ((symbol.type.builtinType == Builtin_Type::REF) && (symbol.type.subTypes[0].builtinType == Builtin_Type::CLASS)) {
+						ss << symbol.type.subTypes[0].name;
+					} else {
+						ss << symbol.type.name;
+					}
 					classVariable = child->mValue.mText;
 				}
 			} else {
