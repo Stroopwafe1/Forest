@@ -49,11 +49,12 @@ public:
 private:
 	uint32_t labelCount = 0;
 	uint32_t ifCount = 0;
-	std::string recentLoopLabel{};
+	std::vector<std::string> loopLabels{};
 	std::map<std::string, SymbolInfo> symbolTable;
 	std::map<std::string, uint32_t> syscallTable;
 	std::string currentClass{};
 	void printBody(std::ofstream& outfile, const Programme& p, const Block& block, const std::string& labelName, int* offset, int* allocs);
+	void setup(std::ofstream& outfile);
 	void printLibs(std::ofstream& outfile);
 	void printFunctionCall(std::ofstream& outfile, const Programme& p, const FuncCallStatement& fc);
 	void printSyscall(std::ofstream& outfile, const std::string& syscall);
@@ -70,9 +71,11 @@ private:
 	const char* getMoveAction(int regSize, int valSize, bool isSigned);
 	int getSizeFromByteSize(size_t byteSize);
 	int getSizeFromType(const Type& type);
+	int nearestMultipleOf(int toRound, int multiple);
 	const char* convertARegSize(int size);
 	const char* getDefineBytes(size_t byteSize);
 	const char* getReserveBytes(size_t byteSize);
+	const char* escape(const char* input);
 };
 
 

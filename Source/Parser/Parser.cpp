@@ -174,13 +174,13 @@ namespace forest::parser {
 		while(!expectOperator(")").has_value()) {
 			std::optional<Type> pType = expectType();
 			if (!pType.has_value()) {
-				std::cerr << "Expected a type declaration in " << name.value().mText << "'s parameter list at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected a type declaration in " << name.value().mText << "'s parameter list at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
 			std::optional<Token> pName = expectIdentifier();
 			if (!pName.has_value()) {
-				std::cerr << "Expected a parameter name in " << name.value().mText << "'s parameter list at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected a parameter name in " << name.value().mText << "'s parameter list at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -194,7 +194,7 @@ namespace forest::parser {
 			std::optional<Token> comma = expectOperator(",");
 			if (!comma.has_value()) {
 				// We didn't encounter the ')', and we didn't get a ','
-				std::cerr << "Expected a ',' in " << name.value().mText << "'s parameter list at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected a ',' in " << name.value().mText << "'s parameter list at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -203,11 +203,12 @@ namespace forest::parser {
 		for (const auto& arg : args) {
 			variables.insert({arg.mName, Variable {arg.mType, arg.mName, {}}});
 		}
+		_currentFuncName = name.value().mText;
 		// Parse function body, which is the same as parsing a scoped block.
 		// We have a start, but it's nowhere near accurate
 		std::optional<Block> body = expectBlock();
 		if (!body.has_value()) {
-			std::cerr << "Error: Could not parse function body of function '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Error: Could not parse function body of function '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
 			exit(1);
 		}
 		for (const auto& arg : args) {
@@ -224,8 +225,7 @@ namespace forest::parser {
 				}
 			}
 			if (!found) {
-				std::cerr << "Expected a return statement of type " << type.value().name << " in " << name.value().mText << "'s function body at " << *(mCurrentToken - 1) << std::endl;
-				mCurrentToken = saved;
+				std::cerr << "[Parser]: Expected a return statement of type " << type.value().name << " in " << name.value().mText << "'s function body at " << *(mCurrentToken - 1) << std::endl;
 				return std::nullopt;
 			}
 		}
@@ -248,7 +248,7 @@ namespace forest::parser {
 		if (!open_bracket.has_value()) {
 			std::optional<Statement> statement = expectStatement();
 			if (!statement.has_value()) {
-				std::cerr << "Could not parse statement at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Could not parse statement at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -262,7 +262,7 @@ namespace forest::parser {
 			// Parse statements
 			std::optional<Statement> statement = expectStatement();
 			if (!statement.has_value()) {
-				std::cerr << "Could not parse statement at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Could not parse statement at " << *mCurrentToken << std::endl;
 				continue;
 			}
 
@@ -358,7 +358,7 @@ namespace forest::parser {
 		std::optional<Token> type = expectIdentifier();
 		if (!type.has_value()) {
 			mCurrentToken = saved;
-			std::cerr << "Expected a function name after the # at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected a function name after the # at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 		SpecialStatementType actualType = SpecialStatementType::NOTHING;
@@ -367,7 +367,7 @@ namespace forest::parser {
 		} else if (type.value().mText == "assert") {
 			actualType = SpecialStatementType::ASSERT;
 		} else {
-			std::cerr << "Unexpected special statement '" << type.value().mText << "' at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Unexpected special statement '" << type.value().mText << "' at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 
@@ -390,7 +390,7 @@ namespace forest::parser {
 
 		std::optional<Token> sname = expectIdentifier();
 		if (!sname.has_value()) {
-			std::cerr << "Expected struct to have a name at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected struct to have a name at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
 		}
@@ -406,7 +406,7 @@ namespace forest::parser {
 			StructField sf;
 			std::optional<Type> type = expectType();
 			if (!type.has_value()) {
-				std::cerr << "Expected struct field type at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected struct field type at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -424,7 +424,7 @@ namespace forest::parser {
 			while (!expectSemicolon().has_value()) {
 				std::optional<Token> name = expectIdentifier();
 				if (!name.has_value()) {
-					std::cerr << "Expected struct field name at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected struct field name at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
@@ -435,11 +435,11 @@ namespace forest::parser {
 				else if (expectOperator("|").has_value()) {
 					continue;
 				} else if (expectOperator("(").has_value()) {
-					std::cerr << "Unexpected function definition inside struct '" << sname.value().mText << "' (structs cannot contain functions, change this to a 'class' instead) at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Unexpected function definition inside struct '" << sname.value().mText << "' (structs cannot contain functions, change this to a 'class' instead) at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				} else {
-					std::cerr << "Expected a ';' or '|' to separate the struct field name at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a ';' or '|' to separate the struct field name at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
@@ -481,7 +481,7 @@ namespace forest::parser {
 
 		std::optional<Token> sname = expectIdentifier();
 		if (!sname.has_value()) {
-			std::cerr << "Expected class to have a name at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected class to have a name at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
 		}
@@ -503,7 +503,7 @@ namespace forest::parser {
 			}
 			std::optional<Type> type = expectType();
 			if (!type.has_value()) {
-				std::cerr << "Expected class field type at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected class field type at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -521,7 +521,7 @@ namespace forest::parser {
 			while (!expectSemicolon().has_value()) {
 				std::optional<Token> name = expectIdentifier();
 				if (!name.has_value()) {
-					std::cerr << "Expected class field name at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected class field name at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
@@ -532,7 +532,7 @@ namespace forest::parser {
 				else if (expectOperator("|").has_value()) {
 					continue;
 				} else {
-					std::cerr << "Expected a ';' or '|' to separate the class field name at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a ';' or '|' to separate the class field name at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
@@ -617,7 +617,7 @@ namespace forest::parser {
 			functionName = nsClassOrFunction;
 		} else if (dot.has_value() && !className.has_value()) {
 			// We got a dot after the namespace -> ::. -> Syntax error
-			std::cerr << "Syntax error: Unexpected '.' after namespace operator '::' at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Syntax error: Unexpected '.' after namespace operator '::' at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
 		} else {
@@ -645,7 +645,7 @@ namespace forest::parser {
 		while (!expectOperator(")").has_value()) {
 			Expression* expression = expectExpression(returnValue, true);
 			if (expression == nullptr) {
-				std::cerr << "Expected an expression while parsing " << fc.mFunctionName << "'s argument list at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected an expression while parsing " << fc.mFunctionName << "'s argument list at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -669,7 +669,7 @@ namespace forest::parser {
 			std::optional<Token> comma = expectOperator(",");
 			if (!comma.has_value()) {
 				// We didn't encounter the ')', and we didn't get a ','
-				std::cerr << "Expected a ',' while parsing " << fc.mFunctionName << "'s argument list at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected a ',' while parsing " << fc.mFunctionName << "'s argument list at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -680,19 +680,23 @@ namespace forest::parser {
 
 		std::optional<Token> semi = expectSemicolon();
 		if (!semi.has_value()) {
-			std::cerr << "Expected a closing ';' to end the statement at " << *(mCurrentToken - 1) << std::endl;
+			std::cerr << "[Parser]: Expected a closing ';' to end the statement at " << *(mCurrentToken - 1) << std::endl;
 			//mCurrentToken = saved;
 			// ^ Commented out because it did parse the function call correctly, it just didn't end with a semi.
 			// We want it to keep giving parser errors for the rest of the code, not try to parse something else.
 			return std::nullopt;
 		}
+		if (functionName.value().mText == _currentFuncName)
+			fc.mIsRecursive = true;
 
 		returnValue.funcCall = fc;
 		if (fc.mIsExternal)
 			externalFunctions.push_back(fc);
 		if (!(functionName.value().mText == "write" || functionName.value().mText == "writeln")) {
-			const Variable& klass = variables[className.value().mText];
-			fc.mClassName = klass.mType.name;
+			if (variables.contains(className.value().mText)) {
+				const Variable& klass = variables[className.value().mText];
+				fc.mClassName = klass.mType.name;
+			}
 			_funcCalls.push_back(fc);
 		}
 		return returnValue;
@@ -728,41 +732,46 @@ namespace forest::parser {
 
 			std::optional<Token> comma = expectOperator(",");
 			if (!comma.has_value()) {
-				std::cerr << "Expected a ',' after the variable at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected a ',' after the variable at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
 			// Expect a range
 			Expression* min = expectExpression(s, true);
 			if (min == nullptr) {
-				std::cerr << "Expected a beginning of a range declaration at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected a beginning of a range declaration at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
 			std::optional<Token> range = expectOperator("..");
 			if (!range.has_value()) {
-				std::cerr << "Expected a '..' in the range declaration at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected a '..' in the range declaration at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
 			Expression* max = expectExpression(s, true);
 			if (max == nullptr) {
-				std::cerr << "Expected an ending of the range declaration at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected an ending of the range declaration at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
 			Range r = Range { min, max };
 			ls.mRange = r;
-			ls.mIterator = Variable { getTypeFromRange(r), iterator.value().mText, {} };
+			Variable v = Variable { getTypeFromRange(r), iterator.value().mText, {}};
+			variables.insert({v.mName, v});
+			ls.mIterator = v;
 		} else {
 			ls.mIterator = std::nullopt;
 			ls.mRange = std::nullopt;
 		}
 		std::optional<Block> body = expectBlock();
 		if (!body.has_value()) {
-			std::cerr << "Expected a code block for the loop at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected a code block for the loop at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
+		}
+		if (ls.mIterator.has_value()) {
+			variables.erase(ls.mIterator.value().mName);
 		}
 		ls.mBody = body.value();
 		return Statement { Statement_Type::LOOP, content, std::nullopt, ls};
@@ -787,7 +796,7 @@ namespace forest::parser {
 
 		std::optional<Token> semi = expectSemicolon();
 		if (!semi.has_value()) {
-			std::cerr << "Expected a closing ';' to end the statement at " << *(mCurrentToken - 1) << std::endl;
+			std::cerr << "[Parser]: Expected a closing ';' to end the statement at " << *(mCurrentToken - 1) << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
 		}
@@ -831,12 +840,12 @@ namespace forest::parser {
 
 		std::optional<Token> name = expectIdentifier();
 		if (!name.has_value()) {
-			//std::cerr << "Expected a name for the variable declaration at " << *mCurrentToken << std::endl;
+			//std::cerr << "[Parser]: Expected a name for the variable declaration at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
 		}
 		if (variables.find(name.value().mText) != variables.end()) {
-			std::cerr << "Redeclaration of variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Redeclaration of variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 
@@ -852,7 +861,7 @@ namespace forest::parser {
 
 			std::optional<Token> closingBracket = expectOperator("]");
 			if (!closingBracket.has_value()) {
-				std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in type declaration." << std::endl;
+				std::cerr << "[Parser]: Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in type declaration." << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -871,7 +880,7 @@ namespace forest::parser {
 
 		std::optional<Token> assignment = expectOperator("=");
 		if (!assignment.has_value()) {
-			std::cerr << "Expected a '=' for the assignment of variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected a '=' for the assignment of variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
 		}
@@ -883,13 +892,17 @@ namespace forest::parser {
 			// type[N] varName = { val1, val2, val3, etc... };
 			std::optional<Token> bracket = expectOperator("{");
 			if (!bracket.has_value()) {
-				std::cerr << "Expected a '{' for the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected a '{' for the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
 
 			while (!expectOperator("}").has_value()) {
 				Expression* expression = expectExpression(statement);
+				if (expression == nullptr) {
+					std::cerr << "[Parser]: Expected an expression for the variable declaration and assignment of variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
+					return std::nullopt;
+				}
 
 				values.push_back(expression);
 
@@ -900,7 +913,7 @@ namespace forest::parser {
 				std::optional<Token> comma = expectOperator(",");
 				if (!comma.has_value()) {
 					// We didn't encounter the '}', and we didn't get a ','
-					std::cerr << "Expected a ',' while parsing the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a ',' while parsing the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
@@ -920,7 +933,7 @@ namespace forest::parser {
 
 		semi = expectSemicolon();
 		if (!semi.has_value()) {
-			std::cerr << "Expected a semicolon to close the variable assignment of " << name.value().mText << " at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected a semicolon to close the variable assignment of " << name.value().mText << " at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 
@@ -939,7 +952,7 @@ namespace forest::parser {
 			return std::nullopt;
 		}
 		if (variables.find(name.value().mText) == variables.end()) {
-			std::cerr << "Unknown variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Unknown variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 		Variable v = Variable(variables[name.value().mText]);
@@ -952,13 +965,13 @@ namespace forest::parser {
 				s.mType = Statement_Type::ARRAY_INDEX;
 				Expression* expression = expectExpression(s, true);
 				if (expression == nullptr) {
-					std::cerr << "Expected a value to index array variable " << name.value() << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a value to index array variable " << name.value() << " at " << *mCurrentToken << std::endl;
 					return std::nullopt;
 				}
 
 				std::optional<Token> closingBracket = expectOperator("]");
 				if (!closingBracket.has_value()) {
-					std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in variable assignment" << std::endl;
+					std::cerr << "[Parser]: Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in variable assignment" << std::endl;
 					return std::nullopt;
 				}
 				statement.mContent = expression;
@@ -966,28 +979,7 @@ namespace forest::parser {
 				redefinition = true;
 				statement.mContent = nullptr;
 			}
-		} else if (v.mType.builtinType == Builtin_Type::REF) {
-			std::optional<Token> arrayBracket = expectOperator("[");
-			if (arrayBracket.has_value()) {
-				Statement s;
-				s.mType = Statement_Type::ARRAY_INDEX;
-				Expression* expression = expectExpression(s, true);
-				if (expression == nullptr) {
-					std::cerr << "Expected a value to index ref variable " << name.value() << " at " << *mCurrentToken << std::endl;
-					return std::nullopt;
-				}
-
-				std::optional<Token> closingBracket = expectOperator("]");
-				if (!closingBracket.has_value()) {
-					std::cerr << "Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in variable assignment" << std::endl;
-					return std::nullopt;
-				}
-				statement.mContent = expression;
-			} else {
-				redefinition = true;
-				statement.mContent = nullptr;
-			}
-		} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
+		} else if (v.mType.builtinType == Builtin_Type::STRUCT || (v.mType.builtinType == Builtin_Type::REF && v.mType.subTypes[0].builtinType == Builtin_Type::STRUCT)) {
 			// Access property
 			std::optional<Token> dot = expectOperator(".");
 			if (!dot.has_value()) {
@@ -997,13 +989,18 @@ namespace forest::parser {
 				std::optional<Token> propName = expectIdentifier();
 				if (!propName.has_value()) {
 					// Syntax error
-					std::cerr << "Expected a property name for the assignment of struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a property name for the assignment of struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
 					return std::nullopt;
 				}
-				Struct& s = structs[v.mType.name];
+				std::string structName;
+				if (v.mType.builtinType == Builtin_Type::REF && v.mType.subTypes[0].builtinType == Builtin_Type::STRUCT)
+					structName = v.mType.subTypes[0].name;
+				else
+					structName = v.mType.name;
+				Struct& s = structs[structName];
 				int fieldIndex = s.getIndexOfProperty(propName.value().mText);
 				if (fieldIndex == -1) {
-					std::cerr << "Could not find property " << propName.value().mText << " in struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Could not find property " << propName.value().mText << " in struct " << name.value().mText << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
@@ -1019,23 +1016,44 @@ namespace forest::parser {
 				std::optional<Token> propName = expectIdentifier();
 				if (!propName.has_value()) {
 					// Syntax error
-					std::cerr << "Expected a property name for the assignment of class " << name.value().mText << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a property name for the assignment of class " << name.value().mText << " at " << *mCurrentToken << std::endl;
 					return std::nullopt;
 				}
 				Class& c = classes[v.mType.name];
 				int fieldIndex = c.getIndexOfProperty(propName.value().mText);
 				if (fieldIndex == -1) {
-					std::cerr << "Could not find property " << propName.value().mText << " in class " << name.value().mText << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Could not find property " << propName.value().mText << " in class " << name.value().mText << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
 				v.mName += "." + propName.value().mText;
 			}
+		} else if (v.mType.builtinType == Builtin_Type::REF) {
+			std::optional<Token> arrayBracket = expectOperator("[");
+			if (arrayBracket.has_value()) {
+				Statement s;
+				s.mType = Statement_Type::ARRAY_INDEX;
+				Expression* expression = expectExpression(s, true);
+				if (expression == nullptr) {
+					std::cerr << "[Parser]: Expected a value to index ref variable " << name.value() << " at " << *mCurrentToken << std::endl;
+					return std::nullopt;
+				}
+
+				std::optional<Token> closingBracket = expectOperator("]");
+				if (!closingBracket.has_value()) {
+					std::cerr << "[Parser]: Expected a ']' to close the opening '[' at " << arrayBracket.value() << " in variable assignment" << std::endl;
+					return std::nullopt;
+				}
+				statement.mContent = expression;
+			} else {
+				redefinition = true;
+				statement.mContent = nullptr;
+			}
 		}
 
 		std::optional<Token> opop = expectOperator(); // Any assignment operator
 		if (!opop.has_value()) {
-			std::cerr << "Expected an assignment operator for variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected an assignment operator for variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 		Token op = opop.value();
@@ -1045,20 +1063,24 @@ namespace forest::parser {
 		std::vector<Expression*> values;
 		if (redefinition) {
 			if (op.mText != "=") {
-				std::cerr << "Expected a '=' for the redefinition of variable " << name.value().mText << " but got '" << op.mText << "' instead at " << *mCurrentToken << std::endl;
+				std::cerr << "[Parser]: Expected a '=' for the redefinition of variable " << name.value().mText << " but got '" << op.mText << "' instead at " << *mCurrentToken << std::endl;
 				return std::nullopt;
 			}
 			if (v.mType.builtinType == Builtin_Type::ARRAY) {
 				// type[N] varName = { val1, val2, val3, etc... };
 				std::optional<Token> bracket = expectOperator("{");
 				if (!bracket.has_value()) {
-					std::cerr << "Expected a '{' for the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a '{' for the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
 
 				while (!expectOperator("}").has_value()) {
 					Expression* expression = expectExpression(statement);
+					if (expression == nullptr) {
+						std::cerr << "[Parser]: Expected an expression for the assignment of array variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
+						return std::nullopt;
+					}
 
 					values.push_back(expression);
 
@@ -1069,7 +1091,7 @@ namespace forest::parser {
 					std::optional<Token> comma = expectOperator(",");
 					if (!comma.has_value()) {
 						// We didn't encounter the '}', and we didn't get a ','
-						std::cerr << "Expected a ',' while parsing the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
+						std::cerr << "[Parser]: Expected a ',' while parsing the assignment of array variable " << name.value().mText << " at " << *mCurrentToken << std::endl;
 						mCurrentToken = saved;
 						return std::nullopt;
 					}
@@ -1078,17 +1100,27 @@ namespace forest::parser {
 				Statement s;
 				s.mType = Statement_Type::NOTHING;
 				Expression* expression = expectExpression(s);
+				if (expression == nullptr) {
+					std::cerr << "[Parser]: Expected an expression for the assignment of ref variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
+					return std::nullopt;
+				}
 				values.push_back(expression);
 			} else if (v.mType.builtinType == Builtin_Type::STRUCT) {
 				if (!ParseStructAssignment(v.mType.name, values))
 					return std::nullopt;
 			} else {
 				Expression* expression = expectExpression(statement, true);
-				if (expression != nullptr)
-					values.push_back(expression);
+				if (expression == nullptr) {
+					std::cerr << "[Parser]: Expected an expression for the assignment of variable '" << name.value().mText << "' at " << *mCurrentToken << std::endl;
+					return std::nullopt;
+				}
+				values.push_back(expression);
 			}
 		} else {
-			if (op.mText == "++" || op.mText == "--") {
+			if (v.mType.builtinType == Builtin_Type::ARRAY && v.mType.subTypes[0].builtinType == Builtin_Type::STRUCT) {
+				if (!ParseStructAssignment(v.mType.subTypes[0].name, values))
+					return std::nullopt;
+			} else if (op.mText == "++" || op.mText == "--") {
 				// Don't parse expression
 				// TODO: These aren't handled correctly, also in compilation... Fix it
 				Expression* opNode = new Expression;
@@ -1097,7 +1129,7 @@ namespace forest::parser {
 			} else {
 				Expression* expression = expectExpression(statement);
 				if (expression == nullptr) {
-					std::cerr << "Expected an assignment operator for variable " << name.value() << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected an assignment operator for variable " << name.value() << " at " << *mCurrentToken << std::endl;
 					return std::nullopt;
 				}
 				// if last character of operator is '=' but not '=' itself, add nodes to expression
@@ -1119,7 +1151,7 @@ namespace forest::parser {
 
 		std::optional<Token> semi = expectSemicolon();
 		if (!semi.has_value()) {
-			std::cerr << "Expected a semicolon to close the variable assignment of " << name.value().mText << " at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected a semicolon to close the variable assignment of " << name.value().mText << " at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 		v.mValues = values;
@@ -1142,13 +1174,13 @@ namespace forest::parser {
 
 		Expression* expression = expectExpression(statement, true);
 		if (expression == nullptr) {
-			std::cerr << "Expected an expression after the if statement at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected an expression after the if statement at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 
 		std::optional<Block> body = expectBlock();
 		if (!body.has_value()) {
-			std::cerr << "Expected a code block for the if statement at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected a code block for the if statement at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return std::nullopt;
 		}
@@ -1163,7 +1195,7 @@ namespace forest::parser {
 
 		std::optional<Block> elseBody = expectBlock();
 		if (!elseBody.has_value()) {
-			std::cerr << "Expected a code block for the else statement at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Expected a code block for the else statement at " << *mCurrentToken << std::endl;
 			return std::nullopt;
 		}
 
@@ -1258,12 +1290,12 @@ namespace forest::parser {
 				// Child element
 				std::optional<Type> childType = expectType();
 				if (!childType.has_value()) {
-					std::cerr << "Expected a type within the <...> of type '" << id->mText << "' at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a type within the <...> of type '" << id->mText << "' at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				}
 				if (!expectOperator(">").has_value()) {
-					std::cerr << "Expected a closing '>' for the opening '<' at " << openingSharp.value() << std::endl;
+					std::cerr << "[Parser]: Expected a closing '>' for the opening '<' at " << openingSharp.value() << std::endl;
 					mCurrentToken = saved;
 					return std::nullopt;
 				};
@@ -1275,7 +1307,7 @@ namespace forest::parser {
 					if (semi.has_value()) {
 						std::optional<Token> length = expectLiteral();
 						if (!length.has_value())
-							std::cerr << "Expected a length after the ';' in the generic array type at " << *mCurrentToken << std::endl;
+							std::cerr << "[Parser]: Expected a length after the ';' in the generic array type at " << *mCurrentToken << std::endl;
 						else {
 							len = stol(length.value().mText);
 						}
@@ -1304,7 +1336,7 @@ namespace forest::parser {
 
 			std::optional<Token> closingBracket = expectOperator("]");
 			if (!closingBracket.has_value()) {
-				std::cerr << "Expected a ']' to close the opening '[' at " << openingBracket.value() << " in type declaration." << std::endl;
+				std::cerr << "[Parser]: Expected a ']' to close the opening '[' at " << openingBracket.value() << " in type declaration." << std::endl;
 				mCurrentToken = saved;
 				return std::nullopt;
 			}
@@ -1335,15 +1367,16 @@ namespace forest::parser {
 		// While no '{' for range statement, parse
 		std::stack<char> parenStack;
 		std::vector<Expression*> nodes;
+		bool parsingProperty = false;
 
 		// While the next token exists and is not a closing character for the current statement context
 
 
 		while (ExpressionShouldContinueParsing(statementContext, parenStack)) {
-			if (mCurrentToken->mText == "(") {
+			if (mCurrentToken->mType == TokenType::OPERATOR && mCurrentToken->mText == "(") {
 				parenStack.push('(');
 				expectOperator("(");
-			} else if (mCurrentToken->mText == ")") {
+			} else if (mCurrentToken->mType == TokenType::OPERATOR && mCurrentToken->mText == ")") {
 				expectOperator(")");
 				// Pop parenStack
 				// Pop last 3 nodes
@@ -1359,7 +1392,7 @@ namespace forest::parser {
 					nodes.pop_back();
 
 					if (op->mValue.mType != TokenType::OPERATOR) {
-						std::cerr << "Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
+						std::cerr << "[Parser]: Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
 						mCurrentToken = saved;
 						return nullptr;
 					}
@@ -1377,12 +1410,14 @@ namespace forest::parser {
 					// And we probably want to make sure that the operator is a unary operator...
 					if (val1->mValue.mType == TokenType::OPERATOR) {
 						val1->mChildren.push_back(val2);
+						val1->mValue.mSubType = TokenSubType::OP_UNARY;
 						nodes.push_back(val1);
 					} else if (val2->mValue.mType == TokenType::OPERATOR) {
 						val2->mChildren.push_back(val1);
+						val2->mValue.mSubType = TokenSubType::OP_UNARY;
 						nodes.push_back(val2);
 					} else {
-						std::cerr << "Expected an operator inside unary expression at " << val1->mValue << std::endl;
+						std::cerr << "[Parser]: Expected an operator inside unary expression at " << val1->mValue << std::endl;
 						mCurrentToken = saved;
 						return nullptr;
 					}
@@ -1408,6 +1443,10 @@ namespace forest::parser {
 					node->mChildren.push_back(left);
 					node->mChildren.push_back(right);
 					nodes.push_back(node);
+					if (variables.find(identifier.value().mText) == variables.end() && !parsingProperty) {
+						std::cerr << "[Parser]: Unknown variable '" << identifier.value().mText << "' at " << identifier.value() << std::endl;
+						return nullptr;
+					}
 				} else if (nextToken.has_value() && nextToken.value().mText == "(") {
 					// Can only be function call, would be regular operator if this is meant to be a variable
 					// ui8 foo = bar(
@@ -1472,6 +1511,10 @@ namespace forest::parser {
 					expectOperator(")"); // We discard this value because we don't need it
 					nodes.push_back(node);
 				} else {
+					if (variables.find(identifier.value().mText) == variables.end() && !parsingProperty) {
+						std::cerr << "[Parser]: Unknown variable '" << identifier.value().mText << "' at " << identifier.value() << std::endl;
+						return nullptr;
+					}
 					Expression* node = new Expression;
 					node->mValue = identifier.value();
 					nodes.push_back(node);
@@ -1481,13 +1524,17 @@ namespace forest::parser {
 				Expression* node = new Expression;
 				node->mValue = op.value();
 				nodes.push_back(node);
+				if (op.value().mText == ".") {
+					parsingProperty = true;
+					continue;
+				}
 			} else if (mCurrentToken->mType == TokenType::LITERAL) {
 				std::optional<Token> literal = expectLiteral();
 				Expression* node = new Expression;
 				node->mValue = literal.value();
 				nodes.push_back(node);
 			}
-
+			parsingProperty = false;
 			// E.g. (4 - (3 + 1)) or ((4 - 3) + 1)
 		} // End of while
 		if (nodes.size() == 3) {
@@ -1499,7 +1546,7 @@ namespace forest::parser {
 			nodes.pop_back();
 
 			if (op->mValue.mType != TokenType::OPERATOR) {
-				std::cerr << "Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
+				std::cerr << "[Parser]: Expected an operator while parsing the expression at " << op->mValue << " but got '" << op->mValue.mText << "' instead." << std::endl;
 				mCurrentToken = saved;
 				return nullptr;
 			}
@@ -1516,25 +1563,27 @@ namespace forest::parser {
 			// We need to see which of these is the operator
 			if (val1->mValue.mType == TokenType::OPERATOR) {
 				val1->mChildren.push_back(val2);
+				val1->mValue.mSubType = TokenSubType::OP_UNARY;
 				nodes.push_back(val1);
 			} else if (val2->mValue.mType == TokenType::OPERATOR) {
 				val2->mChildren.push_back(val1);
+				val2->mValue.mSubType = TokenSubType::OP_UNARY;
 				nodes.push_back(val2);
 			} else {
-				std::cerr << "Expected an operator inside unary expression at " << val1->mValue << std::endl;
+				std::cerr << "[Parser]: Expected an operator inside unary expression at " << val1->mValue << std::endl;
 				mCurrentToken = saved;
 				return nullptr;
 			}
 		} // Else we just have a value wrapped with () which is fine -> (5) is still 5
 
 		if (nodes.empty()) {
-			std::cerr << "Zero nodes found while parsing expression at " << *mCurrentToken << std::endl;
+			std::cerr << "[Parser]: Zero nodes found while parsing expression at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return nullptr;
 		} else if (nodes.size() > 1) {
-			std::cerr << "Unexpected amount of nodes while parsing expression. Found " << nodes.size() << " but expected one. Full list:" << std::endl;
+			std::cerr << "[Parser]: Unexpected amount of nodes while parsing expression. Found " << nodes.size() << " but expected one. Full list:" << std::endl;
 			for (auto node : nodes) {
-				std::cerr << "Unexpected node " << node->mValue.mText << " at " << (*node).mValue << std::endl;
+				std::cerr << "[Parser]: Unexpected node " << node->mValue.mText << " at " << (*node).mValue << std::endl;
 			}
 			mCurrentToken = saved;
 			return nullptr;
@@ -1548,10 +1597,10 @@ namespace forest::parser {
 
 	bool Parser::ExpressionShouldContinueParsing(const Statement& statementContext, const std::stack<char>& parenStack) const {
 		bool hasNextToken = mCurrentToken != mTokensEnd;
-		bool closesIf = (mCurrentToken->mText == ")" || mCurrentToken->mText == "{") && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF);
+		bool closesIf = ((mCurrentToken->mType == TokenType::OPERATOR && mCurrentToken->mText == ")") || mCurrentToken->mText == "{") && (statementContext.mType == Statement_Type::FUNC_CALL || statementContext.mType == Statement_Type::IF);
 		bool closesArrayIndex = mCurrentToken->mText == "]" && statementContext.mType == Statement_Type::ARRAY_INDEX;
 		bool closesLoop = (mCurrentToken->mText == "{" || mCurrentToken->mText == "..") && statementContext.mType == Statement_Type::LOOP;
-		bool closesGeneralExpression = mCurrentToken->mType == TokenType::SEMICOLON || mCurrentToken->mText == ",";
+		bool closesGeneralExpression = mCurrentToken->mType == TokenType::SEMICOLON || (mCurrentToken->mType == TokenType::OPERATOR && mCurrentToken->mText == ",");
 		bool closesVarAssignment = mCurrentToken->mText == "}" && (statementContext.mType == Statement_Type::VAR_DECL_ASSIGN || statementContext.mType == Statement_Type::VAR_ASSIGNMENT);
 
 		return hasNextToken && !((closesIf || closesArrayIndex || closesLoop || closesVarAssignment || closesGeneralExpression) && parenStack.empty());
@@ -1559,22 +1608,36 @@ namespace forest::parser {
 
 	bool Parser::ParseStructAssignment(const std::string& structName, std::vector<Expression*>& values) {
 		std::vector<Token>::iterator saved = mCurrentToken;
-		std::optional<Token> bracket = expectOperator("{");
-		if (!bracket.has_value()) {
-			std::cerr << "Expected a '{' for the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
+		if (!structs.contains(structName)) {
+			std::cerr << "[Parser]: Error occurred trying to parse struct assignment: No struct found with name '" << structName << "' at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return false;
 		}
 
-		if (!structs.contains(structName) && !classes.contains(structName)) {
-			std::cerr << "Error occurred trying to parse struct assignment: No struct found with name '" << structName << "' at " << *mCurrentToken << std::endl;
-			mCurrentToken = saved;
-			return false;
+		std::optional<Token> bracket = expectOperator("{");
+		Statement statement;
+		statement.mType = Statement_Type::VAR_DECL_ASSIGN;
+		if (!bracket.has_value()) {
+			std::optional<Token> at = expectOperator("@");
+			if (!at.has_value()) {
+				std::cerr << "[Parser]: Expected a '{' or '@' for the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return false;
+			}
+			Expression* expression = expectExpression(statement);
+			if (expression == nullptr) {
+				std::cerr << "[Parser]: Expected an expression for the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return false;
+			}
+			Expression* atExp = new Expression;
+			atExp->mValue = at.value();
+			atExp->mChildren.push_back(expression);
+			values.push_back(atExp);
+			return true;
 		}
 
 		Struct& s = structs[structName];
-		Statement statement;
-		statement.mType = Statement_Type::VAR_DECL_ASSIGN;
 		// Insert positions available to the struct. This means we can mix and match between {val1, val2} and {.val1 = value; .val2 = value} like {.val1 = value; val2, .val3 = value}
 		// Without one overriding the other
 		std::vector<int> insertPositions;
@@ -1587,14 +1650,14 @@ namespace forest::parser {
 				// We have { .val1 = value; }
 				std::optional<Token> propertyOpt = expectIdentifier();
 				if (!propertyOpt.has_value()) {
-					std::cerr << "Expected a property name for the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a property name for the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return false;
 				}
 
 				std::optional<Token> equalOpt = expectOperator("=");
 				if (!equalOpt.has_value()) {
-					std::cerr << "Expected a '=' for the assignment of property " << propertyOpt.value().mText << " of struct " << structName << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a '=' for the assignment of property " << propertyOpt.value().mText << " of struct " << structName << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return false;
 				}
@@ -1602,13 +1665,13 @@ namespace forest::parser {
 				Expression* expression = expectExpression(statement);
 				std::optional<Token> semi = expectSemicolon();
 				if (!semi.has_value()) {
-					std::cerr << "Expected a semicolon to close the assignment of property " << propertyOpt.value().mText << " of struct " << structName << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a semicolon to close the assignment of property " << propertyOpt.value().mText << " of struct " << structName << " at " << *mCurrentToken << std::endl;
 					return false;
 				}
 
 				int fieldIndex = s.getIndexOfProperty(propertyOpt.value().mText);
 				if (fieldIndex == -1) {
-					std::cerr << "Could not find property " << propertyOpt.value().mText << " in struct " << structName << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Could not find property " << propertyOpt.value().mText << " in struct " << structName << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return false;
 				}
@@ -1628,7 +1691,7 @@ namespace forest::parser {
 				std::optional<Token> comma = expectOperator(",");
 				if (!comma.has_value()) {
 					// We didn't encounter the '}', and we didn't get a ','
-					std::cerr << "Expected a ',' while parsing the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a ',' while parsing the assignment of struct variable " << structName << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return false;
 				}
@@ -1639,22 +1702,36 @@ namespace forest::parser {
 
 	bool Parser::ParseClassAssignment(const std::string& className, std::vector<Expression*>& values) {
 		std::vector<Token>::iterator saved = mCurrentToken;
-		std::optional<Token> bracket = expectOperator("{");
-		if (!bracket.has_value()) {
-			std::cerr << "Expected a '{' for the assignment of class variable " << className << " at " << *mCurrentToken << std::endl;
+		if (!classes.contains(className)) {
+			std::cerr << "[Parser]: Error occurred trying to parse class assignment: No class found with name '" << className << "' at " << *mCurrentToken << std::endl;
 			mCurrentToken = saved;
 			return false;
 		}
 
-		if (!classes.contains(className)) {
-			std::cerr << "Error occurred trying to parse class assignment: No class found with name '" << className << "' at " << *mCurrentToken << std::endl;
-			mCurrentToken = saved;
-			return false;
+		std::optional<Token> bracket = expectOperator("{");
+		Statement statement;
+		statement.mType = Statement_Type::VAR_DECL_ASSIGN;
+		if (!bracket.has_value()) {
+			std::optional<Token> at = expectOperator("@");
+			if (!at.has_value()) {
+				std::cerr << "[Parser]: Expected a '{' or '@' for the assignment of class variable " << className << " at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return false;
+			}
+			Expression* expression = expectExpression(statement);
+			if (expression == nullptr) {
+				std::cerr << "[Parser]: Expected an expression for the assignment of class variable " << className << " at " << *mCurrentToken << std::endl;
+				mCurrentToken = saved;
+				return false;
+			}
+			Expression* atExp = new Expression;
+			atExp->mValue = at.value();
+			atExp->mChildren.push_back(expression);
+			values.push_back(atExp);
+			return true;
 		}
 
 		Class& c = classes[className];
-		Statement statement;
-		statement.mType = Statement_Type::VAR_DECL_ASSIGN;
 		// Insert positions available to the class. This means we can mix and match between {val1, val2} and {.val1 = value; .val2 = value} like {.val1 = value; val2, .val3 = value}
 		// Without one overriding the other
 		std::vector<int> insertPositions;
@@ -1667,14 +1744,14 @@ namespace forest::parser {
 				// We have { .val1 = value; }
 				std::optional<Token> propertyOpt = expectIdentifier();
 				if (!propertyOpt.has_value()) {
-					std::cerr << "Expected a property name for the assignment of class variable " << className << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a property name for the assignment of class variable " << className << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return false;
 				}
 
 				std::optional<Token> equalOpt = expectOperator("=");
 				if (!equalOpt.has_value()) {
-					std::cerr << "Expected a '=' for the assignment of property " << propertyOpt.value().mText << " of class " << className << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a '=' for the assignment of property " << propertyOpt.value().mText << " of class " << className << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return false;
 				}
@@ -1682,13 +1759,13 @@ namespace forest::parser {
 				Expression* expression = expectExpression(statement);
 				std::optional<Token> semi = expectSemicolon();
 				if (!semi.has_value()) {
-					std::cerr << "Expected a semicolon to close the assignment of property " << propertyOpt.value().mText << " of class " << className << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a semicolon to close the assignment of property " << propertyOpt.value().mText << " of class " << className << " at " << *mCurrentToken << std::endl;
 					return false;
 				}
 
 				int fieldIndex = c.getIndexOfProperty(propertyOpt.value().mText);
 				if (fieldIndex == -1) {
-					std::cerr << "Could not find property " << propertyOpt.value().mText << " in class " << className << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Could not find property " << propertyOpt.value().mText << " in class " << className << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return false;
 				}
@@ -1708,7 +1785,7 @@ namespace forest::parser {
 				std::optional<Token> comma = expectOperator(",");
 				if (!comma.has_value()) {
 					// We didn't encounter the '}', and we didn't get a ','
-					std::cerr << "Expected a ',' while parsing the assignment of class variable " << className << " at " << *mCurrentToken << std::endl;
+					std::cerr << "[Parser]: Expected a ',' while parsing the assignment of class variable " << className << " at " << *mCurrentToken << std::endl;
 					mCurrentToken = saved;
 					return false;
 				}

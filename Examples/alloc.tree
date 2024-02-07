@@ -1,0 +1,12 @@
+ui8 main(cstring[] argv) {
+	ref<ui8> val1 = alloc(20);
+	stdout.writeln(val1);
+	loop i, 0..20 {
+		val1[i] = i;
+	}
+	ref<ui32> reinterpreted = val1;
+	ui32 val2 = reinterpreted[0];
+	stdout.writeln(val2);
+	dealloc(val1, 20);
+	return 0;
+}

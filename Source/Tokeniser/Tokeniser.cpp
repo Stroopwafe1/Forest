@@ -378,6 +378,10 @@ namespace forest::parser {
 				case '\'':
 					if (currentToken.mSubType == TokenSubType::CHAR_LITERAL) {
 						currentToken.mEndOffset = end + 1;
+						if (currentToken.mText.length() > 1) {
+							std::cerr << "Error during tokenisation: Found character literal of length '" << currentToken.mText.length() << "', expected length '1'" << std::endl;
+							throw std::runtime_error("Tokeniser error");
+						}
 						endToken(currentToken, tokens);
 					} else {
 						if (currentToken.mType != TokenType::NOTHING) {
