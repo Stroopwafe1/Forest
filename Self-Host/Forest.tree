@@ -1,0 +1,1389 @@
+Ui8 _cTOKENTYPE_NONE = 0;
+// Literals
+ui8 _cTOKENTYPE_INTEGER = 1;
+ui8 _cTOKENTYPE_FLOAT = 2;
+ui8 _cTOKENTYPE_STRING = 3;
+ui8 _cTOKENTYPE_CHAR = 4;
+ui8 _cTOKENTYPE_BOOL = 5;
+// Operators
+ui8 _cTOKENTYPE_MINUS = 6;
+ui8 _cTOKENTYPE_PLUS = 7;
+ui8 _cTOKENTYPE_MULTIPLY = 8;
+ui8 _cTOKENTYPE_POWER_OF = 9;
+ui8 _cTOKENTYPE_DIVIDE = 10;
+ui8 _cTOKENTYPE_MODULUS = 11;
+ui8 _cTOKENTYPE_XOR = 12;
+ui8 _cTOKENTYPE_OR = 13;
+ui8 _cTOKENTYPE_AND = 14;
+ui8 _cTOKENTYPE_NOT = 15;
+ui8 _cTOKENTYPE_NEGATE = 16;
+ui8 _cTOKENTYPE_LESS_THAN = 17;
+ui8 _cTOKENTYPE_SHIFT_LEFT = 18;
+ui8 _cTOKENTYPE_GREATER_THAN = 19;
+ui8 _cTOKENTYPE_SHIFT_RIGHT = 20;
+ui8 _cTOKENTYPE_REFERENCE_OF = 21;
+ui8 _cTOKENTYPE_DEREFERENCE = 22;
+// Syntax
+ui8 _cTOKENTYPE_DOT = 23;
+ui8 _cTOKENTYPE_RANGE = 24;
+ui8 _cTOKENTYPE_COLON = 25;
+ui8 _cTOKENTYPE_PARENTHESIS_OPEN = 26;
+ui8 _cTOKENTYPE_PARENTHESIS_CLOSE = 27;
+ui8 _cTOKENTYPE_SQUARE_OPEN = 28;
+ui8 _cTOKENTYPE_SQUARE_CLOSE = 29;
+ui8 _cTOKENTYPE_CURLY_OPEN = 30;
+ui8 _cTOKENTYPE_CURLY_CLOSE = 31;
+ui8 _cTOKENTYPE_COMMA = 32;
+ui8 _cTOKENTYPE_MACRO = 33;
+ui8 _cTOKENTYPE_SINGLE_QUOTE = 34;
+ui8 _cTOKENTYPE_DOUBLE_QUOTE = 35;
+ui8 _cTOKENTYPE_SEMICOLON = 36;
+ui8 _cTOKENTYPE_SINGLELINE_COMMENT = 37;
+ui8 _cTOKENTYPE_MULTILINE_COMMENT = 38;
+
+ui8 _cTOKENTYPE_ASSIGNMENT = 64; // To be used as a bit flag
+ui8 _cTOKENTYPE_EQUALITY = 128;
+
+ui16 _cTOKENTYPE_KEYWORD_IDENTIFIER = 512;
+ui16 _cTOKENTYPE_KEYWORD_IF = 513;
+ui16 _cTOKENTYPE_KEYWORD_ELSE = 514;
+ui16 _cTOKENTYPE_KEYWORD_LOOP = 515;
+ui16 _cTOKENTYPE_KEYWORD_BREAK = 516;
+ui16 _cTOKENTYPE_KEYWORD_SKIP = 517;
+ui16 _cTOKENTYPE_KEYWORD_RETURN = 518;
+ui16 _cTOKENTYPE_KEYWORD_STRUCT = 519;
+ui16 _cTOKENTYPE_KEYWORD_CLASS = 520;
+
+ui16 _cTOKENTYPE_ESCAPE_STRING = 1024;
+ui16 _cTOKENTYPE_ESCAPE_CHAR = 1025;
+
+ui8 _cPARSER_NODETYPE_NONE = 0;
+ui8 _cPARSER_NODETYPE_PROGRAMME = 1;
+ui8 _cPARSER_NODETYPE_FUNCTION = 2;
+ui8 _cPARSER_NODETYPE_PARAM_LIST = 3;
+ui8 _cPARSER_NODETYPE_BLOCK = 4;
+ui8 _cPARSER_NODETYPE_ELSE_IF = 5;
+ui8 _cPARSER_NODETYPE_VARIABLE_DECLARATION = 6;
+ui8 _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT = 7;
+ui8 _cPARSER_NODETYPE_VARIABLE_ASSIGNMENT = 8;
+ui8 _cPARSER_NODETYPE_FUNCTION_CALL = 9;
+ui8 _cPARSER_NODETYPE_EXPRESSION = 10;
+ui8 _cPARSER_NODETYPE_IF = 11;
+ui8 _cPARSER_NODETYPE_ELSE = 12;
+ui8 _cPARSER_NODETYPE_BREAK = 13;
+ui8 _cPARSER_NODETYPE_SKIP = 14;
+ui8 _cPARSER_NODETYPE_RETURN = 15;
+ui8 _cPARSER_NODETYPE_LOOP = 16;
+ui8 _cPARSER_NODETYPE_UNTIL = 17;
+ui8 _cPARSER_NODETYPE_RANGE = 18;
+ui8 _cPARSER_NODETYPE_TYPE = 19;
+ui8 _cPARSER_NODETYPE_TOKEN = 20;
+ui8 _cPARSER_NODETYPE_PROPERTY = 21;
+ui8 _cPARSER_NODETYPE_FUNCTION_CALL = 22;
+ui8 _cPARSER_NODETYPE_INDEX = 23;
+ui8 _cPARSER_NODETYPE_RANGE_MIN = 24;
+ui8 _cPARSER_NODETYPE_RANGE_MAX = 25;
+ui8 _cPARSER_NODETYPE_RANGE_STEP = 26;
+
+ui8 _cPARSER_TYPETYPE_VOID = 0;
+ui8 _cPARSER_TYPETYPE_UI8 = 1;
+ui8 _cPARSER_TYPETYPE_UI16 = 2;
+ui8 _cPARSER_TYPETYPE_UI32 = 3;
+ui8 _cPARSER_TYPETYPE_UI64 = 4;
+ui8 _cPARSER_TYPETYPE_I8 = 5;
+ui8 _cPARSER_TYPETYPE_I16 = 6;
+ui8 _cPARSER_TYPETYPE_I32 = 7;
+ui8 _cPARSER_TYPETYPE_I64 = 8;
+ui8 _cPARSER_TYPETYPE_F8 = 9;
+ui8 _cPARSER_TYPETYPE_F16 = 10;
+ui8 _cPARSER_TYPETYPE_F32 = 11;
+ui8 _cPARSER_TYPETYPE_F64 = 12;
+ui8 _cPARSER_TYPETYPE_BOOL = 13;
+ui8 _cPARSER_TYPETYPE_CHAR = 14;
+ui8 _cPARSER_TYPETYPE_REF = 15;
+ui8 _cPARSER_TYPETYPE_ARRAY = 16;
+ui8 _cPARSER_TYPETYPE_STRUCT = 17;
+ui8 _cPARSER_TYPETYPE_CLASS = 18;
+
+void memcopy(ref<ui8> destination, ref<ui8> source, ui64 bytes) {
+	// First copy over every 8 bytes, and then individual bytes
+	ref<ui64> resizedDest = destination;
+	ref<ui64> resizedSrc = source;
+	ui64 size = bytes / 8;
+	loop i, 0..size {
+		resizedDest[i] = resizedSrc[i];
+	}
+	loop i, 0..bytes % 8 {
+		destination[(size * 8) + i] = source[i];
+	}
+}
+
+bool StrEquals(ref<ui8> s1, ref<ui8> s2, ui64 length) {
+	loop i, 0..length {
+		if s1[i] != s2[i] {
+			return false;
+		}
+	}
+	return true;
+}
+
+ui16 GetLengthOfCstring(ref<ui8> input) {
+	ui32 it = 0;
+	loop {
+		ui8 byte = input[it];
+		if byte != 0 {
+			it += 1;
+		} else {
+			return it;
+		}
+	}
+	return 0;
+}
+
+struct Token {
+	ui16 type;
+	ui32 line;
+	ui32 column;
+	ref<ui8> file;
+	ref<ui8> text;
+	ui64 textLength;
+}
+
+void PrintToken(ref<Token> token) {
+	Token t = @token;
+	stdout.write("' ");
+	SYS_WRITE(1, t.text, t.textLength);
+	stdout.write("' at ");
+	SYS_WRITE(1, t.file, lengthOfFile);
+	stdout.write(":");
+	ui32 line = t.line;
+	stdout.write(line);
+	ui32 column = t.column;
+	stdout.write(":");
+	stdout.writeln(column);
+}
+
+class TokenArr {
+	ui64 size;
+	ui64 count;
+	ref<Token> tokens;
+
+	void New(ui64 _size) {
+		size = _size;
+		tokens = alloc((size * 34) + 34);
+		count = 0;
+	}
+
+	void AddToken(ref<Token> token) {
+		// If count exceeded size, realloc and move
+		if (count + 1) == size {
+			ui64 s = size * 2;
+			ui64 c = count + 1;
+			ref<Token> newRef = alloc((s * 34) + 34);
+			memcopy(newRef, tokens, count * 34);
+			dealloc(tokens, (size * 34) + 34);
+			tokens = newRef;
+			size = s;
+			count = c;
+		} else {
+			ui64 c = count;
+			memcopy(tokens + (count * 34), token, 34);
+			c += 1;
+			count = c;
+		}
+	}
+	ref<Token> At(ui64 index) {
+		return tokens[index];
+	}
+}
+
+void Tokenise(ref<TokenArr> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8> file) {
+	Token currentToken = {1, 0, 0, file, 0, 0};
+	ui64 start = 0;
+	ui16 currentType = 0;
+	ui64 textLength = 0;
+	ui32 line = 1;
+	loop i, 0..sourceLength {
+		start += 1;
+		ui8 byte = source[i];
+		if (currentType == _cTOKENTYPE_STRING) & (byte != '"') {
+			textLength += 1;
+			skip;
+		} else if (currentType == _cTOKENTYPE_CHAR) & (byte != 39) {
+			textLength += 1;
+			skip;
+		} else if (currentType == _cTOKENTYPE_MULTILINE_COMMENT) & ((byte == '*') & (source[i + 1] == '/')) {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			textLength = 0;
+			currentType = 0;
+			i += 1;
+			skip;
+		} else if (currentType == _cTOKENTYPE_SINGLELINE_COMMENT) & (byte != 10) {
+			textLength += 1;
+			skip;
+		}
+
+		if (byte >= '0') & (byte <= '9') {
+			if currentType == _cTOKENTYPE_NONE {
+				currentType = _cTOKENTYPE_INTEGER;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			} else if currentType <= _cTOKENTYPE_CHAR {
+				textLength += 1;
+			} else if currentType == _cTOKENTYPE_NONE {
+				currentType = _cTOKENTYPE_INTEGER;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			} else if currentType == _cTOKENTYPE_MINUS {
+				currentType = _cTOKENTYPE_INTEGER;
+				textLength += 1;
+			}  else if currentType == _cTOKENTYPE_KEYWORD_IDENTIFIER {
+				textLength += 1;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_INTEGER;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else if byte == '.' { // TODO: Dot with 2 identifiers doesn't get tokenised correctly
+			if currentType == _cTOKENTYPE_FLOAT {
+				currentToken.type = _cTOKENTYPE_INTEGER;
+				currentToken.textLength = textLength - 1;
+				EndToken(tokens, \currentToken);
+				currentToken.type = _cTOKENTYPE_RANGE;
+				currentToken.text = source + (i - 1);
+				currentToken.column = start - 1;
+				currentToken.textLength = 2;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_NONE;
+				textLength = 0;
+			} else if currentType == _cTOKENTYPE_DOT {
+				currentToken.type = _cTOKENTYPE_RANGE;
+				currentToken.textLength = textLength + 1;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_NONE;
+				textLength = 0;
+			} else if currentType == _cTOKENTYPE_INTEGER {
+				currentType = _cTOKENTYPE_FLOAT;
+				textLength += 1;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_DOT;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else if byte == '/' {
+			if currentType == _cTOKENTYPE_DIVIDE {
+				currentType = _cTOKENTYPE_SINGLELINE_COMMENT;
+				currentToken.text = (source + i) + 1;
+				textLength = 0;
+				currentToken.column = start + 1;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_DIVIDE;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else if byte == '-' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_MINUS;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '+' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_PLUS;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '@' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_DEREFERENCE;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '!' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_NOT;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '~' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_NEGATE;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '(' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_PARENTHESIS_OPEN;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == ')' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_PARENTHESIS_CLOSE;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == 123 { // Opening '{'
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_CURLY_OPEN;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '}' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_CURLY_CLOSE;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '[' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_SQUARE_OPEN;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == ']' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_SQUARE_CLOSE;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == ',' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_COMMA;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '^' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_XOR;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '#' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_MACRO;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '%' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_MODULUS;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '=' {
+			if ((currentType >= _cTOKENTYPE_MINUS) & (currentType <= _cTOKENTYPE_DEREFERENCE)) | (currentType == _cTOKENTYPE_ASSIGNMENT) {
+				currentToken.type = currentType + _cTOKENTYPE_ASSIGNMENT;
+				currentToken.textLength = textLength + 1;
+				EndToken(tokens, \currentToken);
+				currentType = 0;
+				textLength = 0;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_ASSIGNMENT;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else if byte == ':' {
+			if currentType == _cTOKENTYPE_COLON {
+				currentToken.textLength = textLength + 1;
+				EndToken(tokens, \currentToken);
+				currentType = 0;
+				textLength = 0;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_COLON;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else if byte == '|' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_OR;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '&' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_MODULUS;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if byte == '*' {
+			if currentType == _cTOKENTYPE_MULTIPLY {
+				currentToken.type = _cTOKENTYPE_POWER_OF;
+				currentToken.textLength = textLength + 1;
+				EndToken(tokens, \currentToken);
+				currentType = 0;
+				textLength = 0;
+			} else if currentType == _cTOKENTYPE_DIVIDE {
+				currentType = _cTOKENTYPE_MULTILINE_COMMENT;
+				currentToken.text = (source + i) + 1;
+				currentToken.column = start + 1;
+				textLength = 0;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_MULTIPLY;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else if byte == '>' {
+			if currentType == _cTOKENTYPE_GREATER_THAN {
+				textLength += 1;
+				currentToken.type = _cTOKENTYPE_SHIFT_RIGHT;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_GREATER_THAN;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else if byte == '<' {
+			if currentType == _cTOKENTYPE_LESS_THAN {
+				textLength += 1;
+				currentToken.type = _cTOKENTYPE_SHIFT_LEFT;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_LESS_THAN;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else if byte == '"' {
+			if currentType == _cTOKENTYPE_STRING {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength - 1;
+				EndToken(tokens, \currentToken);
+				currentType = 0;
+				textLength = 0;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_STRING;
+				currentToken.column = start;
+				currentToken.text = (source + i) + 1;
+				textLength = 1;
+			}
+		} else if byte == 39 { // single quote
+			if currentType == _cTOKENTYPE_CHAR {
+				if textLength > 1 {
+					stdout.write("[Tokeniser]: Character literal length longer than 1 character at ");
+					ui32 lengthOfFile = GetLengthOfCstring(file);
+					SYS_WRITE(1, file, lengthOfFile);
+					stdout.write(":");
+					stdout.write(line);
+					ui32 column = currentToken.column;
+					stdout.write(":");
+					stdout.writeln(column);
+					SYS_EXIT(1);
+				}
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = 0;
+				textLength = 0;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_CHAR;
+				currentToken.column = start;
+				currentToken.text = (source + i) + 1;
+				textLength = 0;
+			}
+		} else if byte == 92 { // '\'
+			if currentType == _cTOKENTYPE_STRING {
+				currentType = _cTOKENTYPE_ESCAPE_STRING;
+			} else if currentType == _cTOKENTYPE_CHAR {
+				currentType = _cTOKENTYPE_ESCAPE_CHAR;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_REFERENCE_OF;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else if byte == ';' {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = _cTOKENTYPE_SEMICOLON;
+			currentToken.column = start;
+			currentToken.text = source + i;
+			textLength = 1;
+		} else if (byte == 32) | (byte == 9) { // ' ' or '\t'
+			if ((currentType == _cTOKENTYPE_SINGLELINE_COMMENT) | (currentType == _cTOKENTYPE_MULTILINE_COMMENT)) | ((currentType == _cTOKENTYPE_STRING) | (currentType == _cTOKENTYPE_CHAR)) {
+				textLength += 1;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = 0;
+				textLength = 0;
+			}
+		} else if byte == 10 {
+			currentToken.type = currentType;
+			currentToken.textLength = textLength;
+			EndToken(tokens, \currentToken);
+			currentType = 0;
+			line += 1;
+			currentToken.line = line;
+			start = 0;
+			textLength = 0;
+		} else if ((byte == 'x') | (byte == 'o')) | (((byte >= 'a') & (byte <= 'f')) | ((byte >= 'A') & (byte <= 'F'))) {
+			if currentType == _cTOKENTYPE_INTEGER {
+				textLength += 1;
+			} else if currentType == _cTOKENTYPE_KEYWORD_IDENTIFIER {
+				textLength += 1;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_KEYWORD_IDENTIFIER;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
+		} else {
+			if currentType != _cTOKENTYPE_KEYWORD_IDENTIFIER {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_KEYWORD_IDENTIFIER;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			} else {
+				textLength += 1;
+			}
+		}
+	}
+	currentToken.type = currentType;
+	currentToken.textLength = textLength;
+	EndToken(tokens, \currentToken);
+}
+
+void EndToken(ref<TokenArr> tokens, ref<Token> token) {
+	Token t = @token;
+	if (t.type) != _cTOKENTYPE_NONE {
+		tokens.AddToken(token);
+	}
+}
+
+struct Type {
+	i32 firstChild;
+	i32 nextSibling;
+	//i32 extraIndex; // Extra index is to index into the structs/classes array, depending on the TypeType. Structs/Classes will have the name of the struct/class. Name is not necessary for the base types.
+	ui16 byteSize;
+	i16 align;
+	bool signed;
+	ui8 typeType; // VOID, UI8, UI16, UI32, UI64, I8, I16, I32, I64, F8, F16, F32, F64, BOOL, CHAR, REF, ARRAY, STRUCT, CLASS
+} // (size 14)
+
+class TypeArr {
+	ui64 size;
+	ui64 count;
+	ref<Type> types;
+
+	void New(ui64 _size) {
+		size = _size;
+		types = alloc((size * 14) + 14);
+		count = 0;
+	}
+
+	void AddType(ref<Type> type) {
+		// If count exceeded size, realloc and move
+		if (count + 1) == size {
+			ui64 s = size * 2;
+			ui64 c = count + 1;
+			ref<Type> newRef = alloc((s * 14) + 14);
+			memcopy(newRef, types, count * 14);
+			dealloc(types, (size * 14) + 14);
+			types = newRef;
+			size = s;
+			count = c;
+		} else {
+			ui64 c = count;
+			memcopy(types + (count * 14), type, 14);
+			c += 1;
+			count = c;
+		}
+	}
+}
+
+struct Node {
+	i32 firstChild;
+	i32 nextSibling;
+	ui16 type;
+	i32 typeIndex;
+	ui64 tokenIndex;
+}// (size 22)
+
+class NodeArr {
+	ui64 size;
+	ui64 count;
+	ref<Node> nodes;
+
+	void New(ui64 _size) {
+		size = _size;
+		nodes = alloc((size * 22) + 22);
+		count = 0;
+	}
+
+	void AddNode(ref<Node> node) {
+		// If count exceeded size, realloc and move
+		if (count + 1) == size {
+			ui64 s = size * 2;
+			ui64 c = count + 1;
+			ref<Node> newRef = alloc((s * 22) + 22);
+			memcopy(newRef, nodes, count * 22);
+			dealloc(nodes, (size * 22) + 22);
+			nodes = newRef;
+			size = s;
+			count = c;
+		} else {
+			ui64 c = count;
+			memcopy(nodes + (count * 22), node, 22);
+			c += 1;
+			count = c;
+		}
+	}
+}
+
+ui64 GetTypeIndexFromName(ref<TypeArr> typArr, ref<Token> t) {
+	Token token = @t;
+	bool equals = StrEquals(token.text, "ui8", 3);
+	if equals {
+		return _cPARSER_TYPETYPE_UI8;
+	}
+	equals = StrEquals(token.text, "ui16", 4);
+	if equals {
+		return _cPARSER_TYPETYPE_UI16;
+	}
+	equals = StrEquals(token.text, "ui32", 4);
+	if equals {
+		return _cPARSER_TYPETYPE_UI32;
+	}
+	equals = StrEquals(token.text, "ui64", 4);
+	if equals {
+		return _cPARSER_TYPETYPE_UI64;
+	}
+	equals = StrEquals(token.text, "i8", 2);
+	if equals {
+		return _cPARSER_TYPETYPE_I8;
+	}
+	equals = StrEquals(token.text, "i16", 3);
+	if equals {
+		return _cPARSER_TYPETYPE_I16;
+	}
+	equals = StrEquals(token.text, "i32", 3);
+	if equals {
+		return _cPARSER_TYPETYPE_I32;
+	}
+	equals = StrEquals(token.text, "i64", 3);
+	if equals {
+		return _cPARSER_TYPETYPE_I64;
+	}
+	equals = StrEquals(token.text, "f8", 2);
+	if equals {
+		return _cPARSER_TYPETYPE_F8;
+	}
+	equals = StrEquals(token.text, "f16", 3);
+	if equals {
+		return _cPARSER_TYPETYPE_F16;
+	}
+	equals = StrEquals(token.text, "f32", 3);
+	if equals {
+		return _cPARSER_TYPETYPE_F32;
+	}
+	equals = StrEquals(token.text, "f64", 3);
+	if equals {
+		return _cPARSER_TYPETYPE_F64;
+	}
+	equals = StrEquals(token.text, "bool", 4);
+	if equals {
+		return _cPARSER_TYPETYPE_BOOL;
+	}
+	equals = StrEquals(token.text, "char", 4);
+	if equals {
+		return _cPARSER_TYPETYPE_CHAR;
+	}
+	equals = StrEquals(token.text, "void", 4);
+	if equals {
+		return _cPARSER_TYPETYPE_VOID;
+	}
+	return 15;
+}
+
+bool IsTokenSpecifiedType(ref<TokenArr> tArr, ui64 offset, ui16 desiredType) {
+	TokenArr tokens = @tArr;
+	ref<Token> t = tokens.At(offset);
+	Token token = @t;
+	return token.type == desiredType;
+}
+
+// Returns how much to increment i by
+ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
+	TokenArr tokens = @tArr;
+	TypeArr types = @typeArr;
+	ui64 tokenCount = tokens.count;
+	// id [<? ]>?
+	ref<Token> t = tokens.At(offset);
+	Token token = @t;
+	ui64 type = token.type;
+	if (type != _cTOKENTYPE_KEYWORD_IDENTIFIER) {
+		// stdout.write("[Parser]: Expected a type identifier but got ");
+		// PrintToken(t);
+		// SYS_EXIT(1);
+		return 0;
+	}
+	ui16 returnVal = 1;
+	ui64 childTypeIndex = GetTypeIndexFromName(typeArr, t);
+	// if childType == 15, it's not a primitive type
+	ref<Type> childTypePtr = types.At(childTypeIndex);
+	Type childType = @childTypePtr;
+
+
+	t = typeArr.At(offset + 1);
+	Token nextToken = @t;
+	type = nextToken.type;
+	if type == _cTOKENTYPE_SQUARE_OPEN {
+		bool isNextLiteral = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_INTEGER);
+		Type typ = {
+			childTypeIndex,
+			-1,
+			childType.byteSize,
+			childType.align,
+			false,
+			_cPARSER_TYPETYPE_ARRAY
+		};
+
+		if childTypeIndex >= 15 {
+			stdout.writeln("[Parser]: Non-primitive type arrays are not implemented yet");
+			SYS_EXIT(1);
+		}
+		
+		if isNextLiteral {
+			bool isNextClosingSquare = IsTokenSpecifiedType(tArr, offset + 3, _cTOKENTYPE_SQUARE_CLOSE);
+			if !isNextClosingSquare {
+				stdout.write("[Parser]: Expected an integer or ']' but got ");
+				PrintToken(t);
+				SYS_EXIT(1);
+			}
+			ui64 value = find_ui64_in_string(token.text);
+			typ.byteSize = childType.byteSize * value;
+			returnVal += 3;
+		} else {
+			bool isNextClosingSquare = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_SQUARE_CLOSE);
+			if !isNextClosingSquare {
+				stdout.write("[Parser]: Expected an integer or ']' but got ");
+				PrintToken(t);
+				SYS_EXIT(1);
+			}
+			returnVal += 2;
+		}
+		typeArr.Add(\typ);
+	}
+	else if type == _cTOKENTYPE_LESS_THAN {
+		bool isRef = StrEquals(token.text, "ref", 3);
+		bool isArr = StrEquals(token.text, "array", 5);
+		if isRef {
+			Type typ = {
+				types.count + 1,
+				-1,
+				8,
+				8,
+				false,
+				_cPARSER_TYPETYPE_REF
+			};
+			typeArr.Add(\typ);
+		} else if isArr {
+			Type typ = {
+				types.count + 1,
+				-1,
+				8,
+				8,
+				false,
+				_cPARSER_TYPETYPE_ARRAY
+			};
+			typeArr.Add(\typ);
+		}
+		ui16 depth = ParseType(tArr, typeArr, offset + 2);
+		bool hasClosing = IsTokenSpecified(tArr, (offset + 2) + depth, _cTOKENTYPE_GREATER_THAN);
+		if !hasClosing {
+			stdout.write("[Parser]: Unbalanced angle brackets, expected a '>' to close the ");
+			PrintToken(\token);
+			SYS_EXIT(1);
+		}
+		returnVal += (2 + depth);
+	} else {
+		return returnVal;
+	}
+	
+	return returnVal;
+}
+
+ui64 ParseExpression(ref<NodeArr> nodeArr, ui64 offset, ui64 max, ui16 endType) {
+	ui64 returnValue = 0;
+	Node currentNode = { 0, 0, 0, 0, 0 };
+	loop i, offset..max {
+		bool end = IsTokenSpecified(tArr, i, endType);
+		if end {
+			break;
+		}
+		currentNode.type = _cPARSER_NODETYPE_EXPRESSION;
+		currentNode.firstChild = 0;
+		currentNode.nextSibling = 0;
+		currentNode.typeIndex = -1;
+		currentNode.tokenIndex = i;
+		nodeArr.AddNode(\currentNode);
+		returnValue += 1;
+	}
+	return returnValue;
+}
+
+ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset) {
+	NodeArr nodes = @nodeArr;
+	TokenArr tokens = @tArr;
+	bool hasBody = IsTokenSpecified(tArr, offset, _cTOKENTYPE_CURLY_OPEN);
+	if !hasBody {
+		stdout.write("[Parser]: Expected a '{' for the body but got ");
+		ref<Token> bodyToken = tArr.At(offset);
+		PrintToken(bodyToken);
+		SYS_EXIT(1);
+	}
+	Node currentNode = { nodes.count + 1, 0, _cPARSER_NODETYPE_BLOCK, -1, offset };
+	nodeArr.AddNode(\currentNode);
+	ui64 returnVal = 1;
+
+	bool hasElse = false;
+	loop i, offset + 1..tokens.count {
+		ref<Token> nextTokenPtr = tArr.At(offset + 1);
+		Token nextToken = @nextTokenPtr;
+		currentNode.tokenIndex = i;
+		ui64 toSkip = 0;
+		if hasElse {
+			if (nextToken.type) == _cTOKENTYPE_CURLY_OPEN {
+				hasElse = false;
+				toSkip += ParseBody(tArr, nodeArr, typeArr, i);
+			}
+			bool isIf = StrEquals(nextToken.text, "if", 2);
+			if !isIf {
+				stdout.write("[Parser]: Expected a '{' or 'if' after 'else' but got ");
+				PrintToken(nextTokenPtr);
+				SYS_EXIT(1);
+			}
+		}
+
+		if (nextToken.type) == _cTOKENTYPE_CURLY_CLOSE {
+			break;
+		}
+		
+		bool equals = StrEquals(nextToken.text, "return", 6);
+		if equals {
+			currentNode.type = _cPARSER_NODETYPE_RETURN;
+			currentNode.firstChild = nodes.count + 1;
+			currentNode.nextSibling = 0;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i;
+			nodeArr.AddNode(\currentNode);
+			toSkip += 1;
+
+			toSkip += ParseExpression(nodeArr, i + 1, tokens.count, _cTOKENTYPE_SEMICOLON);
+			bool hasSemi = IsTokenSpecified(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
+			if !hasSemi {
+				stdout.write("[Parser]: Expected a ';' to close the statement but got ");
+				ref<Token> notSemi = tArr.At(i + toSkip);
+				PrintToken(notSemi);
+				SYS_EXIT(1);
+			}
+		}
+
+		equals = StrEquals(nextToken.text, "break", 5);
+		if equals {
+			currentNode.type = _cPARSER_NODETYPE_BREAK;
+			currentNode.firstChild = -1;
+			currentNode.nextSibling = 0;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i;
+			nodeArr.AddNode(\currentNode);
+			toSkip += 1;
+			bool hasSemi = IsTokenSpecified(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
+			if !hasSemi {
+				stdout.write("[Parser]: Expected a ';' to close the statement but got ");
+				ref<Token> notSemi = tArr.At(i + toSkip);
+				PrintToken(notSemi);
+				SYS_EXIT(1);
+			}
+		}
+		
+		equals = StrEquals(nextToken.text, "skip", 4);
+		if equals {
+			currentNode.type = _cPARSER_NODETYPE_SKIP;
+			currentNode.firstChild = -1;
+			currentNode.nextSibling = 0;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i;
+			nodeArr.AddNode(\currentNode);
+			toSkip += 1;
+			bool hasSemi = IsTokenSpecified(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
+			if !hasSemi {
+				stdout.write("[Parser]: Expected a ';' to close the statement but got ");
+				ref<Token> notSemi = tArr.At(i + toSkip);
+				PrintToken(notSemi);
+				SYS_EXIT(1);
+			}
+		}
+		
+		equals = StrEquals(nextToken.text, "if", 2);
+		if equals {
+			if hasElse {
+				currentNode.type = _cPARSER_NODETYPE_ELSE_IF;
+				hasElse = false;
+			} else {
+				currentNode.type = _cPARSER_NODETYPE_IF;
+			}
+			currentNode.firstChild = nodes.count + 1;
+			currentNode.nextSibling = 0;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i;
+			nodeArr.AddNode(\currentNode);
+			toSkip += 1;
+
+			toSkip += ParseExpression(nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
+			
+			if toSkip == 1 {
+				stdout.write("[Parser]: Expected an expression for the ");
+				PrintToken(nextTokenPtr);
+				SYS_EXIT(1);
+			}
+			toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
+		}
+		equals = StrEquals(nextToken.text, "else", 4);
+		if equals {
+			hasEquals = true;
+			// Rest of code is handled at start loop or if
+		}
+
+		equals = StrEquals(nextToken.text, "loop", 4);
+		if equals {
+			// Parse unconditional loop
+			toSkip += 1;
+			bool isSimpleLoop = IsTokenSpecified(tArr, i + 1, _cTOKENTYPE_CURLY_OPEN);
+			if isSimpleLoop {
+				toSkip += ParseBody(tArr, nodeArr, typeArr, i + 1);
+			} else {
+				bool hasVariable = IsTokenSpecified(tArr, i + 1, _cTOKENTYPE_KEYWORD_IDENTIFIER);
+				if !hasVariable {
+					stdout.write("[Parser]: Expected a variable identifier for the ");
+					PrintToken(nextTokenPtr);
+					SYS_EXIT(1);
+				}
+				currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
+				currentNode.firstChild = nodes.count + 1;
+				currentNode.nextSibling = 0;
+				currentNode.typeIndex = 0;
+				currentNode.tokenIndex = i + 1;
+				nodeArr.AddNode(\currentNode);
+				toSkip += 1;
+				
+				bool hasStep = IsTokenSpecified(tArr, i + 2, _cTOKENTYPE_COLON);
+				
+				if hasStep {
+					currentNode.type = _cPARSER_NODETYPE_RANGE_STEP;
+					currentNode.firstChild = nodes.count + 1;
+					currentNode.nextSibling = 0;
+					currentNode.typeIndex = -1;
+					currentNode.tokenIndex = i + 2;
+					nodeArr.AddNode(\currentNode);
+					toSkip += 1;
+
+					toSkip += ParseExpression(nodeArr, i + 2, tokens.count, _cTOKENTYPE_SEMICOLON);
+				}
+
+				currentNode.type = _cPARSER_NODETYPE_RANGE_MIN;
+				currentNode.firstChild = nodes.count + 1;
+				currentNode.nextSibling = 0;
+				currentNode.typeIndex = -1;
+				currentNode.tokenIndex = i + toSkip;
+				nodeArr.AddNode(\currentNode);
+				toSkip += ParseExpression(nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_RANGE);
+				
+				currentNode.type = _cPARSER_NODETYPE_RANGE_MAX;
+				currentNode.firstChild = nodes.count + 1;
+				currentNode.nextSibling = 0;
+				currentNode.typeIndex = -1;
+				currentNode.tokenIndex = i + toSkip;
+				nodeArr.AddNode(\currentNode);
+				toSkip += ParseExpression(nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_CURLY_OPEN);
+
+				toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
+			}
+		}
+		equals = StrEquals(nextToken.text, "until", 5);
+		if equals {
+			currentNode.type = _cPARSER_NODETYPE_UNTIL;
+			currentNode.firstChild = nodes.count + 1;
+			currentNode.nextSibling = 0;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i;
+			nodeArr.AddNode(\currentNode);
+			toSkip += 1;
+
+			toSkip += ParseExpression(nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
+			toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
+		}
+		
+		// TODO: Parse function call, var declaration, var assignment
+		// Function call is identifier (.::identifier)* '('
+		// Var declaration is identifier identifier
+		// Var assignment is same as function call until '(' or '='
+		bool isIdentifier = IsTokenSpecified(tArr, i, _cTOKENTYPE_KEYWORD_IDENTIFIER);
+		bool hasSecondIdent = IsTokenSpecified(tArr, i + 1, _cTOKENTYPE_KEYWORD_IDENTIFIER);
+		bool isGeneric = IsTokenSpecified(tArr, i + 1, _cTOKENTYPE_LESS_THAN);
+		bool isArray = IsTokenSpecified(tArr, i + 1, _cTOKENTYPE_SQUARE_OPEN);
+		bool isArrayType = false;
+
+		if isArray {
+			loop j, i + 2..tokens.count {
+				bool closing = IsTokenSpecified(tArr, j, _cTOKENTYPE_SQUARE_CLOSE);
+				bool ident = IsTokenSpecified(tArr, j + 1, _cTOKENTYPE_KEYWORD_IDENTIFIER);
+				if closing & ident {
+					isArrayType = true;
+					break;
+				}
+			}
+		}
+		
+		if hasIdentifier {
+			if (hasSecondIdent | isGeneric) | isArrayType {
+				// We are doing var declaration
+				ui64 currType = types.count;
+				toSkip += ParseType(tArr, typeArr, i);
+				ui64 typeIndex = GetTypeIndexFromName(typeArr, token);
+				if typeIndex == 15 {
+					typeIndex = currType;
+				}
+				ref<Token> assignTokenPtr = tArr.At((i + toSkip) + 1);
+				Token assignToken = @assignTokenPtr;
+
+				currentNode.typeIndex = typeIndex;
+				currentNode.tokenIndex = i + toSkip;
+				if ((assignToken.type) & _cTOKENTYPE_ASSIGNMENT) == _cTOKENTYPE_ASSIGNMENT {
+					currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT;
+					currentNode.firstChild = nodes.count + 1;
+					currentNode.nextSibling = 0;
+					nodeArr.AddNode(\currentNode);
+					toSkip += 1;
+
+					currentNode.type = _cPARSER_NODETYPE_EXPRESSION;
+					currentNode.firstChild = nodes.count + 1;
+					currentNode.nextSibling = 0;
+					currentNode.typeIndex = -1;
+					currentNode.tokenIndex = i + toSkip;
+					nodeArr.AddNode(\currentNode);
+					toSkip += 1;
+
+					toSkip += ParseExpression(nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
+				} else {
+					currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
+					currentNode.firstChild = -1;
+					currentNode.nextSibling = nodes.count + 1;
+					nodeArr.AddNode(\currentNode);
+					
+					bool hasSemi = IsTokenSpecified(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
+					if !hasSemi {
+						stdout.write("[Parser]: Expected a ';' to close the statement but got ");
+						ref<Token> notSemi = tArr.At(i + toSkip);
+						PrintToken(notSemi);
+						SYS_EXIT(1);
+					}
+				}
+			} else {
+				// Assignment or func call
+				
+			}
+		}
+		
+		returnVal += toSkip;
+	}
+}
+
+ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset, i32 typeIndex) {
+	NodeArr nodes = @nodeArr;
+	TokenArr tokens = @tArr;
+	Node currentNode = { nodes.count + 1, 0, _cPARSER_NODETYPE_FUNCTION, typeIndex, offset };
+	bool isSyntaxCorrect = IsTokenSpecified(tArr, offset + 1, _cTOKENTYPE_PARENTHESIS_OPEN);
+	if !isSyntaxCorrect {
+		ref<Token> t = tArr.At(offset + 1);
+		// This never happens as we only call this function when we have detected (
+		stdout.write("[Parser]: Expected '(' for function definition but got ");
+		PrintToken(t);
+		SYS_EXIT(1);
+	}
+	nodeArr.AddNode(\currentNode);
+	ui64 returnVal = 1;
+
+	bool hasNoParameters = IsTokenSpecified(tArr, offset + 2, _cTOKENTYPE_PARENTHESIS_CLOSE);
+	if !hasNoParameters {
+		currentNode.firstChild = nodes.count + 1;
+		currentNode.type = _cPARSER_NODETYPE_PARAM_LIST;
+		currentNode.typeIndex = -1;
+		currentNode.tokenIndex = offset + 1;
+		nodeArr.AddNode(\currentNode);
+
+		// Parse param list... type name, type name, etc...
+		loop i, offset + 2..tokens.count {
+			ui64 currType = types.count;
+			ui16 toIncrease = ParseType(tArr, typeArr, i);
+			ui64 typeIndex = GetTypeIndexFromName(typeArr, token);
+			if typeIndex == 15 {
+				typeIndex = currType;
+			}
+			i += toIncrease;
+			currentNode.firstChild = 0;
+			bool hasComma = IsTokenSpecified(tArr, i + 1, _cTOKENTYPE_COMMA);
+			if hasComma {
+				currentNode.nextSibling = nodes.count + 1;
+			}
+			currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
+			currentNode.typeIndex = typeIndex;
+			currentNode.tokenIndex = i;
+			nodeArr.AddNode(\currentNode);
+			bool hasClosing = IsTokenSpecified(tArr, i + 1, _cTOKENTYPE_PARENTHESIS_CLOSE);
+			if hasClosing {
+				returnVal += (i + 1);
+				break;
+			}
+
+			if (!hasComma) && (!hasClosing) {
+				stdout.write("[Parser]: Expected a ',' or ')' inside the parameter list of function definition ");
+				ref<Token> functionToken = tArr.At(offset);
+				PrintToken(functionToken);
+				SYS_EXIT(1);
+			}
+		}
+	} else {
+		returnVal += 1;
+	}
+
+	bool hasBody = IsTokenSpecified(tArr, offset + returnVal, _cTOKENTYPE_CURLY_OPEN);
+	if !hasBody {
+		stdout.write("[Parser]: Expected a '{' for the body of function definition but got ");
+		ref<Token> bodyToken = tArr.At(offset + returnVal);
+		PrintToken(bodyToken);
+		SYS_EXIT(1);
+	}
+	returnVal += ParseBody(tArr, nodeArr, typeArr, offset + returnVal);
+
+	return returnVal;
+}
+
+void Parse(ref<TokenArr> tArr, ref<NodeArr> nodes, ref<TypeArr> typeArr) {
+	TokenArr tokens = @tArr;
+	TypeArr types = @typeArr;
+	Node currentNode = {1, -1, 1, -1, 0};
+	nodes.AddNode(\currentNode);
+	ui64 tokenCount = tokens.count;
+
+	loop i, 0..tokenCount {
+		ref<Token> token = tokens.At(i);
+		Token t = @token;
+		ui64 type = t.type;
+
+		if type == _cTOKENTYPE_MACRO {
+			stdout.writeln("[Parser]: Parsing macros is not supported yet");
+			SYS_EXIT(1);
+		}
+
+		if type != _cTOKENTYPE_KEYWORD_IDENTIFIER {
+			stdout.write("[Parser]: Unexpected token type, expected identifier but got ");
+			PrintToken(token);
+			SYS_EXIT(1);
+		}
+
+		bool isStruct = StrEquals(t.text, "struct", 6);
+		bool isClass = StrEquals(t.text, "class", 5);
+		bool isAligned = StrEquals(t.text, "aligned", 7);
+		if (isStruct || isClass) || isAligned {
+			stdout.writeln("[Parser]: Parsing structs/classes is not supported yet");
+			SYS_EXIT(1);
+		}
+
+		ui64 currType = types.count;
+		ui16 toIncrease = ParseType(tArr, typeArr, i);
+		ui64 typeIndex = GetTypeIndexFromName(typeArr, token);
+		if typeIndex == 15 {
+			typeIndex = currType;
+		}
+		i += toIncrease;
+		bool isFunction = IsTokenSpecified(tArr, i + 2, _cTOKENTYPE_PARENTHESIS_OPEN);
+		if isFunction {
+			toIncrease = ParseFunction(tArr, nodes, typeArr, i + 2, typeIndex);
+			i += (toIncrease + 2);
+		}
+	}
+}
+
+void SetupTypeArr(ref<TypeArr> typeArr) {
+	Type type = {
+		-1,
+		-1,
+		0,
+		0,
+		false,
+		0
+	}; // void
+	typeArr.AddType(\type);
+	type.byteSize = 1;
+	type.align = 1;
+	type.typeType = 1; // UI8
+	typeArr.AddType(\type);
+	type.byteSize = 2;
+	type.align = 2;
+	type.typeType = 2; // UI16
+	typeArr.AddType(\type);
+	type.byteSize = 4;
+	type.align = 4;
+	type.typeType = 3; // UI32
+	typeArr.AddType(\type);
+	type.byteSize = 8;
+	type.align = 8;
+	type.typeType = 4; // UI64
+	typeArr.AddType(\type);
+	type.signed = true;
+	type.byteSize = 1;
+	type.align = 1;
+	type.typeType = 5; // I8
+	typeArr.AddType(\type);
+	type.byteSize = 2;
+	type.align = 2;
+	type.typeType = 6; // I16
+	typeArr.AddType(\type);
+	type.byteSize = 4;
+	type.align = 4;
+	type.typeType = 7; // I32
+	typeArr.AddType(\type);
+	type.byteSize = 8;
+	type.align = 8;
+	type.typeType = 8; // I64
+	typeArr.AddType(\type);
+	type.byteSize = 1;
+	type.align = 1;
+	type.typeType = 9; // F8
+	typeArr.AddType(\type);
+	type.byteSize = 2;
+	type.align = 2;
+	type.typeType = 10; // F16
+	typeArr.AddType(\type);
+	type.byteSize = 4;
+	type.align = 4;
+	type.typeType = 11; // F32
+	typeArr.AddType(\type);
+	type.byteSize = 8;
+	type.align = 8;
+	type.typeType = 12; // F64
+	typeArr.AddType(\type);
+	type.byteSize = 1;
+	type.align = 1;
+	type.typeType = 13; // BOOL
+	typeArr.AddType(\type);
+	type.byteSize = 4;
+	type.align = 4;
+	type.typeType = 14; // CHAR
+	typeArr.AddType(\type);
+}
+
+ui8 main(array<ref<ui8>> argv) {
+	TokenArr tokens = {0, 0, 0};
+	tokens.New(1024);
+	i32 fd = SYS_OPEN(argv[1], 0, 0);
+	if (fd < 0) {
+		stdout.writeln("Could not open file");
+		return -1;
+	}
+	ui64 fileSize = SYS_LSEEK(fd, 0, 2);
+	SYS_LSEEK(fd, 0, 0);
+	ref<ui8> source = alloc(fileSize);
+
+	ui64 sizeRead = SYS_READ(fd, source, fileSize);
+	if (sizeRead == 0) {
+		stdout.writeln("Could not read from file");
+		return -1;
+	}
+	Tokenise(\tokens, source, sizeRead, argv[1]);
+	ui32 lengthOfFile = GetLengthOfCstring(argv[1]);
+	ui64 tokenCount = tokens.count;
+	NodeArr nodes = {0, 0, 0};
+	nodes.New(tokenCount);
+	TypeArr types = {0, 0, 0};
+	types.New(256);
+	SetupTypeArr(\types);
+	Parse(\tokens, \nodes, \types);
+	return 0;
+}

@@ -495,11 +495,25 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 
 			std::vector<std::string> localSymbols;
 
+			const char* sizes[] = {"byte", "word", "dword", "qword"};
+			int size = 0;
 			for (size_t i = 0; i < function.mArgs.size(); i++) {
 				const auto& arg = function.mArgs[i];
-				std::string reg = i < 6 ? getRegister(callingConvention[i], getSizeFromByteSize(arg.mType.byteSize)) : "rbp+";
+				size += arg.mType.byteSize;
+			}
+			size += 8;
+			outfile << "\tsub rsp, " << nearestMultipleOf(size, 8) << std::endl;
 
-				addToSymbols(&argOffset, Variable{arg.mType, arg.mName, {}}, reg);
+			Type t = {"ref<>", Builtin_Type::REF, { Type {klass.second.mName, Builtin_Type::CLASS, {}, klass.second.mSize, klass.second.mSize }}, 8, 8};
+			addToSymbols(&offset, Variable{t, klass.second.mName, {}});
+			outfile << "\tmov qword [rbp" << offset << "], rdi" << std::endl;
+			for (size_t i = 0; i < function.mArgs.size(); i++) {
+				const auto& arg = function.mArgs[i];
+
+				size_t incI = i + 1;
+				int s = addToSymbols(&offset, Variable{arg.mType, arg.mName, {}});
+				std::string reg = incI < 6 ? getRegister(callingConvention[incI], s) : "rbp+";
+				outfile << "\tmov " << sizes[s] << " [rbp" << offset << "], " << reg << std::endl;
 				localSymbols.push_back(arg.mName);
 			}
 
@@ -559,9 +573,9 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 			const char* sizes[] = {"byte", "word", "dword", "qword"};
 			for (size_t i = 0; i < function.mArgs.size(); i++) {
 				const auto& arg = function.mArgs[i];
-				std::string reg = i < 6 ? getRegister(callingConvention[i], getSizeFromByteSize(arg.mType.byteSize)) : "rbp+";
 
 				int s = addToSymbols(&offset, Variable{arg.mType, arg.mName, {}});
+				std::string reg = i < 6 ? getRegister(callingConvention[i], s) : "rbp+";
 				outfile << "\tmov " << sizes[s] << " [rbp" << offset << "], " << reg << std::endl;
 				localSymbols.push_back(arg.mName);
 			}
@@ -903,6 +917,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							else
 								outfile << "-" << -(var.offset + c.mFields[i].mOffset);
 							outfile << "], " << getRegister("a", actualSize) << "; VAR_DECL_ASSIGN CLASS " << v.mType.name << "." << c.mFields[i].mNames[0] << std::endl;
+
 						}
 					}
 				} else {
@@ -1066,7 +1081,9 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							const Class& klass = p.classes.at(currentClass);
 							int propIndex = klass.getIndexOfProperty(v.mName);
 							int leftSize = getSizeFromType(klass.mFields[propIndex].mType);
-							outfile << "\tmov " << sizes[leftSize] << " [rdi+" << klass.mFields[propIndex].mOffset << "], " << getRegister("a", leftSize) << "; VAR_ASSIGNMENT else CLASS " << klass.mName << "." << v.mName << std::endl;
+							SymbolInfo& classInfo = symbolTable[currentClass];
+							outfile << "\tmov r10, qword [rbp" << classInfo.offset << "]" << std::endl;
+							outfile << "\tmov " << sizes[leftSize] << " [r10+" << klass.mFields[propIndex].mOffset << "], " << getRegister("a", leftSize) << "; VAR_ASSIGNMENT else CLASS " << klass.mName << "." << v.mName << std::endl;
 						} else {
 							SymbolInfo& symbol = symbolTable[v.mName];
 							if (v.mValues.empty()) {
@@ -1157,18 +1174,24 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 				} else {
 					if (fc.mArgs.empty() && !fc.mClassName.empty()) {
 						const SymbolInfo& symbol = symbolTable[fc.mClassName];
-						outfile << "\tlea rax, " << symbol.location(true) << std::endl;
+						if (symbol.type.builtinType == Builtin_Type::CLASS)
+							outfile << "\tlea rax, " << symbol.location(true) << std::endl;
 						outfile << "\tmov " << callingConvention[0] << ", rax" << std::endl;
 					} else {
-						for (int i = fc.mArgs.size() - 1; i >= 0; i--) {
-							if (i == 0 && !fc.mClassName.empty()) {
-								const SymbolInfo& symbol = symbolTable[fc.mClassName];
+						uint8_t toChange = 0;
+						if (!fc.mClassName.empty()) {
+							const SymbolInfo& symbol = symbolTable[fc.mClassName];
+							if (symbol.type.builtinType == Builtin_Type::CLASS) {
 								outfile << "\tlea rax, " << symbol.location(true) << std::endl;
 								outfile << "\tmov " << callingConvention[0] << ", rax" << std::endl;
-								continue;
+							} else {
+								outfile << "\tmov " << callingConvention[0] << ", " << sizes[symbol.size] << " " << symbol.location(true) << std::endl;
 							}
+							toChange = 1;
+						}
+						for (int i = toChange; i < fc.mArgs.size() + toChange; i++) {
 							std::string value;
-							Expression* expr = fc.mArgs[i];
+							Expression* expr = fc.mArgs[i - toChange];
 							if (expr->mValue.mSubType == TokenSubType::STRING_LITERAL) {
 								value = p.findLiteralByContent(expr->mValue.mText)->mAlias;
 							} else {
@@ -1178,7 +1201,7 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							if (i <= 6)
 								outfile << "\tmov " << callingConvention[i] << ", " << value << std::endl;
 							else
-								outfile << "\tpush " << value << std::endl;
+								outfile << "\tpush " << value << std::endl; // These will be in wrong order
 						}
 					}
 					if (fc.mFunctionName == "printf" && fc.mIsExternal) {
@@ -1196,7 +1219,11 @@ void X86_64LinuxYasmCompiler::printBody(std::ofstream& outfile, const Programme&
 							outfile << fc.mNamespace << "_";
 						if (!fc.mClassName.empty()) {
 							const SymbolInfo& symbol = symbolTable[fc.mClassName];
-							outfile << symbol.type.name << "_";
+							if (symbol.type.builtinType == Builtin_Type::CLASS)
+								outfile << symbol.type.name << "_";
+							else {
+								outfile << symbol.type.subTypes[0].name << "_";
+							}
 						}
 						outfile << statement.funcCall.value().mFunctionName << std::endl;
 					}
@@ -1296,15 +1323,28 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		} else if (expression->mValue.mSubType == TokenSubType::CHAR_LITERAL) {
 			outfile << "\tmov rax, " << int(expression->mValue.mText[0]) << "; CHAR_LITERAL '" << escape(&expression->mValue.mText[0]) << "'" << std::endl;
 		} else if (expression->mValue.mType == TokenType::IDENTIFIER) {
-			SymbolInfo& val = symbolTable[expression->mValue.mText];
-			bool sign = val.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
-			const char* moveAction = getMoveAction(3, val.size, sign);
-			const char* reg = (val.size < 2 || sign) ? "rax" : getRegister("a", val.size);
-			if (val.isGlobal) {
-				outfile << "\t" << moveAction << " " << reg << ", " << sizes[val.size] << " "  << val.location(true) << "; printExpression global variable " << expression->mValue.mText << std::endl;
+			if (!symbolTable.contains(expression->mValue.mText)) {
+				// Class member
+				const Class& klass = p.classes.at(currentClass);
+				int propIndex = klass.getIndexOfProperty(expression->mValue.mText);
+				bool sign = klass.mFields[propIndex].mType.name[0] == 'i';
+				int size = getSizeFromType(klass.mFields[propIndex].mType);
+				const char* reg = size < 2 || sign ? "rax" : getRegister("a", size);
+				const char* moveAction = getMoveAction(3, size, sign);
+				SymbolInfo& classInfo = symbolTable[currentClass];
+				outfile << "\tmov r10, qword [rbp" << classInfo.offset << "]" << std::endl;
+				outfile << "\t" << moveAction << " " << reg << ", " << sizes[size] << " [r10+" << klass.mFields[propIndex].mOffset << "]" << "; printExpression, left identifier, class " << currentClass << "." << expression->mValue.mText << std::endl;
 			} else {
-				bool dereferenceNeeded = val.reg == "rbp";
-				outfile << "\t" << moveAction << " " << reg << ", " << sizes[val.size] << " " << val.location(dereferenceNeeded) << "; printExpression variable " << expression->mValue.mText << std::endl;
+				SymbolInfo& val = symbolTable[expression->mValue.mText];
+				bool sign = val.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
+				const char* moveAction = getMoveAction(3, val.size, sign);
+				const char* reg = (val.size < 2 || sign) ? "rax" : getRegister("a", val.size);
+				if (val.isGlobal) {
+					outfile << "\t" << moveAction << " " << reg << ", " << sizes[val.size] << " "  << val.location(true) << "; printExpression global variable " << expression->mValue.mText << std::endl;
+				} else {
+					bool dereferenceNeeded = val.reg == "rbp";
+					outfile << "\t" << moveAction << " " << reg << ", " << sizes[val.size] << " " << val.location(dereferenceNeeded) << "; printExpression variable " << expression->mValue.mText << std::endl;
+				}
 			}
 		} else if (expression->mValue.mType == TokenType::OPERATOR) {
 			if (expression->mValue.mText == "++") {
@@ -1404,7 +1444,8 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				printArgs = true;
 				if (!classVariable.empty()) {
 					const SymbolInfo& symbol = symbolTable[classVariable];
-					outfile << "\tlea rax, " << symbol.location(true) << std::endl;
+					if (symbol.type.builtinType == Builtin_Type::CLASS)
+						outfile << "\tlea rax, " << symbol.location(true) << std::endl;
 					outfile << "\tmov " << callingConvention[0] << ", rax" << std::endl;
 					i++;
 				}
@@ -1617,7 +1658,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			structName = left.type.subTypes[0].name; // TODO: We assume only one level deep
 		}
 		int actualSize = 0;
-		if (left.type.builtinType == Builtin_Type::STRUCT || (left.type.subTypes[0].builtinType == Builtin_Type::STRUCT)) {
+		if (left.type.builtinType == Builtin_Type::STRUCT) {
 			const Struct& s = p.structs.at(structName);
 			int fieldIndex = s.getIndexOfProperty(propName);
 			const StructField& sf = s.mFields[fieldIndex];
@@ -1677,7 +1718,9 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			leftSize = getSizeFromType(klass.mFields[propIndex].mType);
 			const char* reg = leftSize < 2 || leftSign ? "rax" : getRegister("a", leftSize);
 			const char* moveAction = getMoveAction(3, leftSize, leftSign);
-			outfile << "\t" << moveAction << " " << reg << ", " << sizes[leftSize] << " [rdi+" << klass.mFields[propIndex].mOffset << "]" << "; printExpression, left identifier, class " << currentClass << "." << expression->mChildren[0]->mValue.mText << std::endl;
+			SymbolInfo& classInfo = symbolTable[currentClass];
+			outfile << "\tmov r10, qword [rbp" << classInfo.offset << "]" << std::endl;
+			outfile << "\t" << moveAction << " " << reg << ", " << sizes[leftSize] << " [r10+" << klass.mFields[propIndex].mOffset << "]" << "; printExpression, left identifier, class " << currentClass << "." << expression->mChildren[0]->mValue.mText << std::endl;
 		} else {
 			SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
 			leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
@@ -1719,7 +1762,9 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			rightSize = getSizeFromType(klass.mFields[propIndex].mType);
 			const char* reg = rightSize < 2 || rightSign ? "rbx" : getRegister("b", rightSize);
 			const char* moveAction = getMoveAction(3, rightSize, rightSign);
-			outfile << "\t" << moveAction << " " << reg << ", " << sizes[rightSize] << " [rdi+" << klass.mFields[propIndex].mOffset << "]" << "; printExpression, right identifier, class " << currentClass << "." << expression->mChildren[1]->mValue.mText << std::endl;
+			SymbolInfo& classInfo = symbolTable[currentClass];
+			outfile << "\tmov r10, qword [rbp" << classInfo.offset << "]" << std::endl;
+			outfile << "\t" << moveAction << " " << reg << ", " << sizes[rightSize] << " [r10+" << klass.mFields[propIndex].mOffset << "]" << "; printExpression, right identifier, class " << currentClass << "." << expression->mChildren[1]->mValue.mText << std::endl;
 		} else {
 			SymbolInfo& right = symbolTable[expression->mChildren[1]->mValue.mText];
 			rightSign = right.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i

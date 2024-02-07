@@ -695,7 +695,11 @@ namespace forest::parser {
 		if (!(functionName.value().mText == "write" || functionName.value().mText == "writeln")) {
 			if (variables.contains(className.value().mText)) {
 				const Variable& klass = variables[className.value().mText];
-				fc.mClassName = klass.mType.name;
+				if (klass.mType.builtinType == Builtin_Type::CLASS) {
+					fc.mClassName = klass.mType.name;
+				} else {
+					fc.mClassName = klass.mType.subTypes[0].name;
+				}
 			}
 			_funcCalls.push_back(fc);
 		}
