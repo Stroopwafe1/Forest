@@ -954,6 +954,12 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 		if hasElse {
 			if (nextToken.type) == _cTOKENTYPE_CURLY_OPEN {
 				hasElse = false;
+				currentNode.type = _cPARSER_NODETYPE_ELSE;
+				currentNode.firstChild = (nodes.count) + 1;
+				currentNode.nextSibling = 0;
+				currentNode.typeIndex = -1;
+				currentNode.tokenIndex = i - 1;
+				nodeArr.AddNode(\currentNode);
 				toSkip += ParseBody(tArr, nodeArr, typeArr, i);
 			}
 			bool isIf = StrEquals(nextToken.text, "if", 2);
