@@ -1,4 +1,4 @@
-i32 main(string[] argv) {
+i32 main(array<ref<ui8> > argv) {
 	return 0;
 }
 

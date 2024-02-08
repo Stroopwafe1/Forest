@@ -104,6 +104,12 @@ ui8 _cPARSER_TYPETYPE_ARRAY = 16;
 ui8 _cPARSER_TYPETYPE_STRUCT = 17;
 ui8 _cPARSER_TYPETYPE_CLASS = 18;
 
+void memcopy2(ref<ui8> dest, ref<ui8> src, ui64 bytes) {
+	loop i, 0..bytes {
+		dest[i] = src[i];
+	}
+}
+
 void memcopy(ref<ui8> destination, ref<ui8> source, ui64 bytes) {
 	// First copy over every 8 bytes, and then individual bytes
 	ref<ui64> resizedDest = destination;
@@ -151,7 +157,7 @@ struct Token {
 void PrintToken(ref<Token> token) {
 	Token t = @token;
 	ui16 lengthOfFile = GetLengthOfCstring(t.file);
-	stdout.write("' ");
+	stdout.write("'");
 	SYS_WRITE(1, t.text, t.textLength);
 	stdout.write("' at ");
 	SYS_WRITE(1, t.file, lengthOfFile);
@@ -180,19 +186,23 @@ class TokenArr {
 			ui64 s = size * 2;
 			ui64 c = count + 1;
 			ref<Token> newRef = alloc((s * 34) + 34);
-			memcopy(newRef, tokens, count * 34);
+			memcopy2(newRef, tokens, count * 34);
 			dealloc(tokens, (size * 34) + 34);
 			tokens = newRef;
 			size = s;
 			count = c;
 		} else {
 			ui64 c = count;
-			memcopy(tokens + (count * 34), token, 34);
+			memcopy2(tokens + (count * 34), token, 34);
 			c += 1;
 			count = c;
 		}
 	}
 	ref<Token> At(ui64 index) {
+		if index >= count {
+			stdout.writeln("TokenArr Index out of Bounds");
+			SYS_EXIT(1);
+		}
 		return tokens + (index * 34);
 	}
 }
@@ -212,14 +222,19 @@ void Tokenise(ref<TokenArr> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 		} else if (currentType == _cTOKENTYPE_CHAR) & (byte != 39) {
 			textLength += 1;
 			skip;
-		} else if (currentType == _cTOKENTYPE_MULTILINE_COMMENT) & ((byte == '*') & (source[i + 1] == '/')) {
-			currentToken.type = currentType;
-			currentToken.textLength = textLength;
-			EndToken(tokens, \currentToken);
-			textLength = 0;
-			currentType = 0;
-			i += 1;
-			skip;
+		} else if currentType == _cTOKENTYPE_MULTILINE_COMMENT {
+			if (byte == '*') & (source[i + 1] == '/') {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				textLength = 0;
+				currentType = 0;
+				i += 1;
+				skip;
+			} else {
+				textLength += 1;
+				skip;
+			}
 		} else if (currentType == _cTOKENTYPE_SINGLELINE_COMMENT) & (byte != 10) {
 			textLength += 1;
 			skip;
@@ -630,7 +645,7 @@ void Tokenise(ref<TokenArr> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 
 void EndToken(ref<TokenArr> tokens, ref<Token> token) {
 	Token t = @token;
-	if (t.type) != _cTOKENTYPE_NONE {
+	if (((t.type) != _cTOKENTYPE_NONE) & ((t.type) != _cTOKENTYPE_SINGLELINE_COMMENT)) & ((t.type) != _cTOKENTYPE_MULTILINE_COMMENT) {
 		tokens.AddToken(token);
 	}
 }
@@ -662,14 +677,14 @@ class TypeArr {
 			ui64 s = size * 2;
 			ui64 c = count + 1;
 			ref<Type> newRef = alloc((s * 14) + 14);
-			memcopy(newRef, _types, count * 14);
+			memcopy2(newRef, _types, count * 14);
 			dealloc(_types, (size * 14) + 14);
 			_types = newRef;
 			size = s;
 			count = c;
 		} else {
 			ui64 c = count;
-			memcopy(_types + (count * 14), type, 14);
+			memcopy2(_types + (count * 14), type, 14);
 			c += 1;
 			count = c;
 		}
@@ -705,14 +720,14 @@ class NodeArr {
 			ui64 s = size * 2;
 			ui64 c = count + 1;
 			ref<Node> newRef = alloc((s * 22) + 22);
-			memcopy(newRef, _nodes, count * 22);
+			memcopy2(newRef, _nodes, count * 22);
 			dealloc(_nodes, (size * 22) + 22);
 			_nodes = newRef;
 			size = s;
 			count = c;
 		} else {
 			ui64 c = count;
-			memcopy(_nodes + (count * 22), node, 22);
+			memcopy2(_nodes + (count * 22), node, 22);
 			c += 1;
 			count = c;
 		}
@@ -799,11 +814,12 @@ ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 	// id [<? ]>?
 	ref<Token> t = tArr.At(offset);
 	Token token = @t;
+	
 	ui64 type = token.type;
 	if (type != _cTOKENTYPE_KEYWORD_IDENTIFIER) {
-		// stdout.write("[Parser]: Expected a type identifier but got ");
-		// PrintToken(t);
-		// SYS_EXIT(1);
+		stdout.write("[Parser]: Expected a type identifier but got ");
+		PrintToken(t);
+		SYS_EXIT(1);
 		return 0;
 	}
 	ui16 returnVal = 1;
@@ -813,7 +829,7 @@ ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 	Type childType = @childTypePtr;
 
 
-	t = typeArr.At(offset + 1);
+	t = tArr.At(offset + 1);
 	Token nextToken = @t;
 	type = nextToken.type;
 	if type == _cTOKENTYPE_SQUARE_OPEN {
@@ -882,6 +898,9 @@ ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 		if !hasClosing {
 			stdout.write("[Parser]: Unbalanced angle brackets, expected a '>' to close the ");
 			PrintToken(\token);
+			stdout.write(" but got ");
+			ref<Token> unexpected = tArr.At((offset + 2) + depth);
+			PrintToken(unexpected);
 			SYS_EXIT(1);
 		}
 		returnVal += (2 + depth);
@@ -928,7 +947,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 
 	bool hasElse = false;
 	loop i, offset + 1..tokens.count {
-		ref<Token> nextTokenPtr = tArr.At(offset + 1);
+		ref<Token> nextTokenPtr = tArr.At(i);
 		Token nextToken = @nextTokenPtr;
 		currentNode.tokenIndex = i;
 		ui64 toSkip = 0;
@@ -959,13 +978,15 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
-			toSkip += ParseExpression(nodeArr, i + 1, tokens.count, _cTOKENTYPE_SEMICOLON);
+			toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
 			bool hasSemi = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
 			if !hasSemi {
 				stdout.write("[Parser]: Expected a ';' to close the statement but got ");
 				ref<Token> notSemi = tArr.At(i + toSkip);
 				PrintToken(notSemi);
 				SYS_EXIT(1);
+			} else {
+				toSkip += 1;
 			}
 		}
 
@@ -984,6 +1005,8 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				ref<Token> notSemi = tArr.At(i + toSkip);
 				PrintToken(notSemi);
 				SYS_EXIT(1);
+			} else {
+				toSkip += 1;
 			}
 		}
 		
@@ -1002,6 +1025,8 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				ref<Token> notSemi = tArr.At(i + toSkip);
 				PrintToken(notSemi);
 				SYS_EXIT(1);
+			} else {
+				toSkip += 1;
 			}
 		}
 		
@@ -1020,7 +1045,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
-			toSkip += ParseExpression(nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
+			toSkip += ParseExpression(tArr, nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
 			
 			if toSkip == 1 {
 				stdout.write("[Parser]: Expected an expression for the ");
@@ -1068,7 +1093,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 					nodeArr.AddNode(\currentNode);
 					toSkip += 1;
 
-					toSkip += ParseExpression(nodeArr, i + 2, tokens.count, _cTOKENTYPE_SEMICOLON);
+					toSkip += ParseExpression(tArr, nodeArr, i + 2, tokens.count, _cTOKENTYPE_SEMICOLON);
 				}
 
 				currentNode.type = _cPARSER_NODETYPE_RANGE_MIN;
@@ -1077,7 +1102,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = i + toSkip;
 				nodeArr.AddNode(\currentNode);
-				toSkip += ParseExpression(nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_RANGE);
+				toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_RANGE);
 				
 				currentNode.type = _cPARSER_NODETYPE_RANGE_MAX;
 				currentNode.firstChild = (nodes.count) + 1;
@@ -1085,7 +1110,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = i + toSkip;
 				nodeArr.AddNode(\currentNode);
-				toSkip += ParseExpression(nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_CURLY_OPEN);
+				toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_CURLY_OPEN);
 
 				toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
 			}
@@ -1100,7 +1125,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
-			toSkip += ParseExpression(nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
+			toSkip += ParseExpression(tArr, nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
 			toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
 		}
 		
@@ -1155,7 +1180,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 					nodeArr.AddNode(\currentNode);
 					toSkip += 1;
 
-					toSkip += ParseExpression(nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
+					toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
 				} else {
 					currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
 					currentNode.firstChild = -1;
@@ -1168,11 +1193,12 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 						ref<Token> notSemi = tArr.At(i + toSkip);
 						PrintToken(notSemi);
 						SYS_EXIT(1);
+					} else {
+						toSkip += 1;
 					}
 				}
 			} else {
 				// Assignment or func call
-				
 			}
 		}
 		
@@ -1226,7 +1252,7 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 			nodeArr.AddNode(\currentNode);
 			bool hasClosing = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_PARENTHESIS_CLOSE);
 			if hasClosing {
-				returnVal += (i + 1);
+				returnVal += i;
 				break;
 			}
 
@@ -1291,10 +1317,10 @@ void Parse(ref<TokenArr> tArr, ref<NodeArr> nodes, ref<TypeArr> typeArr) {
 			typeIndex = currType;
 		}
 		i += toIncrease;
-		bool isFunction = IsTokenSpecifiedType(tArr, i + 2, _cTOKENTYPE_PARENTHESIS_OPEN);
+		bool isFunction = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_PARENTHESIS_OPEN);
 		if isFunction {
-			toIncrease = ParseFunction(tArr, nodes, typeArr, i + 2, typeIndex);
-			i += (toIncrease + 2);
+			toIncrease = ParseFunction(tArr, nodes, typeArr, i, typeIndex);
+			i += toIncrease;
 		}
 	}
 }
@@ -1388,6 +1414,20 @@ ui8 main(cstring[] argv) {
 	Tokenise(\tokens, source, sizeRead, argv[1]);
 	ui32 lengthOfFile = GetLengthOfCstring(argv[1]);
 	ui64 tokenCount = tokens.count;
+	loop i, 0..tokenCount {
+		ref<Token> tok = tokens.At(i);
+		Token t = @tok;
+		stdout.write("'");
+		SYS_WRITE(1, t.text, t.textLength);
+		stdout.write("' at ");
+		SYS_WRITE(1, t.file, lengthOfFile);
+		stdout.write(":");
+		ui32 line = t.line;
+		stdout.write(line);
+		ui32 column = t.column;
+		stdout.write(":");
+		stdout.writeln(column);
+	}
 	NodeArr nodes = {0, 0, 0};
 	nodes.New(tokenCount);
 	TypeArr types = {0, 0, 0};
