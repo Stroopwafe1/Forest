@@ -208,7 +208,7 @@ class TokenArr {
 }
 
 void Tokenise(ref<TokenArr> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8> file) {
-	Token currentToken = {1, 0, 0, file, 0, 0};
+	Token currentToken = {1, 1, 0, file, 0, 0};
 	ui64 start = 0;
 	ui16 currentType = 0;
 	ui64 textLength = 0;
@@ -827,8 +827,8 @@ ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 	ref<Token> t = tArr.At(offset);
 	Token token = @t;
 	
-	ui64 type = token.type;
-	if (type != _cTOKENTYPE_KEYWORD_IDENTIFIER) {
+	ui64 ttype = token.type;
+	if (ttype != _cTOKENTYPE_KEYWORD_IDENTIFIER) {
 		stdout.write("[Parser]: Expected a type identifier but got ");
 		PrintToken(t);
 		SYS_EXIT(1);
@@ -843,8 +843,8 @@ ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 
 	t = tArr.At(offset + 1);
 	Token nextToken = @t;
-	type = nextToken.type;
-	if type == _cTOKENTYPE_SQUARE_OPEN {
+	ttype = nextToken.type;
+	if ttype == _cTOKENTYPE_SQUARE_OPEN {
 		bool isNextLiteral = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_INTEGER);
 		Type typ = {
 			childTypeIndex,
@@ -881,7 +881,7 @@ ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 		}
 		typeArr.AddType(\typ);
 	}
-	else if type == _cTOKENTYPE_LESS_THAN {
+	else if ttype == _cTOKENTYPE_LESS_THAN {
 		bool isRef = StrEquals(token.text, "ref", 3);
 		bool isArr = StrEquals(token.text, "array", 5);
 		if isRef {
@@ -927,6 +927,7 @@ ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 ui64 ParseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64 max, ui16 endType) {
 	ui64 returnValue = 0;
 	Node currentNode = { 0, 0, 0, 0, 0 };
+	NodeArr nodes = @nodeArr;
 	loop i, offset..max {
 		bool end = IsTokenSpecifiedType(tArr, i, endType);
 		bool isNextEnd = IsTokenSpecifiedType(tArr, i + 1, endType);
@@ -1211,14 +1212,14 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				ui64 currType = types.count;
 				toSkip += ParseType(tArr, typeArr, i);
 				ref<Token> token = tArr.At(i);
-				ui64 typeIndex = GetTypeIndexFromName(typeArr, token);
-				if typeIndex == 15 {
-					typeIndex = currType;
+				ui64 ttypeIndex = GetTypeIndexFromName(typeArr, token);
+				if ttypeIndex == 15 {
+					ttypeIndex = currType;
 				}
 				ref<Token> assignTokenPtr = tArr.At((i + toSkip) + 1);
 				Token assignToken = @assignTokenPtr;
 
-				currentNode.typeIndex = typeIndex;
+				currentNode.typeIndex = ttypeIndex;
 				currentNode.tokenIndex = i + toSkip;
 				if ((assignToken.type) & _cTOKENTYPE_ASSIGNMENT) == _cTOKENTYPE_ASSIGNMENT {
 					currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT;
@@ -1416,14 +1417,14 @@ void Parse(ref<TokenArr> tArr, ref<NodeArr> nodes, ref<TypeArr> typeArr) {
 	loop i, 0..tokenCount {
 		ref<Token> token = tArr.At(i);
 		Token t = @token;
-		ui64 type = t.type;
+		ui64 ttype = t.type;
 
-		if type == _cTOKENTYPE_MACRO {
+		if ttype == _cTOKENTYPE_MACRO {
 			stdout.writeln("[Parser]: Parsing macros is not supported yet");
 			SYS_EXIT(1);
 		}
 
-		if type != _cTOKENTYPE_KEYWORD_IDENTIFIER {
+		if ttype != _cTOKENTYPE_KEYWORD_IDENTIFIER {
 			stdout.write("[Parser]: Unexpected token type, expected identifier but got ");
 			PrintToken(token);
 			SYS_EXIT(1);
@@ -1453,7 +1454,7 @@ void Parse(ref<TokenArr> tArr, ref<NodeArr> nodes, ref<TypeArr> typeArr) {
 }
 
 void SetupTypeArr(ref<TypeArr> typeArr) {
-	Type type = {
+	Type ttype = {
 		-1,
 		-1,
 		0,
@@ -1461,64 +1462,64 @@ void SetupTypeArr(ref<TypeArr> typeArr) {
 		false,
 		0
 	}; // void
-	typeArr.AddType(\type);
-	type.byteSize = 1;
-	type.align = 1;
-	type.typeType = 1; // UI8
-	typeArr.AddType(\type);
-	type.byteSize = 2;
-	type.align = 2;
-	type.typeType = 2; // UI16
-	typeArr.AddType(\type);
-	type.byteSize = 4;
-	type.align = 4;
-	type.typeType = 3; // UI32
-	typeArr.AddType(\type);
-	type.byteSize = 8;
-	type.align = 8;
-	type.typeType = 4; // UI64
-	typeArr.AddType(\type);
-	type.signed = true;
-	type.byteSize = 1;
-	type.align = 1;
-	type.typeType = 5; // I8
-	typeArr.AddType(\type);
-	type.byteSize = 2;
-	type.align = 2;
-	type.typeType = 6; // I16
-	typeArr.AddType(\type);
-	type.byteSize = 4;
-	type.align = 4;
-	type.typeType = 7; // I32
-	typeArr.AddType(\type);
-	type.byteSize = 8;
-	type.align = 8;
-	type.typeType = 8; // I64
-	typeArr.AddType(\type);
-	type.byteSize = 1;
-	type.align = 1;
-	type.typeType = 9; // F8
-	typeArr.AddType(\type);
-	type.byteSize = 2;
-	type.align = 2;
-	type.typeType = 10; // F16
-	typeArr.AddType(\type);
-	type.byteSize = 4;
-	type.align = 4;
-	type.typeType = 11; // F32
-	typeArr.AddType(\type);
-	type.byteSize = 8;
-	type.align = 8;
-	type.typeType = 12; // F64
-	typeArr.AddType(\type);
-	type.byteSize = 1;
-	type.align = 1;
-	type.typeType = 13; // BOOL
-	typeArr.AddType(\type);
-	type.byteSize = 4;
-	type.align = 4;
-	type.typeType = 14; // CHAR
-	typeArr.AddType(\type);
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 1;
+	ttype.align = 1;
+	ttype.typeType = 1; // UI8
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 2;
+	ttype.align = 2;
+	ttype.typeType = 2; // UI16
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 4;
+	ttype.align = 4;
+	ttype.typeType = 3; // UI32
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 8;
+	ttype.align = 8;
+	ttype.typeType = 4; // UI64
+	typeArr.AddType(\ttype);
+	ttype.signed = true;
+	ttype.byteSize = 1;
+	ttype.align = 1;
+	ttype.typeType = 5; // I8
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 2;
+	ttype.align = 2;
+	ttype.typeType = 6; // I16
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 4;
+	ttype.align = 4;
+	ttype.typeType = 7; // I32
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 8;
+	ttype.align = 8;
+	ttype.typeType = 8; // I64
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 1;
+	ttype.align = 1;
+	ttype.typeType = 9; // F8
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 2;
+	ttype.align = 2;
+	ttype.typeType = 10; // F16
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 4;
+	ttype.align = 4;
+	ttype.typeType = 11; // F32
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 8;
+	ttype.align = 8;
+	ttype.typeType = 12; // F64
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 1;
+	ttype.align = 1;
+	ttype.typeType = 13; // BOOL
+	typeArr.AddType(\ttype);
+	ttype.byteSize = 4;
+	ttype.align = 4;
+	ttype.typeType = 14; // CHAR
+	typeArr.AddType(\ttype);
 }
 
 ui8 main(cstring[] argv) {
