@@ -554,8 +554,10 @@ namespace forest::parser {
 			sf.mOffset = offset;
 			offset += type.value().byteSize;
 			c.mFields.push_back(sf);
-			for (const auto& name : sf.mNames)
+			for (const auto& name : sf.mNames) {
 				variables.insert({name, Variable(sf.mType, name, {})}); // Add the field to the variables so it can be seen by functions
+				localVars.push_back(name);
+			}
 		}
 
 		if (align.has_value()) {
