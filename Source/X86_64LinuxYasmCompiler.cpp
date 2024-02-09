@@ -738,24 +738,37 @@ void X86_64LinuxYasmCompiler::printFunctionCall(std::ofstream& outfile, const Pr
 		outfile << "; =============== END FUNC CALL + INT ===============" << std::endl;
 
 	} else if (arg->mValue.mType == TokenType::IDENTIFIER) {
-		SymbolInfo& var = symbolTable[arg->mValue.mText];
-		outfile << "; =============== FUNC CALL + VARIABLE ===============" << std::endl;
-		if (var.type.builtinType == Builtin_Type::UI8) {
-			outfile << "\tmov rax, 1" << std::endl;
-			outfile << "\tmov rdi, 1" << std::endl;
-			outfile << "\tlea rsi, " << var.location(true) << std::endl;
-			outfile << "\tmov rdx, 1" << std::endl;
-			outfile << "\tsyscall" << std::endl;
+		if (!symbolTable.contains(arg->mValue.mText)) {
+			// Class property
+			const Class& klass = p.classes.at(currentClass);
+			int propIndex = klass.getIndexOfProperty(arg->mValue.mText);
+			int leftSize = getSizeFromType(klass.mFields[propIndex].mType);
+			const char* moveAction = getMoveAction(3, leftSize, false);
+			const char* reg = leftSize < 2 ? "rdi" : getRegister("di", leftSize);
+			SymbolInfo& classInfo = symbolTable[currentClass];
+			outfile << "\tmov r10, qword [rbp" << classInfo.offset << "]" << std::endl;
+			outfile << "\t" << moveAction << " " << reg << ", " << sizes[leftSize] << " [r10+" << klass.mFields[propIndex].mOffset << "]" << "; variable CLASS " << klass.mName << "." << arg->mValue.mText << std::endl;
 		} else {
-			const char* moveAction = getMoveAction(3, var.size, false);
-			const char* reg = var.size < 2 ? "rdi" : getRegister("di", var.size);
-			outfile << "\t" << moveAction << " " << reg << ", " << sizes[var.size] << " " << var.location() << "; variable " << arg->mValue.mText << std::endl;
-			if (fc.mFunctionName == "write") {
-				outfile << "\tcall print_ui64" << std::endl;
-			} else if (fc.mFunctionName == "writeln") {
-				outfile << "\tcall print_ui64_newline" << std::endl;
+			SymbolInfo& var = symbolTable[arg->mValue.mText];
+			outfile << "; =============== FUNC CALL + VARIABLE ===============" << std::endl;
+			if (var.type.builtinType == Builtin_Type::UI8) {
+				outfile << "\tmov rax, 1" << std::endl;
+				outfile << "\tmov rdi, 1" << std::endl;
+				outfile << "\tlea rsi, " << var.location(true) << std::endl;
+				outfile << "\tmov rdx, 1" << std::endl;
+				outfile << "\tsyscall" << std::endl;
+			} else {
+				const char* moveAction = getMoveAction(3, var.size, false);
+				const char* reg = var.size < 2 ? "rdi" : getRegister("di", var.size);
+				outfile << "\t" << moveAction << " " << reg << ", " << sizes[var.size] << " " << var.location() << "; variable " << arg->mValue.mText << std::endl;
 			}
 		}
+		if (fc.mFunctionName == "write") {
+			outfile << "\tcall print_ui64" << std::endl;
+		} else if (fc.mFunctionName == "writeln") {
+			outfile << "\tcall print_ui64_newline" << std::endl;
+		}
+
 		outfile << "; =============== END FUNC CALL + VARIABLE ===============" << std::endl;
 
 	} else if (arg->mValue.mType == TokenType::OPERATOR && arg->mValue.mText == "[") { // Array indexing
