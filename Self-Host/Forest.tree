@@ -40,6 +40,7 @@ ui8 _cTOKENTYPE_DOUBLE_QUOTE = 35;
 ui8 _cTOKENTYPE_SEMICOLON = 36;
 ui8 _cTOKENTYPE_SINGLELINE_COMMENT = 37;
 ui8 _cTOKENTYPE_MULTILINE_COMMENT = 38;
+ui8 _cTOKENTYPE_NAMESPACE = 39;
 
 ui8 _cTOKENTYPE_ASSIGNMENT = 64; // To be used as a bit flag
 ui8 _cTOKENTYPE_EQUALITY = 128;
@@ -83,6 +84,10 @@ ui8 _cPARSER_NODETYPE_INDEX = 22;
 ui8 _cPARSER_NODETYPE_RANGE_MIN = 23;
 ui8 _cPARSER_NODETYPE_RANGE_MAX = 24;
 ui8 _cPARSER_NODETYPE_RANGE_STEP = 25;
+ui8 _cPARSER_NODETYPE_NAMESPACE = 26;
+ui8 _cPARSER_NODETYPE_CLASS = 27;
+ui8 _cPARSER_NODETYPE_ARG_LIST = 28;
+ui8 _cPARSER_NODETYPE_ARGUMENT = 29;
 
 ui8 _cPARSER_TYPETYPE_VOID = 0;
 ui8 _cPARSER_TYPETYPE_UI8 = 1;
@@ -451,6 +456,7 @@ void Tokenise(ref<TokenArr> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 		} else if byte == ':' {
 			if currentType == _cTOKENTYPE_COLON {
 				currentToken.textLength = textLength + 1;
+				currentToken.type = _cTOKENTYPE_NAMESPACE;
 				EndToken(tokens, \currentToken);
 				currentType = 0;
 				textLength = 0;
@@ -663,11 +669,11 @@ struct Type {
 class TypeArr {
 	ui64 size;
 	ui64 count;
-	ref<Type> _types;
+	ref<Type> types;
 
 	void New(ui64 _size) {
 		size = _size;
-		_types = alloc((size * 14) + 14);
+		types = alloc((size * 14) + 14);
 		count = 0;
 	}
 
@@ -677,21 +683,25 @@ class TypeArr {
 			ui64 s = size * 2;
 			ui64 c = count + 1;
 			ref<Type> newRef = alloc((s * 14) + 14);
-			memcopy2(newRef, _types, count * 14);
-			dealloc(_types, (size * 14) + 14);
-			_types = newRef;
+			memcopy2(newRef, types, count * 14);
+			dealloc(types, (size * 14) + 14);
+			types = newRef;
 			size = s;
 			count = c;
 		} else {
 			ui64 c = count;
-			memcopy2(_types + (count * 14), type, 14);
+			memcopy2(types + (count * 14), type, 14);
 			c += 1;
 			count = c;
 		}
 	}
 
+	ui64 GetCount() {
+		return count;
+	}
+
 	ref<Type> At(ui64 index) {
-		return _types + (index * 14);
+		return types + (index * 14);
 	}
 }
 
@@ -705,16 +715,30 @@ class Node {
 	void SetNS(i32 ns) {
 		nextSibling = ns;
 	}
+
+	void PrintNode() {
+		stdout.write("Node: FC(");
+		stdout.write(firstChild);
+		stdout.write(") NS(");
+		stdout.write(nextSibling);
+		stdout.write(") Type(");
+		stdout.write(type);
+		stdout.write(") TypeIndex(");
+		stdout.write(typeIndex);
+		stdout.write(") TokenIndex(");
+		stdout.write(tokenIndex);
+		stdout.writeln(")");
+	}
 }// (size 22)
 
 class NodeArr {
 	ui64 size;
 	ui64 count;
-	ref<Node> _nodes;
+	ref<Node> nodes;
 
 	void New(ui64 _size) {
 		size = _size;
-		_nodes = alloc((size * 22) + 22);
+		nodes = alloc((size * 22) + 22);
 		count = 0;
 	}
 
@@ -724,22 +748,30 @@ class NodeArr {
 			ui64 s = size * 2;
 			ui64 c = count + 1;
 			ref<Node> newRef = alloc((s * 22) + 22);
-			memcopy2(newRef, _nodes, count * 22);
-			dealloc(_nodes, (size * 22) + 22);
-			_nodes = newRef;
+			memcopy2(newRef, nodes, count * 22);
+			dealloc(nodes, (size * 22) + 22);
+			nodes = newRef;
 			size = s;
 			count = c;
 		} else {
 			ui64 c = count;
-			memcopy2(_nodes + (count * 22), node, 22);
+			memcopy2(nodes + (count * 22), node, 22);
 			c += 1;
 			count = c;
 		}
 	}
 
+	ui64 GetCount() {
+		return count;
+	}
+
 	void UpdateNS(ui64 index, i32 ns) {
-		ref<Node> node = _nodes + (index * 22);
+		ref<Node> node = nodes + (index * 22);
 		node.SetNS(ns);
+	}
+
+	ref<Node> At(ui64 index) {
+		return nodes + (index * 22);
 	}
 }
 
@@ -884,9 +916,10 @@ ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 	else if ttype == _cTOKENTYPE_LESS_THAN {
 		bool isRef = StrEquals(token.text, "ref", 3);
 		bool isArr = StrEquals(token.text, "array", 5);
+		ui64 typeCount = typeArr.GetCount();
 		if isRef {
 			Type typ = {
-				(typesArr.count) + 1,
+				typeCount + 1,
 				-1,
 				8,
 				8,
@@ -896,7 +929,7 @@ ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 			typeArr.AddType(\typ);
 		} else if isArr {
 			Type typ = {
-				(typesArr.count) + 1,
+				typeCount + 1,
 				-1,
 				8,
 				8,
@@ -931,15 +964,17 @@ ui64 ParseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64
 	loop i, offset..max {
 		bool end = IsTokenSpecifiedType(tArr, i, endType);
 		bool isNextEnd = IsTokenSpecifiedType(tArr, i + 1, endType);
+		bool isNextMax = (i + 1) == max;
 		if end {
 			break;
 		}
 		currentNode.type = _cPARSER_NODETYPE_EXPRESSION;
 		currentNode.firstChild = -1;
-		if isNextEnd {
+		if isNextEnd | isNextMax {
 			currentNode.nextSibling = -1;
 		} else {
-			currentNode.nextSibling = (nodes.count) + 1;
+			ui64 nodeCount = nodeArr.GetCount();
+			currentNode.nextSibling = nodeCount + 1;
 		}
 		currentNode.typeIndex = -1;
 		currentNode.tokenIndex = i;
@@ -949,8 +984,281 @@ ui64 ParseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64
 	return returnValue;
 }
 
+ui64 ParseFunctionCall(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
+	TokenArr tokens = @tArr;
+
+	ui64 nodeCount = nodeArr.GetCount();
+	Node currentNode = {
+		.type = _cPARSER_NODETYPE_FUNCTION_CALL;
+		.firstChild = nodeCount + 1;
+		.nextSibling = 0;
+		.tokenIndex = offset;
+		.typeIndex = -1;
+	};
+	ui64 funcCallNodeState = nodeCount;
+	nodeArr.AddNode(\currentNode);
+	ui64 toSkip = 1;
+
+	loop j, offset..tokens.count {
+		ui16 localToSkip = 0;
+		ref<Token> funcCallTokenPtr = tArr.At(j);
+		Token funcCallToken = @funcCallTokenPtr;
+		if (funcCallToken.type) == _cTOKENTYPE_PARENTHESIS_OPEN {
+			break;
+		}
+		bool equals = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_PARENTHESIS_OPEN);
+		if equals {
+			nodeCount = nodeArr.GetCount();
+			currentNode.type = _cPARSER_NODETYPE_FUNCTION;
+			currentNode.firstChild = nodeCount + 1; // Argument list is child of function
+			currentNode.nextSibling = -1;
+			currentNode.tokenIndex = j;
+			currentNode.typeIndex = -1;
+			nodeArr.AddNode(\currentNode);
+			toSkip += 1;
+			break;
+		}
+		equals = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_NAMESPACE);
+		if equals {
+			nodeCount = nodeArr.GetCount();
+			currentNode.type = _cPARSER_NODETYPE_NAMESPACE;
+			currentNode.firstChild = -1;
+			currentNode.nextSibling = nodeCount + 1;
+			currentNode.tokenIndex = j;
+			currentNode.typeIndex = -1;
+			nodeArr.AddNode(\currentNode);
+			localToSkip += 1;
+		}
+		equals = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_DOT);
+		if equals {
+			nodeCount = nodeArr.GetCount();
+			currentNode.type = _cPARSER_NODETYPE_CLASS;
+			currentNode.firstChild = -1;
+			currentNode.nextSibling = nodeCount + 1;
+			currentNode.tokenIndex = j;
+			currentNode.typeIndex = -1;
+			nodeArr.AddNode(\currentNode);
+			localToSkip += 1;
+		}
+		j += localToSkip;
+		toSkip += localToSkip;
+	}
+
+	nodeCount = nodeArr.GetCount();
+	currentNode.type = _cPARSER_NODETYPE_ARG_LIST;
+	currentNode.firstChild = nodeCount + 1;
+	currentNode.nextSibling = -1;
+	currentNode.tokenIndex = toSkip + offset;
+	currentNode.typeIndex = -1;
+	nodeArr.AddNode(\currentNode);
+	toSkip += 1;
+
+	// Following loop is necessary to detect end of argument parsing. We try parsing until a ',' but if there's only one argument it would parse too much.
+	// That's why we look up what the matching closing parenthesis is and only parse the expression until that point.
+	ui64 matchingParen = 0;
+	ui64 parenCount = 1;
+
+	loop j, offset + toSkip..tokens.count {
+		// Count opening and closing parentheses, if count gets to 0, we found it
+		bool isOpen = IsTokenSpecifiedType(tArr, j, _cTOKENTYPE_PARENTHESIS_OPEN);
+		if isOpen {
+			parenCount += 1;
+		} else {
+			bool isClose = IsTokenSpecifiedType(tArr, j, _cTOKENTYPE_PARENTHESIS_CLOSE);
+			if isClose {
+				parenCount -= 1;
+				if parenCount == 0 {
+					matchingParen = j;
+					break;
+				}
+			}
+		}
+	}
+	
+	bool hasNoArgument = IsTokenSpecifiedType(tArr, offset + toSkip, _cTOKENTYPE_PARENTHESIS_CLOSE);
+	if !hasNoArgument {
+		// If we have arguments. Function call wasn't 'foo();'
+		loop j, offset + toSkip..tokens.count {
+			nodeCount = nodeArr.GetCount();
+			ui16 localToSkip = 0;
+
+			currentNode.type = _cPARSER_NODETYPE_ARGUMENT;
+			currentNode.firstChild = nodeCount + 1;
+			currentNode.nextSibling = 0;
+			currentNode.tokenIndex = offset + toSkip;
+			currentNode.typeIndex = -1;
+			ui64 argNodeState = nodeCount;
+			nodeArr.AddNode(\currentNode);
+
+			localToSkip += ParseExpression(tArr, nodeArr, j, matchingParen, _cTOKENTYPE_COMMA);
+			bool hasNextArgument = (j + localToSkip) != matchingParen;
+			if hasNextArgument {
+				nodeCount = nodeArr.GetCount();
+				nodeArr.UpdateNS(argNodeState, nodeCount);
+			} else {
+				nodeArr.UpdateNS(argNodeState, -1);
+				toSkip += localToSkip;
+				break;
+			}
+			j += localToSkip;
+			toSkip += localToSkip;
+		}
+	}
+	toSkip += 1; // Closing parenthesis
+	bool hasSemi = IsTokenSpecifiedType(tArr, (toSkip + offset), _cTOKENTYPE_SEMICOLON);
+	if !hasSemi {
+		stdout.write("[Parser]: Expected a ';' to close the statement but got ");
+		ref<Token> notSemi = tArr.At(toSkip + offset);
+		PrintToken(notSemi);
+		SYS_EXIT(1);
+	} else {
+		toSkip += 1;
+	}
+
+	nodeCount = nodeArr.GetCount();
+	nodeArr.UpdateNS(funcCallNodeState, nodeCount);
+	return toSkip;
+}
+
+ui64 ParseVarAssignment(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
+	TokenArr tokens = @tArr;
+	// First, find the '(' or any of the '=' e.g. '+=' '/=' '*=' etc...
+	bool isAssignment = false;
+	ui64 assignmentIndex = 0;
+	loop j, offset+1..tokens.count {
+		ref<Token> assignTokenPtr = tArr.At(j);
+		Token assignToken = @assignTokenPtr;
+		if ((assignToken.type) & _cTOKENTYPE_ASSIGNMENT) == _cTOKENTYPE_ASSIGNMENT {
+			isAssignment = true;
+			assignmentIndex = j;
+			break;
+		} else if (assignToken.type) == _cTOKENTYPE_PARENTHESIS_OPEN {
+			break;
+		}
+	}
+	if !isAssignment {
+		return 0;
+	}
+
+	ui64 nodeCount = nodeArr.GetCount();
+	Node currentNode = {
+		.type = _cPARSER_NODETYPE_VARIABLE_ASSIGNMENT;
+		.firstChild = nodeCount + 1;
+		.nextSibling = 0;
+		.typeIndex = -1;
+		.tokenIndex = offset;
+	};
+	
+	ui64 currentNodeState = nodeCount;
+	nodeArr.AddNode(\currentNode);
+	ui64 toSkip = 1;
+
+	// very.nested.array[39 + 30].property.also.should.be.supported = true
+	if assignmentIndex > offset {
+		loop j, offset+1..assignmentIndex {
+			ui64 localToSkip = 0;
+			bool isProperty = IsTokenSpecifiedType(tArr, j, _cTOKENTYPE_DOT);
+			bool isArrayIndex = IsTokenSpecifiedType(tArr, j, _cTOKENTYPE_SQUARE_OPEN);
+			bool id = IsTokenSpecifiedType(tArr, j+1, _cTOKENTYPE_KEYWORD_IDENTIFIER);
+			
+			if isProperty {
+				bool continuesProp = IsTokenSpecifiedType(tArr, j+2, _cTOKENTYPE_DOT);
+				bool continuesIndex = IsTokenSpecifiedType(tArr, j+2, _cTOKENTYPE_SQUARE_OPEN);
+				currentNode.type = _cPARSER_NODETYPE_PROPERTY;
+				currentNode.firstChild = -1;
+				nodeCount = nodeArr.GetCount();
+				if continuesProp | continuesIndex {
+					currentNode.nextSibling = nodeCount + 1;
+				} else {
+					currentNode.nextSibling = -1;
+				}
+				currentNode.typeIndex = -1;
+				currentNode.tokenIndex = j + 1;
+				nodeArr.AddNode(\currentNode);
+				localToSkip += 1;
+			} else if isArrayIndex {
+				bool continuesProp = IsTokenSpecifiedType(tArr, j+2, _cTOKENTYPE_DOT);
+				bool continuesIndex = IsTokenSpecifiedType(tArr, j+2, _cTOKENTYPE_SQUARE_OPEN);
+				currentNode.type = _cPARSER_NODETYPE_INDEX;
+				nodeCount = nodeArr.GetCount();
+				currentNode.firstChild = nodeCount + 1;
+				if continuesProp | continuesIndex {
+					currentNode.nextSibling = 0;
+				} else {
+					currentNode.nextSibling = -1;
+				}
+				currentNode.typeIndex = -1;
+				currentNode.tokenIndex = j;
+				nodeCount = nodeArr.GetCount();
+				ui64 nodeState = nodeCount;
+				nodeArr.AddNode(\currentNode);
+				localToSkip += ParseExpression(tArr, nodeArr, j + 1, assignmentIndex, _cTOKENTYPE_SQUARE_CLOSE);
+				
+				if continuesProp | continuesIndex {
+					nodeCount = nodeArr.GetCount();
+					nodeArr.UpdateNS(nodeState, nodeCount + 1);
+				}
+			} else {
+				break;
+			}
+			j += localToSkip;
+			toSkip += localToSkip;
+		}
+	}
+
+	toSkip += ParseExpression(tArr, nodeArr, offset + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
+	nodeCount = nodeArr.GetCount();
+	nodeArr.UpdateNS(currentNodeState, nodeCount + 1);
+	return toSkip;
+}
+
+ui64 ParseVarDeclaration(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset) {
+	TypeArr types = @typeArr;
+	TokenArr tokens = @tArr;
+	ui64 currType = types.count;
+	ui64 toSkip = ParseType(tArr, typeArr, offset);
+	ref<Token> token = tArr.At(offset);
+	ui64 ttypeIndex = GetTypeIndexFromName(typeArr, token);
+	if ttypeIndex == 15 {
+		ttypeIndex = currType;
+	}
+	ref<Token> assignTokenPtr = tArr.At((offset + toSkip) + 1);
+	Token assignToken = @assignTokenPtr;
+
+	Node currentNode = {0, 0, 0, 0, 0};
+	currentNode.typeIndex = ttypeIndex;
+	currentNode.tokenIndex = offset + toSkip;
+	ui64 nodeCount = nodeArr.GetCount();
+	if ((assignToken.type) & _cTOKENTYPE_ASSIGNMENT) == _cTOKENTYPE_ASSIGNMENT {
+		currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT;
+		currentNode.firstChild = nodeCount + 1;
+		currentNode.nextSibling = 0;
+		ui64 nodeState = nodeCount;
+		nodeArr.AddNode(\currentNode);
+		toSkip += 1;
+
+		toSkip += ParseExpression(tArr, nodeArr, offset + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
+		nodeArr.UpdateNS(nodeState, nodeCount + 1);
+	} else {
+		currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
+		currentNode.firstChild = -1;
+		currentNode.nextSibling = nodeCount + 1;
+		nodeArr.AddNode(\currentNode);
+	}
+	
+	bool hasSemi = IsTokenSpecifiedType(tArr, offset + toSkip, _cTOKENTYPE_SEMICOLON);
+	if !hasSemi {
+		stdout.write("[Parser]: Expected a ';' to close the statement but got ");
+		ref<Token> notSemi = tArr.At(offset + toSkip);
+		PrintToken(notSemi);
+		SYS_EXIT(1);
+	} else {
+		toSkip += 1;
+	}
+	return toSkip;
+}
+
 ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset) {
-	NodeArr nodes = @nodeArr;
 	TokenArr tokens = @tArr;
 	TypeArr types = @typeArr;
 	bool hasBody = IsTokenSpecifiedType(tArr, offset, _cTOKENTYPE_CURLY_OPEN);
@@ -960,8 +1268,9 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 		PrintToken(bodyToken);
 		SYS_EXIT(1);
 	}
-	Node currentNode = { (nodes.count) + 1, 0, _cPARSER_NODETYPE_BLOCK, -1, offset };
-	ui64 bodyNodeState = nodes.count;
+	ui64 nodeCount = nodeArr.GetCount();
+	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_BLOCK, -1, offset };
+	ui64 bodyNodeState = nodeCount;
 	nodeArr.AddNode(\currentNode);
 	ui64 returnVal = 1;
 
@@ -975,14 +1284,20 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			if (nextToken.type) == _cTOKENTYPE_CURLY_OPEN {
 				hasElse = false;
 				currentNode.type = _cPARSER_NODETYPE_ELSE;
-				currentNode.firstChild = (nodes.count) + 1;
+				nodeCount = nodeArr.GetCount();
+				currentNode.firstChild = nodeCount + 1;
 				currentNode.nextSibling = 0;
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = i - 1;
-				ui64 nodeState = nodes.count;
+				ui64 nodeState = nodeCount;
 				nodeArr.AddNode(\currentNode);
 				toSkip += ParseBody(tArr, nodeArr, typeArr, i);
-				nodeArr.UpdateNS(nodeState, (nodes.count) + 1);
+				nodeCount = nodeArr.GetCount();
+				nodeArr.UpdateNS(nodeState, nodeCount);
+				
+				i += toSkip;
+				returnVal += toSkip;
+				skip;
 			}
 			bool isIf = StrEquals(nextToken.text, "if", 2);
 			if !isIf {
@@ -995,20 +1310,25 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 		// Scoped blocks
 		if (nextToken.type) == _cTOKENTYPE_CURLY_OPEN {
 			toSkip += ParseBody(tArr, nodeArr, typeArr, i);
+			i += toSkip;
+			returnVal += toSkip;
+			skip;
 		}
 
 		if (nextToken.type) == _cTOKENTYPE_CURLY_CLOSE {
+			returnVal += 1;
 			break;
 		}
 		
 		bool equals = StrEquals(nextToken.text, "return", 6);
 		if equals {
 			currentNode.type = _cPARSER_NODETYPE_RETURN;
-			currentNode.firstChild = (nodes.count) + 1;
+			nodeCount = nodeArr.GetCount();
+			currentNode.firstChild = nodeCount + 1;
 			currentNode.nextSibling = 0;
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
-			ui64 nodeState = nodes.count;
+			ui64 nodeState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
@@ -1016,13 +1336,16 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			bool hasSemi = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
 			if !hasSemi {
 				stdout.write("[Parser]: Expected a ';' to close the statement but got ");
+				stdout.writeln("Return failed");
 				ref<Token> notSemi = tArr.At(i + toSkip);
 				PrintToken(notSemi);
 				SYS_EXIT(1);
-			} else {
-				toSkip += 1;
 			}
-			nodeArr.UpdateNS(nodeState, (nodes.count) + 1);
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateNS(nodeState, nodeCount);
+			i += toSkip;
+			returnVal += toSkip;
+			skip;
 		}
 
 		equals = StrEquals(nextToken.text, "break", 5);
@@ -1032,7 +1355,8 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			currentNode.nextSibling = 0;
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
-			ui64 nodeState = nodes.count;
+			nodeCount = nodeArr.GetCount();
+			ui64 nodeState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 			bool hasSemi = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
@@ -1044,7 +1368,11 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			} else {
 				toSkip += 1;
 			}
-			nodeArr.UpdateNS(nodeState, (nodes.count) + 1);
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateNS(nodeState, nodeCount);
+			i += toSkip;
+			returnVal += toSkip;
+			skip;
 		}
 		
 		equals = StrEquals(nextToken.text, "skip", 4);
@@ -1054,7 +1382,8 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			currentNode.nextSibling = 0;
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
-			ui64 nodeState = nodes.count;
+			nodeCount = nodeArr.GetCount();
+			ui64 nodeState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 			bool hasSemi = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
@@ -1066,7 +1395,11 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			} else {
 				toSkip += 1;
 			}
-			nodeArr.UpdateNS(nodeState, (nodes.count) + 1);
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateNS(nodeState, nodeCount);
+			i += toSkip;
+			returnVal += toSkip;
+			skip;
 		}
 		
 		equals = StrEquals(nextToken.text, "if", 2);
@@ -1077,11 +1410,12 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			} else {
 				currentNode.type = _cPARSER_NODETYPE_IF;
 			}
-			currentNode.firstChild = (nodes.count) + 1;
+			nodeCount = nodeArr.GetCount();
+			currentNode.firstChild = nodeCount + 1;
 			currentNode.nextSibling = 0;
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
-			ui64 nodeState = nodes.count;
+			ui64 nodeState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
@@ -1093,7 +1427,11 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				SYS_EXIT(1);
 			}
 			toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
-			nodeArr.UpdateNS(nodeState, (nodes.count) + 1);
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateNS(nodeState, nodeCount);
+			i += toSkip;
+			returnVal += toSkip;
+			skip;
 		}
 		equals = StrEquals(nextToken.text, "else", 4);
 		if equals {
@@ -1105,11 +1443,12 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 		if equals {
 			// Parse unconditional loop
 			currentNode.type = _cPARSER_NODETYPE_LOOP;
-			currentNode.firstChild = (nodes.count) + 1;
+			nodeCount = nodeArr.GetCount();
+			currentNode.firstChild = nodeCount + 1;
 			currentNode.nextSibling = 0;
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
-			ui64 loopNodeState = nodes.count;
+			ui64 loopNodeState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 			
@@ -1123,70 +1462,87 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 					PrintToken(nextTokenPtr);
 					SYS_EXIT(1);
 				}
+				nodeCount = nodeArr.GetCount();
 				currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
-				currentNode.firstChild = (nodes.count) + 1;
+				currentNode.firstChild = nodeCount + 1;
 				currentNode.nextSibling = 0;
 				currentNode.typeIndex = 0;
 				currentNode.tokenIndex = i + 1;
-				ui64 nodeState = nodes.count;
+				ui64 nodeState = nodeCount;
 				nodeArr.AddNode(\currentNode);
 				toSkip += 1;
 				
 				bool hasStep = IsTokenSpecifiedType(tArr, i + 2, _cTOKENTYPE_COLON);
 				
 				if hasStep {
+					nodeCount = nodeArr.GetCount();
 					currentNode.type = _cPARSER_NODETYPE_RANGE_STEP;
-					currentNode.firstChild = (nodes.count) + 1;
+					currentNode.firstChild = nodeCount + 1;
 					currentNode.nextSibling = 0;
 					currentNode.typeIndex = -1;
 					currentNode.tokenIndex = i + 2;
-					ui64 stepNodeState = nodes.count;
+					ui64 stepNodeState = nodeCount;
 					nodeArr.AddNode(\currentNode);
 					toSkip += 1;
 
 					toSkip += ParseExpression(tArr, nodeArr, i + 2, tokens.count, _cTOKENTYPE_COMMA);
-					nodeArr.UpdateNS(stepNodeState, (nodes.count) + 1);
+					nodeCount = nodeArr.GetCount()
+					nodeArr.UpdateNS(stepNodeState, nodeCount);
 				}
 
+				nodeCount = nodeArr.GetCount();
 				currentNode.type = _cPARSER_NODETYPE_RANGE_MIN;
-				currentNode.firstChild = (nodes.count) + 1;
+				currentNode.firstChild = nodeCount + 1;
 				currentNode.nextSibling = 0;
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = i + toSkip;
-				ui64 rangeMinNodeState = nodes.count;
+				ui64 rangeMinNodeState = nodeCount;
 				nodeArr.AddNode(\currentNode);
 				toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_RANGE);
-				nodeArr.UpdateNS(rangeMinNodeState, (nodes.count) + 1);
+				nodeCount = nodeArr.GetCount();
+				nodeArr.UpdateNS(rangeMinNodeState, nodeCount);
 				
 				currentNode.type = _cPARSER_NODETYPE_RANGE_MAX;
-				currentNode.firstChild = (nodes.count) + 1;
+				currentNode.firstChild = nodeCount + 1;
 				currentNode.nextSibling = 0;
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = i + toSkip;
 				nodeArr.AddNode(\currentNode);
-				ui64 rangeMaxNodeState = nodes.count;
+				nodeCount = nodeArr.GetCount();
+				ui64 rangeMaxNodeState = nodeCount;
 				toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_CURLY_OPEN);
-				nodeArr.UpdateNS(rangeMaxNodeState, (nodes.count) + 1);
+				nodeCount = nodeArr.GetCount();
+				nodeArr.UpdateNS(rangeMaxNodeState, nodeCount);
 
 				toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
-				nodeArr.UpdateNS(nodeState, (nodes.count) + 1);
+				nodeCount = nodeArr.GetCount();
+				nodeArr.UpdateNS(nodeState, nodeCount);
 			}
-			nodeArr.UpdateNS(loopNodeState, (nodes.count) + 1);
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateNS(loopNodeState, nodeCount);
+			i += toSkip;
+			returnVal += toSkip;
+			skip;
 		}
 		equals = StrEquals(nextToken.text, "until", 5);
 		if equals {
+			nodeCount = nodeArr.GetCount();
 			currentNode.type = _cPARSER_NODETYPE_UNTIL;
-			currentNode.firstChild = (nodes.count) + 1;
+			currentNode.firstChild = nodeCount + 1;
 			currentNode.nextSibling = 0;
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
-			ui64 nodeState = nodes.count;
+			ui64 nodeState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
 			toSkip += ParseExpression(tArr, nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
 			toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
-			nodeArr.UpdateNS(nodeState, (nodes.count) + 1);
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateNS(nodeState, nodeCount);
+			i += toSkip;
+			returnVal += toSkip;
+			skip;
 		}
 		
 		bool isIdentifier = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_KEYWORD_IDENTIFIER);
@@ -1205,141 +1561,35 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				}
 			}
 		}
-		
+
 		if isIdentifier {
 			if (hasSecondIdent | isGeneric) | isArrayType {
 				// We are doing var declaration
-				ui64 currType = types.count;
-				toSkip += ParseType(tArr, typeArr, i);
-				ref<Token> token = tArr.At(i);
-				ui64 ttypeIndex = GetTypeIndexFromName(typeArr, token);
-				if ttypeIndex == 15 {
-					ttypeIndex = currType;
-				}
-				ref<Token> assignTokenPtr = tArr.At((i + toSkip) + 1);
-				Token assignToken = @assignTokenPtr;
-
-				currentNode.typeIndex = ttypeIndex;
-				currentNode.tokenIndex = i + toSkip;
-				if ((assignToken.type) & _cTOKENTYPE_ASSIGNMENT) == _cTOKENTYPE_ASSIGNMENT {
-					currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT;
-					currentNode.firstChild = (nodes.count) + 1;
-					currentNode.nextSibling = 0;
-					ui64 nodeState = nodes.count;
-					nodeArr.AddNode(\currentNode);
-					toSkip += 1;
-
-					toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
-					nodeArr.UpdateNS(nodeState, (nodes.count) + 1);
-				} else {
-					currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
-					currentNode.firstChild = -1;
-					currentNode.nextSibling = (nodes.count) + 1;
-					nodeArr.AddNode(\currentNode);
-				}
-				
-				bool hasSemi = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
-				if !hasSemi {
-					stdout.write("[Parser]: Expected a ';' to close the statement but got ");
-					ref<Token> notSemi = tArr.At(i + toSkip);
-					PrintToken(notSemi);
-					SYS_EXIT(1);
-				} else {
-					toSkip += 1;
-				}
+				toSkip += ParseVarDeclaration(tArr, nodeArr, typeArr, i);
 			} else {
-				// First, find the '(' or any of the '=' e.g. '+=' '/=' '*=' etc...
-				bool isAssignment = false;
-				ui64 assignmentIndex = 0;
-				loop j, i+1..tokens.count {
-					ref<Token> assignTokenPtr = tArr.At(j);
-					Token assignToken = @assignTokenPtr;
-					if ((assignToken.type) & _cTOKENTYPE_ASSIGNMENT) == _cTOKENTYPE_ASSIGNMENT {
-						isAssignment = true;
-						assignmentIndex = j;
-						break;
-					} else if (assignToken.type) == _cTOKENTYPE_PARENTHESIS_OPEN {
-						break;
-					}
-				}
+				ui64 isAssignment = ParseVarAssignment(tArr, nodeArr, i);
 
-				if isAssignment {
-					currentNode.type = _cPARSER_NODETYPE_VARIABLE_ASSIGNMENT;
-					currentNode.firstChild = (nodes.count) + 1;
-					currentNode.nextSibling = 0;
-					currentNode.typeIndex = -1;
-					currentNode.tokenIndex = i;
-					ui64 currentNodeState = nodes.count;
-					nodeArr.AddNode(\currentNode);
-					toSkip += 1;
-
-					// very.nested.array[39 + 30].property.also.should.be.supported = true
-					if assignmentIndex > i {
-						loop j, i+1..assignmentIndex {
-							ui64 localToSkip = 0;
-							bool isProperty = IsTokenSpecifiedType(tArr, j, _cTOKENTYPE_DOT);
-							bool isArrayIndex = IsTokenSpecifiedType(tArr, j, _cTOKENTYPE_SQUARE_OPEN);
-							bool id = IsTokenSpecifiedType(tArr, j+1, _cTOKENTYPE_KEYWORD_IDENTIFIER);
-							
-							if isProperty {
-								bool continuesProp = IsTokenSpecifiedType(tArr, j+2, _cTOKENTYPE_DOT);
-								bool continuesIndex = IsTokenSpecifiedType(tArr, j+2, _cTOKENTYPE_SQUARE_OPEN);
-								currentNode.type = _cPARSER_NODETYPE_PROPERTY;
-								currentNode.firstChild = -1;
-								if continuesProp | continuesIndex {
-									currentNode.nextSibling = (nodes.count) + 1;
-								} else {
-									currentNode.nextSibling = -1;
-								}
-								currentNode.typeIndex = -1;
-								currentNode.tokenIndex = j + 1;
-								nodeArr.AddNode(\currentNode);
-								localToSkip += 1;
-							} else if isArrayIndex {
-								bool continuesProp = IsTokenSpecifiedType(tArr, j+2, _cTOKENTYPE_DOT);
-								bool continuesIndex = IsTokenSpecifiedType(tArr, j+2, _cTOKENTYPE_SQUARE_OPEN);
-								currentNode.type = _cPARSER_NODETYPE_INDEX;
-								currentNode.firstChild = (nodes.count) + 1;
-								if continuesProp | continuesIndex {
-									currentNode.nextSibling = 0;
-								} else {
-									currentNode.nextSibling = -1;
-								}
-								currentNode.typeIndex = -1;
-								currentNode.tokenIndex = j;
-								ui64 nodeState = nodes.count;
-								nodeArr.AddNode(\currentNode);
-								localToSkip += ParseExpression(tArr, nodeArr, j + 1, assignmentIndex, _cTOKENTYPE_SQUARE_CLOSE);
-								
-								if continuesProp | continuesIndex {
-									nodeArr.UpdateNS(nodeState, (nodes.count) + 1);
-								}
-							} else {
-								break;
-							}
-							j += localToSkip;
-						}
-					}
-
-					toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
-					nodeArr.UpdateNS(currentNodeState, (nodes.count) + 1);
+				if isAssignment != 0 {
+					toSkip += isAssignment;
 				} else {
-					// TODO(#3): Implement function calls
+					toSkip += (ParseFunctionCall(tArr, nodeArr, i) - 1);
 				}
 			}
 		}
-		
+
+		i += toSkip;
 		returnVal += toSkip;
 	}
-	nodeArr.UpdateNS(bodyNodeState, (nodes.count) + 1);
-	return returnVal;
+	nodeCount = nodeArr.GetCount();
+	nodeArr.UpdateNS(bodyNodeState, nodeCount);
+	return returnVal + 1;
 }
 
 ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset, i32 typeIndex) {
-	NodeArr nodes = @nodeArr;
 	TokenArr tokens = @tArr;
 	TypeArr types = @typeArr;
-	Node currentNode = { (nodes.count) + 1, 0, _cPARSER_NODETYPE_FUNCTION, typeIndex, offset };
+	ui64 nodeCount = nodeArr.GetCount();
+	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_FUNCTION, typeIndex, offset };
 	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + 1, _cTOKENTYPE_PARENTHESIS_OPEN);
 	if !isSyntaxCorrect {
 		ref<Token> t = tArr.At(offset + 1);
@@ -1348,34 +1598,42 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 		PrintToken(t);
 		SYS_EXIT(1);
 	}
+	ui64 nodeState = nodeCount;
 	nodeArr.AddNode(\currentNode);
 	ui64 returnVal = 1;
 
 	bool hasNoParameters = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_PARENTHESIS_CLOSE);
 	if !hasNoParameters {
-		currentNode.firstChild = (nodes.count) + 1;
+		nodeCount = nodeArr.GetCount();
+		currentNode.firstChild = nodeCount + 1;
+		currentNode.nextSibling = 0;
 		currentNode.type = _cPARSER_NODETYPE_PARAM_LIST;
 		currentNode.typeIndex = -1;
 		currentNode.tokenIndex = offset + 1;
+		ui64 paramNodeState = nodeCount;
 		nodeArr.AddNode(\currentNode);
 
 		// Parse param list... type name, type name, etc...
 		loop i, offset + 2..tokens.count {
-			ui64 currType = (types.count);
+			ui64 typeCount = typeArr.GetCount();
 			ui16 toIncrease = ParseType(tArr, typeArr, i);
 			ref<Token> token = tArr.At(i);
 			ui64 typIndex = GetTypeIndexFromName(typeArr, token);
 			if typIndex == 15 {
-				typIndex = currType;
+				typIndex = typeCount;
 			}
+
 			i += toIncrease;
-			currentNode.firstChild = 0;
+			currentNode.firstChild = -1;
 			bool hasComma = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_COMMA);
+			nodeCount = nodeArr.GetCount();
 			if hasComma {
-				currentNode.nextSibling = (nodes.count) + 1;
+				currentNode.nextSibling = nodeCount + 1;
+			} else {
+				currentNode.nextSibling = -1;
 			}
 			currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
-			currentNode.typeIndex = typeIndex;
+			currentNode.typeIndex = typIndex;
 			currentNode.tokenIndex = i;
 			nodeArr.AddNode(\currentNode);
 			bool hasClosing = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_PARENTHESIS_CLOSE);
@@ -1391,6 +1649,8 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 				SYS_EXIT(1);
 			}
 		}
+		nodeCount = nodeArr.GetCount();
+		nodeArr.UpdateNS(paramNodeState, nodeCount);
 	} else {
 		returnVal += 1;
 	}
@@ -1403,6 +1663,8 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 		SYS_EXIT(1);
 	}
 	returnVal += ParseBody(tArr, nodeArr, typeArr, offset + returnVal);
+	nodeCount = nodeArr.GetCount();
+	nodeArr.UpdateNS(nodeState, nodeCount);
 
 	return returnVal;
 }
@@ -1545,6 +1807,9 @@ ui8 main(cstring[] argv) {
 	loop i, 0..tokenCount {
 		ref<Token> tok = tokens.At(i);
 		Token t = @tok;
+		stdout.write("(");
+		stdout.write(i);
+		stdout.write(") ");
 		stdout.write("'");
 		SYS_WRITE(1, t.text, t.textLength);
 		stdout.write("' at ");
@@ -1562,5 +1827,14 @@ ui8 main(cstring[] argv) {
 	types.New(256);
 	SetupTypeArr(\types);
 	Parse(\tokens, \nodes, \types);
+
+	ui64 nodeCount = nodes.count;
+	loop i, 0..nodeCount {
+		ref<Node> n = nodes.At(i);
+		stdout.write("(");
+		stdout.write(i);
+		stdout.write(") ");
+		n.PrintNode();
+	}
 	return 0;
 }
