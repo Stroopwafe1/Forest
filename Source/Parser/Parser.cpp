@@ -654,13 +654,16 @@ namespace forest::parser {
 
 			args.push_back(expression);
 			if (expression->mValue.mSubType == TokenSubType::STRING_LITERAL) {
-				std::stringstream alias;
-				alias << "str" << literals.size();
+				std::optional<Literal> foundLiteral = findLiteralByContent(expression->mValue.mText);
+				if (!foundLiteral.has_value()) {
+					std::stringstream alias;
+					alias << "str" << literals.size();
 
-				literals.push_back(Literal{alias.str(), expression->mValue.mText, uint32_t(expression->mValue.mText.size())});
-				if (className.value().mText == "stdout" && functionName.value().mText == "writeln") {
-					literals.at(literals.size() - 1).mContent.append("\n");
-					literals.at(literals.size() - 1).mSize += 1;
+					literals.push_back(Literal{alias.str(), expression->mValue.mText, uint32_t(expression->mValue.mText.size())});
+					if (className.value().mText == "stdout" && functionName.value().mText == "writeln") {
+						literals.at(literals.size() - 1).mContent.append("\n");
+						literals.at(literals.size() - 1).mSize += 1;
+					}
 				}
 			}
 
@@ -1507,10 +1510,13 @@ namespace forest::parser {
 
 						node->mChildren.push_back(expression);
 						if (expression->mValue.mSubType == TokenSubType::STRING_LITERAL) {
-							std::stringstream alias;
-							alias << "str" << literals.size();
+							std::optional<Literal> foundLiteral = findLiteralByContent(expression->mValue.mText);
+							if (!foundLiteral.has_value()) {
+								std::stringstream alias;
+								alias << "str" << literals.size();
 
-							literals.push_back(Literal{alias.str(), expression->mValue.mText, uint32_t(expression->mValue.mText.size())});
+								literals.push_back(Literal{alias.str(), expression->mValue.mText, uint32_t(expression->mValue.mText.size())});
+							}
 						}
 
 						std::optional<Token> closingParenthesis = expectOperator(")");

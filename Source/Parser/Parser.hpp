@@ -301,6 +301,25 @@ namespace forest::parser {
 		bool ExpressionShouldContinueParsing(const Statement& statementContext, const std::stack<char>& parenStack) const;
 		bool ParseStructAssignment(const std::string& structName, std::vector<Expression*>& values);
 		bool ParseClassAssignment(const std::string& className, std::vector<Expression*>& values);
+
+		std::optional<Literal> findLiteralByAlias(const std::string& alias) const {
+			for (const auto& literal : literals) {
+				if (literal.mAlias == alias) return literal;
+			}
+			return std::nullopt;
+		}
+
+		std::optional<Literal> findLiteralByContent(const std::string& content) const {
+			for (const auto& literal : literals) {
+				std::string s = literal.mContent;
+				if (s == content) return literal; // First try to see if it matches literally
+				if (s.rfind('\n') != std::string::npos) { // Otherwise try to see if it matches without newline
+					s = s.substr(0, literal.mContent.find_last_of('\n'));
+				}
+				if (s == content) return literal;
+			}
+			return std::nullopt;
+		}
 	};
 
 } // forest::parser
