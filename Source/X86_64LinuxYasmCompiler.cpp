@@ -417,14 +417,11 @@ void X86_64LinuxYasmCompiler::compile(fs::path& filePath, const Programme& p, co
 	outfile << "\tArray_OOB: db \"Array index out of bounds!\",0xA,0" << std::endl;
 	if (!initVars.empty() || !p.literals.empty()) {
 		for (const auto& literal : p.literals) {
-			outfile << "\t" << literal.mAlias << ": db \"";
-			if (literal.mContent[literal.mContent.size() - 1] == '\n') {
-				// Replace \n in string with ',0xA' put after the quote
-				outfile << literal.mContent.substr(0, literal.mContent.size() - 1) << "\",0xA,0" << std::endl;
-			} else {
-				// Just write the string normally
-				outfile << literal.mContent << "\"" << ",0" << std::endl;
+			outfile << "\t" << literal.mAlias << ": db ";
+			for (char c : literal.mContent) {
+				outfile << (int)c << ",";
 			}
+			outfile << "0" << std::endl;
 		}
 		for (const auto& initVar : initVars) {
 			addToSymbols(nullptr, initVar, initVar.mName, true);
@@ -1345,7 +1342,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				int propIndex = klass.getIndexOfProperty(expression->mValue.mText);
 				bool sign = klass.mFields[propIndex].mType.name[0] == 'i';
 				int size = getSizeFromType(klass.mFields[propIndex].mType);
-				const char* reg = size < 2 || sign ? "rax" : getRegister("a", size);
+				const char* reg = size < 2 ? "rax" : getRegister("a", size);
 				const char* moveAction = getMoveAction(3, size, sign);
 				SymbolInfo& classInfo = symbolTable[currentClass];
 				outfile << "\tmov r10, qword [rbp" << classInfo.offset << "]" << std::endl;
@@ -1354,7 +1351,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 				SymbolInfo& val = symbolTable[expression->mValue.mText];
 				bool sign = val.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 				const char* moveAction = getMoveAction(3, val.size, sign);
-				const char* reg = (val.size < 2 || sign) ? "rax" : getRegister("a", val.size);
+				const char* reg = (val.size < 2 ) ? "rax" : getRegister("a", val.size);
 				if (val.isGlobal) {
 					outfile << "\t" << moveAction << " " << reg << ", " << sizes[val.size] << " "  << val.location(true) << "; printExpression global variable " << expression->mValue.mText << std::endl;
 				} else {
@@ -1739,7 +1736,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			int propIndex = klass.getIndexOfProperty(expression->mChildren[0]->mValue.mText);
 			leftSign = klass.mFields[propIndex].mType.name[0] == 'i';
 			leftSize = getSizeFromType(klass.mFields[propIndex].mType);
-			const char* reg = leftSize < 2 || leftSign ? "rax" : getRegister("a", leftSize);
+			const char* reg = leftSize < 2 ? "rax" : getRegister("a", leftSize);
 			const char* moveAction = getMoveAction(3, leftSize, leftSign);
 			SymbolInfo& classInfo = symbolTable[currentClass];
 			outfile << "\tmov r10, qword [rbp" << classInfo.offset << "]" << std::endl;
@@ -1748,7 +1745,7 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 			SymbolInfo& left = symbolTable[expression->mChildren[0]->mValue.mText];
 			leftSign = left.type.name[0] == 'i'; // This might cause a problem later with user-defined types starting with i
 			leftSize = left.size;
-			const char* reg = leftSize < 2 || leftSign ? "rax" : getRegister("a", leftSize);
+			const char* reg = leftSize < 2 ? "rax" : getRegister("a", leftSize);
 			const char* moveAction = getMoveAction(3, leftSize, leftSign);
 			bool dereferenceNeeded = left.isGlobal;
 			if (left.reg == "rbp")
@@ -2040,8 +2037,7 @@ const char* X86_64LinuxYasmCompiler::getMoveAction(int regSize, int valSize, boo
 		if (isSigned) return "movsx";
 		else return "movzx";
 	} else {
-		if (isSigned && valSize == 2) return "movsxd";
-		else return "mov";
+		return "mov";
 	}
 }
 

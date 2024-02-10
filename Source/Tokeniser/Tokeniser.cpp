@@ -35,6 +35,9 @@ namespace forest::parser {
 					case '\\':
 						currentToken.mText.append(1, '\\');
 						break;
+					case '"':
+						currentToken.mText.append(1, '"');
+						break;
 					default:
 						throw std::runtime_error(std::string("Unknown escape sequence: \\") + currChar +
 												 " in string at " + std::to_string(currentToken.mLineNumber) + ":" +

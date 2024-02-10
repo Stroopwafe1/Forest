@@ -727,7 +727,7 @@ class Node {
 		stdout.write(typeIndex);
 		stdout.write(") TokenIndex(");
 		stdout.write(tokenIndex);
-		stdout.writeln(")");
+		stdout.write(")");
 	}
 }// (size 22)
 
@@ -1521,7 +1521,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(loopNodeState, nodeCount);
 			i += toSkip;
-			returnVal += toSkip;
+			returnVal += (toSkip + 1);
 			skip;
 		}
 		equals = StrEquals(nextToken.text, "until", 5);
@@ -1541,7 +1541,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(nodeState, nodeCount);
 			i += toSkip;
-			returnVal += toSkip;
+			returnVal += (toSkip + 1);
 			skip;
 		}
 		
@@ -1578,11 +1578,11 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 		}
 
 		i += toSkip;
-		returnVal += toSkip;
+		returnVal += (toSkip + 1);
 	}
 	nodeCount = nodeArr.GetCount();
 	nodeArr.UpdateNS(bodyNodeState, nodeCount);
-	return returnVal + 1;
+	return returnVal;
 }
 
 ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset, i32 typeIndex) {
@@ -1804,7 +1804,7 @@ ui8 main(cstring[] argv) {
 	Tokenise(\tokens, source, sizeRead, argv[1]);
 	ui32 lengthOfFile = GetLengthOfCstring(argv[1]);
 	ui64 tokenCount = tokens.count;
-	loop i, 0..tokenCount {
+	/*loop i, 0..tokenCount {
 		ref<Token> tok = tokens.At(i);
 		Token t = @tok;
 		stdout.write("(");
@@ -1820,7 +1820,7 @@ ui8 main(cstring[] argv) {
 		ui32 column = t.column;
 		stdout.write(":");
 		stdout.writeln(column);
-	}
+	}*/
 	NodeArr nodes = {0, 0, 0};
 	nodes.New(tokenCount);
 	TypeArr types = {0, 0, 0};
@@ -1829,12 +1829,56 @@ ui8 main(cstring[] argv) {
 	Parse(\tokens, \nodes, \types);
 
 	ui64 nodeCount = nodes.count;
-	loop i, 0..nodeCount {
+	stdout.writeln("graph \"\"");
+	stdout.writeln(" {");
+	stdout.writeln("subgraph nodes\n{");
+	stdout.writeln("n0 [label=\"*Programme*\"]; \nn0 -- n1 ;");
+	loop i, 1..nodeCount {
 		ref<Node> n = nodes.At(i);
-		stdout.write("(");
+		Node node = @n;
+		stdout.write("n");
 		stdout.write(i);
-		stdout.write(") ");
+		stdout.write(" [label=\"");
+		stdout.write(i);
+		stdout.write(". ");
+		if ((node.type) == _cPARSER_NODETYPE_ARGUMENT) {
+			stdout.write("*Argument*");
+		} else if (node.type) == _cPARSER_NODETYPE_FUNCTION_CALL {
+			stdout.write("*Function Call*");
+		} else if (node.type) == _cPARSER_NODETYPE_ARG_LIST {
+			stdout.write("*Arguments*");
+		} else if (node.type) == _cPARSER_NODETYPE_BLOCK {
+			stdout.write("*Block*");
+		} else {
+			ref<Token> tok = tokens.At(node.tokenIndex);
+			Token t = @tok;
+			SYS_WRITE(1, t.text, t.textLength);
+		}
+		stdout.write("\" tooltip=\"");
 		n.PrintNode();
+		stdout.writeln("\"] ;");
+
+		if ((node.firstChild) != -1) & ((node.firstChild) != nodeCount) {
+			stdout.write("n");
+			stdout.write(i);
+			stdout.write(" -- ");
+			stdout.write("n");
+			i32 firstChild = node.firstChild;
+			stdout.write(firstChild);
+			stdout.writeln(" [label = \"FC\" color = darkgreen];");
+		}
+		if ((node.nextSibling) != -1) & ((node.nextSibling) != nodeCount) {
+			stdout.write("n");
+			stdout.write(i);
+			stdout.write(" -- ");
+			stdout.write("n");
+			i32 nextSibling = node.nextSibling;
+			stdout.write(nextSibling);
+			stdout.writeln(" [label = \"NS\" color = blue];");
+		}
+		
 	}
+	stdout.writeln("}");
+	stdout.writeln("}");
 	return 0;
 }
