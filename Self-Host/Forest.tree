@@ -997,7 +997,7 @@ ui64 ParseFunctionCall(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 	};
 	ui64 funcCallNodeState = nodeCount;
 	nodeArr.AddNode(\currentNode);
-	ui64 toSkip = 1;
+	ui64 toSkip = 0;
 
 	loop j, offset..tokens.count {
 		ui16 localToSkip = 0;
@@ -1041,7 +1041,12 @@ ui64 ParseFunctionCall(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 			localToSkip += 1;
 		}
 		j += localToSkip;
-		toSkip += localToSkip;
+		toSkip += (localToSkip + 1);
+	}
+	bool assert = IsTokenSpecifiedType(tArr, offset + toSkip, _cTOKENTYPE_PARENTHESIS_OPEN);
+	if !assert {
+		stdout.writeln("ParseFunctionCall failed assertion - Not opening parenthesis");
+		SYS_EXIT(1);
 	}
 
 	nodeCount = nodeArr.GetCount();
@@ -1051,7 +1056,7 @@ ui64 ParseFunctionCall(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 	currentNode.tokenIndex = toSkip + offset;
 	currentNode.typeIndex = -1;
 	nodeArr.AddNode(\currentNode);
-	toSkip += 1;
+	toSkip += 1; // Skip paren open
 
 	// Following loop is necessary to detect end of argument parsing. We try parsing until a ',' but if there's only one argument it would parse too much.
 	// That's why we look up what the matching closing parenthesis is and only parse the expression until that point.
@@ -1104,15 +1109,19 @@ ui64 ParseFunctionCall(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 			toSkip += localToSkip;
 		}
 	}
-	toSkip += 1; // Closing parenthesis
+	assert = IsTokenSpecifiedType(tArr, offset + toSkip, _cTOKENTYPE_PARENTHESIS_CLOSE);
+	if !assert {
+		stdout.writeln("ParseFunctionCall failed assertion - Not closing parenthesis");
+		SYS_EXIT(1);
+	}
+	toSkip += 1; // skip closing parenthesis, so toSkip is pointing at the semicolon now
+	
 	bool hasSemi = IsTokenSpecifiedType(tArr, (toSkip + offset), _cTOKENTYPE_SEMICOLON);
 	if !hasSemi {
 		stdout.write("[Parser]: Expected a ';' to close the statement but got ");
 		ref<Token> notSemi = tArr.At(toSkip + offset);
 		PrintToken(notSemi);
 		SYS_EXIT(1);
-	} else {
-		toSkip += 1;
 	}
 
 	nodeCount = nodeArr.GetCount();
@@ -1258,6 +1267,7 @@ ui64 ParseVarDeclaration(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> 
 	return toSkip;
 }
 
+// ParseBody parses until the matching '}'. Its returnValue is the offset from given offset to that matching bracket
 ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset) {
 	TokenArr tokens = @tArr;
 	TypeArr types = @typeArr;
@@ -1271,6 +1281,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 	ui64 nodeCount = nodeArr.GetCount();
 	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_BLOCK, -1, offset };
 	ui64 bodyNodeState = nodeCount;
+	ui64 lastStatementState = nodeCount;
 	nodeArr.AddNode(\currentNode);
 	ui64 returnVal = 1;
 
@@ -1290,6 +1301,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = i - 1;
 				ui64 nodeState = nodeCount;
+				lastStatementState = nodeCount;
 				nodeArr.AddNode(\currentNode);
 				toSkip += ParseBody(tArr, nodeArr, typeArr, i);
 				nodeCount = nodeArr.GetCount();
@@ -1316,7 +1328,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 		}
 
 		if (nextToken.type) == _cTOKENTYPE_CURLY_CLOSE {
-			returnVal += 1;
+			nodeArr.UpdateNS(lastStatementState, -1);
 			break;
 		}
 		
@@ -1329,6 +1341,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
 			ui64 nodeState = nodeCount;
+			lastStatementState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
@@ -1344,7 +1357,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(nodeState, nodeCount);
 			i += toSkip;
-			returnVal += toSkip;
+			returnVal += (toSkip + 1);
 			skip;
 		}
 
@@ -1357,6 +1370,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			currentNode.tokenIndex = i;
 			nodeCount = nodeArr.GetCount();
 			ui64 nodeState = nodeCount;
+			lastStatementState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 			bool hasSemi = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
@@ -1384,6 +1398,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			currentNode.tokenIndex = i;
 			nodeCount = nodeArr.GetCount();
 			ui64 nodeState = nodeCount;
+			lastStatementState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 			bool hasSemi = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
@@ -1416,6 +1431,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
 			ui64 nodeState = nodeCount;
+			lastStatementState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
@@ -1449,6 +1465,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
 			ui64 loopNodeState = nodeCount;
+			lastStatementState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 			
@@ -1464,11 +1481,10 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				}
 				nodeCount = nodeArr.GetCount();
 				currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
-				currentNode.firstChild = nodeCount + 1;
-				currentNode.nextSibling = 0;
+				currentNode.firstChild = -1;
+				currentNode.nextSibling = nodeCount + 1;
 				currentNode.typeIndex = 0;
 				currentNode.tokenIndex = i + 1;
-				ui64 nodeState = nodeCount;
 				nodeArr.AddNode(\currentNode);
 				toSkip += 1;
 				
@@ -1489,6 +1505,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 					nodeCount = nodeArr.GetCount()
 					nodeArr.UpdateNS(stepNodeState, nodeCount);
 				}
+				toSkip += 1; // Skip comma
 
 				nodeCount = nodeArr.GetCount();
 				currentNode.type = _cPARSER_NODETYPE_RANGE_MIN;
@@ -1501,27 +1518,26 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_RANGE);
 				nodeCount = nodeArr.GetCount();
 				nodeArr.UpdateNS(rangeMinNodeState, nodeCount);
+				toSkip += 1; // Skip range
 				
 				currentNode.type = _cPARSER_NODETYPE_RANGE_MAX;
 				currentNode.firstChild = nodeCount + 1;
 				currentNode.nextSibling = 0;
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = i + toSkip;
-				nodeArr.AddNode(\currentNode);
 				nodeCount = nodeArr.GetCount();
+				nodeArr.AddNode(\currentNode);
 				ui64 rangeMaxNodeState = nodeCount;
 				toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_CURLY_OPEN);
 				nodeCount = nodeArr.GetCount();
 				nodeArr.UpdateNS(rangeMaxNodeState, nodeCount);
 
 				toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
-				nodeCount = nodeArr.GetCount();
-				nodeArr.UpdateNS(nodeState, nodeCount);
 			}
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(loopNodeState, nodeCount);
 			i += toSkip;
-			returnVal += (toSkip + 1);
+			returnVal += toSkip;
 			skip;
 		}
 		equals = StrEquals(nextToken.text, "until", 5);
@@ -1533,6 +1549,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			currentNode.typeIndex = -1;
 			currentNode.tokenIndex = i;
 			ui64 nodeState = nodeCount;
+			lastStatementState = nodeCount;
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
@@ -1541,7 +1558,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(nodeState, nodeCount);
 			i += toSkip;
-			returnVal += (toSkip + 1);
+			returnVal += toSkip;
 			skip;
 		}
 		
@@ -1565,20 +1582,25 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 		if isIdentifier {
 			if (hasSecondIdent | isGeneric) | isArrayType {
 				// We are doing var declaration
+				nodeCount = nodeArr.GetCount();
+				lastStatementState = nodeCount;
 				toSkip += ParseVarDeclaration(tArr, nodeArr, typeArr, i);
 			} else {
+				nodeCount = nodeArr.GetCount();
+				lastStatementState = nodeCount;
 				ui64 isAssignment = ParseVarAssignment(tArr, nodeArr, i);
 
 				if isAssignment != 0 {
 					toSkip += isAssignment;
 				} else {
-					toSkip += (ParseFunctionCall(tArr, nodeArr, i) - 1);
+					toSkip += ParseFunctionCall(tArr, nodeArr, i);
 				}
 			}
 		}
 
 		i += toSkip;
-		returnVal += (toSkip + 1);
+		returnVal += toSkip;
+		returnVal += 1;
 	}
 	nodeCount = nodeArr.GetCount();
 	nodeArr.UpdateNS(bodyNodeState, nodeCount);
@@ -1662,7 +1684,7 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 		PrintToken(bodyToken);
 		SYS_EXIT(1);
 	}
-	returnVal += ParseBody(tArr, nodeArr, typeArr, offset + returnVal);
+	returnVal += (ParseBody(tArr, nodeArr, typeArr, offset + returnVal) + 1);
 	nodeCount = nodeArr.GetCount();
 	nodeArr.UpdateNS(nodeState, nodeCount);
 
