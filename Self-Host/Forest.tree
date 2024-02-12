@@ -88,6 +88,7 @@ ui8 _cPARSER_NODETYPE_NAMESPACE = 26;
 ui8 _cPARSER_NODETYPE_CLASS = 27;
 ui8 _cPARSER_NODETYPE_ARG_LIST = 28;
 ui8 _cPARSER_NODETYPE_ARGUMENT = 29;
+ui8 _cPARSER_NODETYPE_ASSIGNMENT = 30;
 
 ui8 _cPARSER_TYPETYPE_VOID = 0;
 ui8 _cPARSER_TYPETYPE_UI8 = 1;
@@ -1205,7 +1206,7 @@ ui64 ParseVarAssignment(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 				
 				if continuesProp | continuesIndex {
 					nodeCount = nodeArr.GetCount();
-					nodeArr.UpdateNS(nodeState, nodeCount + 1);
+					nodeArr.UpdateNS(nodeState, nodeCount);
 				}
 			} else {
 				break;
@@ -1217,7 +1218,7 @@ ui64 ParseVarAssignment(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 
 	toSkip += ParseExpression(tArr, nodeArr, offset + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
 	nodeCount = nodeArr.GetCount();
-	nodeArr.UpdateNS(currentNodeState, nodeCount + 1);
+	nodeArr.UpdateNS(currentNodeState, nodeCount);
 	return toSkip;
 }
 
@@ -1246,11 +1247,22 @@ ui64 ParseVarDeclaration(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> 
 		nodeArr.AddNode(\currentNode);
 		toSkip += 1;
 
+		nodeCount = nodeArr.GetCount();
+		currentNode.type = _cPARSER_NODETYPE_ASSIGNMENT;
+		currentNode.firstChild = nodeCount + 1;
+		currentNode.nextSibling = -1;
+		currentNode.typeIndex = -1;
+		currentNode.tokenIndex = offset + toSkip;
+		nodeArr.AddNode(\currentNode);
+		toSkip += 1;
+
 		toSkip += ParseExpression(tArr, nodeArr, offset + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
-		nodeArr.UpdateNS(nodeState, nodeCount + 1);
+		nodeCount = nodeArr.GetCount();
+		nodeArr.UpdateNS(nodeState, nodeCount);
 	} else {
 		currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
 		currentNode.firstChild = -1;
+		nodeCount = nodeArr.GetCount();
 		currentNode.nextSibling = nodeCount + 1;
 		nodeArr.AddNode(\currentNode);
 	}
@@ -1261,8 +1273,6 @@ ui64 ParseVarDeclaration(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> 
 		ref<Token> notSemi = tArr.At(offset + toSkip);
 		PrintToken(notSemi);
 		SYS_EXIT(1);
-	} else {
-		toSkip += 1;
 	}
 	return toSkip;
 }
