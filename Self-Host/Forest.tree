@@ -89,6 +89,7 @@ ui8 _cPARSER_NODETYPE_CLASS = 27;
 ui8 _cPARSER_NODETYPE_ARG_LIST = 28;
 ui8 _cPARSER_NODETYPE_ARGUMENT = 29;
 ui8 _cPARSER_NODETYPE_ASSIGNMENT = 30;
+ui8 _cPARSER_NODETYPE_CONDITION = 31;
 
 ui8 _cPARSER_TYPETYPE_VOID = 0;
 ui8 _cPARSER_TYPETYPE_UI8 = 1;
@@ -1318,7 +1319,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				nodeArr.UpdateNS(nodeState, nodeCount);
 				
 				i += toSkip;
-				returnVal += toSkip;
+				returnVal += (toSkip + 1);
 				skip;
 			}
 			bool isIf = StrEquals(nextToken.text, "if", 2);
@@ -1389,13 +1390,11 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				ref<Token> notSemi = tArr.At(i + toSkip);
 				PrintToken(notSemi);
 				SYS_EXIT(1);
-			} else {
-				toSkip += 1;
 			}
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(nodeState, nodeCount);
 			i += toSkip;
-			returnVal += toSkip;
+			returnVal += (toSkip + 1);
 			skip;
 		}
 		
@@ -1417,13 +1416,11 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 				ref<Token> notSemi = tArr.At(i + toSkip);
 				PrintToken(notSemi);
 				SYS_EXIT(1);
-			} else {
-				toSkip += 1;
 			}
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(nodeState, nodeCount);
 			i += toSkip;
-			returnVal += toSkip;
+			returnVal += (toSkip + 1);
 			skip;
 		}
 		
@@ -1445,18 +1442,38 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
+			nodeCount = nodeArr.GetCount();
+			currentNode.firstChild = nodeCount + 1;
+			currentNode.nextSibling = 0;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i + toSkip;
+			currentNode.type = _cPARSER_NODETYPE_CONDITION;
+			ui64 condNodeState = nodeCount;
+			nodeArr.AddNode(\currentNode);
+			
 			toSkip += ParseExpression(tArr, nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
+			
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateNS(condNodeState, nodeCount);
 			
 			if toSkip == 1 {
 				stdout.write("[Parser]: Expected an expression for the ");
 				PrintToken(nextTokenPtr);
 				SYS_EXIT(1);
 			}
+			
 			toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
+			bool assert = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_CURLY_CLOSE);
+			if !assert {
+				stdout.writeln("Failed assert - parse body failed");
+				ref<Token> debugT = tArr.At(i + toSkip);
+				PrintToken(debugT);
+				SYS_EXIT(1);
+			}
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(nodeState, nodeCount);
 			i += toSkip;
-			returnVal += toSkip;
+			returnVal += (toSkip + 1);
 			skip;
 		}
 		equals = StrEquals(nextToken.text, "else", 4);
@@ -1547,7 +1564,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(loopNodeState, nodeCount);
 			i += toSkip;
-			returnVal += toSkip;
+			returnVal += (toSkip + 1);
 			skip;
 		}
 		equals = StrEquals(nextToken.text, "until", 5);
@@ -1881,6 +1898,12 @@ ui8 main(cstring[] argv) {
 			stdout.write("*Arguments*");
 		} else if (node.type) == _cPARSER_NODETYPE_BLOCK {
 			stdout.write("*Block*");
+		} else if (node.type) == _cPARSER_NODETYPE_CONDITION {
+			stdout.write("*Condition*");
+		} else if (node.type) == _cPARSER_NODETYPE_RANGE_MIN {
+			stdout.write("*Range Min*");
+		} else if (node.type) == _cPARSER_NODETYPE_RANGE_MAX {
+			stdout.write("*Range Max*");
 		} else {
 			ref<Token> tok = tokens.At(node.tokenIndex);
 			Token t = @tok;
