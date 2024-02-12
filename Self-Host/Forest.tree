@@ -1580,12 +1580,25 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 			nodeArr.AddNode(\currentNode);
 			toSkip += 1;
 
+			nodeCount = nodeArr.GetCount();
+			currentNode.firstChild = nodeCount + 1;
+			currentNode.nextSibling = 0;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i + toSkip;
+			currentNode.type = _cPARSER_NODETYPE_CONDITION;
+			ui64 condNodeState = nodeCount;
+			nodeArr.AddNode(\currentNode);
+			
 			toSkip += ParseExpression(tArr, nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
+			
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateNS(condNodeState, nodeCount);
+
 			toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(nodeState, nodeCount);
 			i += toSkip;
-			returnVal += toSkip;
+			returnVal += (toSkip + 1);
 			skip;
 		}
 		
