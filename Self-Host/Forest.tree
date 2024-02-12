@@ -1644,42 +1644,54 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 	return returnVal;
 }
 
-ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset, i32 typeIndex) {
+ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset) {
 	TokenArr tokens = @tArr;
 	TypeArr types = @typeArr;
+	ref<Token> token = tArr.At(offset);
+
+	ui64 currType = types.count;
+	ui64 returnVal = ParseType(tArr, typeArr, offset);
+	ui64 typeIndex = GetTypeIndexFromName(typeArr, token);
+	if typeIndex == 15 {
+		typeIndex = currType;
+	}
+
+	ref<Token> functionToken = tArr.At(offset + returnVal);
 	ui64 nodeCount = nodeArr.GetCount();
-	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_FUNCTION, typeIndex, offset };
-	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + 1, _cTOKENTYPE_PARENTHESIS_OPEN);
+	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_FUNCTION, typeIndex, offset + returnVal };
+	returnVal += 1; // Skip function name
+	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_PARENTHESIS_OPEN);
 	if !isSyntaxCorrect {
-		ref<Token> t = tArr.At(offset + 1);
+		ref<Token> t = tArr.At(offset + returnVal);
 		// This never happens as we only call this function when we have detected (
 		stdout.write("[Parser]: Expected '(' for function definition but got ");
 		PrintToken(t);
 		SYS_EXIT(1);
 	}
+	
 	ui64 nodeState = nodeCount;
 	nodeArr.AddNode(\currentNode);
-	ui64 returnVal = 2;
 
-	bool hasNoParameters = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_PARENTHESIS_CLOSE);
+	bool hasNoParameters = IsTokenSpecifiedType(tArr, (offset + returnVal) + 1, _cTOKENTYPE_PARENTHESIS_CLOSE);
 	if !hasNoParameters {
 		nodeCount = nodeArr.GetCount();
 		currentNode.firstChild = nodeCount + 1;
 		currentNode.nextSibling = 0;
 		currentNode.type = _cPARSER_NODETYPE_PARAM_LIST;
 		currentNode.typeIndex = -1;
-		currentNode.tokenIndex = offset + 1;
+		currentNode.tokenIndex = offset + returnVal;
 		ui64 paramNodeState = nodeCount;
 		nodeArr.AddNode(\currentNode);
+		returnVal += 1; // Skip open paren
 
 		// Parse param list... type name, type name, etc...
-		loop i, offset + 2..tokens.count {
+		loop i, offset + returnVal..tokens.count {
 			ui64 typeCount = typeArr.GetCount();
 			ui16 toIncrease = ParseType(tArr, typeArr, i);
-			ref<Token> token = tArr.At(i);
-			ui64 typIndex = GetTypeIndexFromName(typeArr, token);
-			if typIndex == 15 {
-				typIndex = typeCount;
+			token = tArr.At(i);
+			typeIndex = GetTypeIndexFromName(typeArr, token);
+			if typeIndex == 15 {
+				typeIndex = typeCount;
 			}
 
 			i += toIncrease;
@@ -1693,7 +1705,7 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 				currentNode.nextSibling = -1;
 			}
 			currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
-			currentNode.typeIndex = typIndex;
+			currentNode.typeIndex = typeIndex;
 			currentNode.tokenIndex = i;
 			nodeArr.AddNode(\currentNode);
 			returnVal += 1;
@@ -1705,7 +1717,6 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 
 			if ((!hasComma) & (!hasClosing)) {
 				stdout.write("[Parser]: Expected a ',' or ')' inside the parameter list of function definition ");
-				ref<Token> functionToken = tArr.At(offset);
 				PrintToken(functionToken);
 				SYS_EXIT(1);
 			}
@@ -1714,14 +1725,12 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 		nodeCount = nodeArr.GetCount();
 		nodeArr.UpdateNS(paramNodeState, nodeCount);
 	} else {
-		returnVal += 1;
+		returnVal += 2; // Skip both open and close paren
 	}
 
 	bool hasBody = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_OPEN);
 	if !hasBody {
 		stdout.write("[Parser]: Expected a '{' for the body of function definition but got ");
-		ui64 result = offset + returnVal;
-		stdout.writeln(result);
 		ref<Token> bodyToken = tArr.At(offset + returnVal);
 		PrintToken(bodyToken);
 		SYS_EXIT(1);
@@ -1767,16 +1776,26 @@ void Parse(ref<TokenArr> tArr, ref<NodeArr> nodes, ref<TypeArr> typeArr) {
 			SYS_EXIT(1);
 		}
 
-		ui64 currType = types.count;
-		ui16 toIncrease = ParseType(tArr, typeArr, i);
-		ui64 typeIndex = GetTypeIndexFromName(typeArr, token);
-		if typeIndex == 15 {
-			typeIndex = currType;
+		bool isFunction = false;
+		// Find first relevant token. If '(' we have a function definition, else we don't.
+		loop j, i..tokens.count {
+			ref<Token> iToken = tArr.At(j);
+			Token it = @iToken;
+			if (it.type) == _cTOKENTYPE_PARENTHESIS_OPEN {
+				isFunction = true;
+				break;
+			} else if (it.type) == _cTOKENTYPE_ASSIGNMENT {
+				break;
+			} else if (it.type) == _cTOKENTYPE_SEMICOLON {
+				break;
+			}
 		}
-		i += toIncrease;
-		bool isFunction = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_PARENTHESIS_OPEN);
+		
 		if isFunction {
-			toIncrease = ParseFunction(tArr, nodes, typeArr, i, typeIndex);
+			ui64 toIncrease = ParseFunction(tArr, nodes, typeArr, i);
+			i += toIncrease;
+		} else {
+			ui64 toIncrease = ParseVarDeclaration(tArr, nodes, typeArr, i);
 			i += toIncrease;
 		}
 	}
