@@ -1290,8 +1290,7 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 		SYS_EXIT(1);
 	}
 	ui64 nodeCount = nodeArr.GetCount();
-	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_BLOCK, -1, offset };
-	ui64 bodyNodeState = nodeCount;
+	Node currentNode = { nodeCount + 1, -1, _cPARSER_NODETYPE_BLOCK, -1, offset };
 	ui64 lastStatementState = nodeCount;
 	nodeArr.AddNode(\currentNode);
 	ui64 returnVal = 1;
@@ -1642,8 +1641,6 @@ ui64 ParseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, u
 		returnVal += toSkip;
 		returnVal += 1;
 	}
-	nodeCount = nodeArr.GetCount();
-	nodeArr.UpdateNS(bodyNodeState, nodeCount);
 	return returnVal;
 }
 
@@ -1662,7 +1659,7 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 	}
 	ui64 nodeState = nodeCount;
 	nodeArr.AddNode(\currentNode);
-	ui64 returnVal = 1;
+	ui64 returnVal = 2;
 
 	bool hasNoParameters = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_PARENTHESIS_CLOSE);
 	if !hasNoParameters {
@@ -1686,6 +1683,7 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 			}
 
 			i += toIncrease;
+			returnVal += toIncrease;
 			currentNode.firstChild = -1;
 			bool hasComma = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_COMMA);
 			nodeCount = nodeArr.GetCount();
@@ -1698,9 +1696,10 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 			currentNode.typeIndex = typIndex;
 			currentNode.tokenIndex = i;
 			nodeArr.AddNode(\currentNode);
+			returnVal += 1;
 			bool hasClosing = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_PARENTHESIS_CLOSE);
 			if hasClosing {
-				returnVal += i;
+				returnVal += 1;
 				break;
 			}
 
@@ -1710,6 +1709,7 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 				PrintToken(functionToken);
 				SYS_EXIT(1);
 			}
+			returnVal += 1;
 		}
 		nodeCount = nodeArr.GetCount();
 		nodeArr.UpdateNS(paramNodeState, nodeCount);
@@ -1720,11 +1720,16 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 	bool hasBody = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_OPEN);
 	if !hasBody {
 		stdout.write("[Parser]: Expected a '{' for the body of function definition but got ");
+		ui64 result = offset + returnVal;
+		stdout.writeln(result);
 		ref<Token> bodyToken = tArr.At(offset + returnVal);
 		PrintToken(bodyToken);
 		SYS_EXIT(1);
 	}
-	returnVal += (ParseBody(tArr, nodeArr, typeArr, offset + returnVal) + 1);
+	nodeCount = nodeArr.GetCount();
+	ui64 bodyNodeState = nodeCount;
+	returnVal += ParseBody(tArr, nodeArr, typeArr, offset + returnVal);
+	nodeArr.UpdateNS(bodyNodeState, -1);
 	nodeCount = nodeArr.GetCount();
 	nodeArr.UpdateNS(nodeState, nodeCount);
 
