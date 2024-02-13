@@ -90,6 +90,11 @@ ui8 _cPARSER_NODETYPE_ARG_LIST = 28;
 ui8 _cPARSER_NODETYPE_ARGUMENT = 29;
 ui8 _cPARSER_NODETYPE_ASSIGNMENT = 30;
 ui8 _cPARSER_NODETYPE_CONDITION = 31;
+ui8 _cPARSER_NODETYPE_STRUCT = 32;
+ui8 _cPARSER_NODETYPE_STRUCT_ALIGNED = 33;
+ui8 _cPARSER_NODETYPE_CLASS_ALIGNED = 34;
+ui8 _cPARSER_NODETYPE_FIELD_LIST = 35;
+ui8 _cPARSER_NODETYPE_FIELD = 36;
 
 ui8 _cPARSER_TYPETYPE_VOID = 0;
 ui8 _cPARSER_TYPETYPE_UI8 = 1;
@@ -1745,6 +1750,151 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 	return returnVal;
 }
 
+ui64 ParseFieldList(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset) {
+	ui64 tokenCount = tArr.GetCount();
+	ui64 returnVal = 0;
+	
+	loop i, offset..tokenCount {
+		ref<Token> token = tArr.At(i);
+		bool isClosing = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_CURLY_CLOSE);
+		if isClosing {
+			break;
+		}
+
+		ui64 currType = typeArr.GetCount();
+		ui64 toSkip = ParseType(tArr, typeArr, i);
+		ui64 typeIndex = GetTypeIndexFromName(typeArr, token);
+		if typeIndex == 15 {
+			typeIndex = currType;
+		}
+
+		ui64 nodeCount = nodeArr.GetCount();
+		currentNode.firstChild = nodeCount + 1;
+		currentNode.nextSibling = 0;
+		currentNode.type = _cPARSER_NODETYPE_FIELD_LIST;
+		currentNode.typeIndex = typeIndex;
+		currentNode.tokenIndex = i + toSkip;
+		ui64 fieldNodeState = nodeCount;
+		nodeArr.AddNode(\currentNode);
+
+		loop j, i + toSkip..tokenCount {
+			nodeCount = nodeArr.GetCount();
+			currentNode.firstChild = -1;
+			currentNode.nextSibling = nodeCount + 1;
+			currentNode.type = _cPARSER_NODETYPE_FIELD;
+			currentNode.typeIndex = typeIndex;
+			currentNode.tokenIndex = j;
+			
+			bool isEnd = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_SEMICOLON);
+			if isEnd {
+				currentNode.nextSibling = -1;
+				nodeArr.AddNode(\currentNode);
+				toSkip += 1;
+				break;
+			}
+			bool isClassEnd = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_KEYWORD_IDENTIFIER);
+			if isClassEnd {
+				return returnVal;
+			}
+
+			isSyntaxCorrect = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_OR);
+			if !isSyntaxCorrect {
+				stdout.write("[Parser]: Expected '|' or ';' for struct/class field but got ");
+				ref<Token> wrongToken = tArr.At(j + 1);
+				PrintToken(wrongToken);
+				SYS_EXIT(1);
+			}
+			nodeArr.AddNode(\currentNode);
+			toSkip += 2; // Both name and |
+			i += 1;
+		}
+
+		i += toSkip;
+		returnVal += (toSkip + 1);
+	}
+	return returnVal;
+}
+
+ui64 ParseStruct(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset, bool isAligned) {
+	ui64 tokenCount = tArr.GetCount();
+	ui64 nodeCount = nodeArr.GetCount();
+	// struct name {
+	//   ^ offset
+	
+	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_STRUCT, -1, offset + 1 };
+	if isAligned {
+		currentNode.type = _cPARSER_NODETYPE_STRUCT_ALIGNED;
+	}
+	ui64 structNodeState = nodeCount;
+	nodeArr.AddNode(\currentNode);
+
+	ui64 returnVal = 1;
+
+	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_CURLY_OPEN);
+	if !isSyntaxCorrect {
+		stdout.write("[Parser]: Expected a '{' for the definition of struct but got ");
+		ref<Token> curlyToken = tArr.At((offset + returnVal) + 1);
+		PrintToken(curlyToken);
+		SYS_EXIT(1);
+	}
+	returnVal += 1;
+	
+	returnVal += ParseFieldList(tArr, nodeArr, typeArr, offset + 3);
+
+	nodeCount = nodeArr.GetCount();
+	nodeArr.UpdateNS(structNodeState, nodeCount);
+	return returnVal;
+}
+
+void ParseClass(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset, bool isAligned) {
+	ui64 tokenCount = tArr.GetCount();
+	ui64 nodeCount = nodeArr.GetCount();
+
+	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_CLASS, -1, offset + 1 };
+	if isAligned {
+		currentNode.type = _cPARSER_NODETYPE_CLASS_ALIGNED;
+	}
+	ui64 classNodeState = nodeCount;
+	nodeArr.AddNode(\currentNode);
+
+	ui64 returnVal = 1;
+
+	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_CURLY_OPEN);
+	if !isSyntaxCorrect {
+		stdout.write("[Parser]: Expected a '{' for the definition of class but got ");
+		ref<Token> curlyToken = tArr.At((offset + returnVal) + 1);
+		PrintToken(curlyToken);
+		SYS_EXIT(1);
+	}
+	returnVal += 1;
+	
+	returnVal += ParseFieldList(tArr, nodeArr, typeArr, offset + 3);
+
+	bool isEnd = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_CLOSE);
+	if isEnd {
+		nodeCount = nodeArr.GetCount();
+		nodeArr.UpdateNS(structNodeState, nodeCount);
+		return returnVal;
+	}
+	
+	nodeCount = nodeArr.GetCount();
+	nodeArr.UpdateNS(nodeCount - 1, nodeCount);
+	loop i, offset + returnVal..tokenCount {
+		bool isEnd = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_CURLY_CLOSE);
+		if isEnd {
+			break;
+		}
+
+		ui64 toSkip = ParseFunction(tArr, nodeArr, typeArr, i);
+		returnVal += (toSkip + 1);
+		i += toSkip;
+	}
+
+	nodeCount = nodeArr.GetCount();
+	nodeArr.UpdateNS(classNodeState, nodeCount);
+	return returnVal;
+}
+
 void Parse(ref<TokenArr> tArr, ref<NodeArr> nodes, ref<TypeArr> typeArr) {
 	TokenArr tokens = @tArr;
 	TypeArr types = @typeArr;
@@ -1771,11 +1921,23 @@ void Parse(ref<TokenArr> tArr, ref<NodeArr> nodes, ref<TypeArr> typeArr) {
 		bool isStruct = StrEquals(t.text, "struct", 6);
 		bool isClass = StrEquals(t.text, "class", 5);
 		bool isAligned = StrEquals(t.text, "aligned", 7);
-		if (isStruct || isClass) || isAligned {
-			stdout.writeln("[Parser]: Parsing structs/classes is not supported yet");
-			SYS_EXIT(1);
+		if isAligned {
+			ref<Token> nextTokenPtr = tArr.At(i + 1);
+			Token nextToken = @nextTokenPtr;
+			isStruct = StrEquals(nextToken.text, "struct", 6);
+			isClass = StrEquals(nextToken.text, "class", 5);
+			
+			if isStruct {
+				i += ParseStruct(tArr, nodes, typeArr, i + 1, true);
+			} else if isClass {
+				i += ParseClass(tArr, nodes, typeArr, i + 1, true);
+			} else {
+				stdout.writeln("[Parser]: Unexpected aligned token, expected 'class' or 'struct' but got ");
+				PrintToken(nextTokenPtr);
+				SYS_EXIT(1);
+			}
 		}
-
+		
 		bool isFunction = false;
 		// Find first relevant token. If '(' we have a function definition, else we don't.
 		loop j, i..tokens.count {
