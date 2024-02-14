@@ -217,6 +217,10 @@ class TokenArr {
 		}
 		return tokens + (index * 34);
 	}
+
+	ui64 GetCount() {
+		return count;
+	}
 }
 
 void Tokenise(ref<TokenArr> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8> file) {
@@ -768,6 +772,11 @@ class NodeArr {
 		}
 	}
 
+	void DeleteLast() {
+		ui64 c = count - 1;
+		count = c;
+	}
+
 	ui64 GetCount() {
 		return count;
 	}
@@ -1053,6 +1062,8 @@ ui64 ParseFunctionCall(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 	bool assert = IsTokenSpecifiedType(tArr, offset + toSkip, _cTOKENTYPE_PARENTHESIS_OPEN);
 	if !assert {
 		stdout.writeln("ParseFunctionCall failed assertion - Not opening parenthesis");
+		ref<Token> wrongToken = tArr.At(offset + toSkip);
+		PrintToken(wrongToken);
 		SYS_EXIT(1);
 	}
 
@@ -1107,6 +1118,7 @@ ui64 ParseFunctionCall(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 			if hasNextArgument {
 				nodeCount = nodeArr.GetCount();
 				nodeArr.UpdateNS(argNodeState, nodeCount);
+				toSkip += 1;
 			} else {
 				nodeArr.UpdateNS(argNodeState, -1);
 				toSkip += localToSkip;
@@ -1119,6 +1131,8 @@ ui64 ParseFunctionCall(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 	assert = IsTokenSpecifiedType(tArr, offset + toSkip, _cTOKENTYPE_PARENTHESIS_CLOSE);
 	if !assert {
 		stdout.writeln("ParseFunctionCall failed assertion - Not closing parenthesis");
+		ref<Token> wrongToken = tArr.At(offset + toSkip);
+		PrintToken(wrongToken);
 		SYS_EXIT(1);
 	}
 	toSkip += 1; // skip closing parenthesis, so toSkip is pointing at the semicolon now
@@ -1701,11 +1715,13 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 
 			i += toIncrease;
 			returnVal += toIncrease;
+			toIncrease = 0;
 			currentNode.firstChild = -1;
 			bool hasComma = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_COMMA);
 			nodeCount = nodeArr.GetCount();
 			if hasComma {
 				currentNode.nextSibling = nodeCount + 1;
+				toIncrease = 1;
 			} else {
 				currentNode.nextSibling = -1;
 			}
@@ -1725,6 +1741,7 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 				PrintToken(functionToken);
 				SYS_EXIT(1);
 			}
+			i += toIncrease;
 			returnVal += 1;
 		}
 		nodeCount = nodeArr.GetCount();
@@ -1753,10 +1770,13 @@ ui64 ParseFunction(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeAr
 ui64 ParseFieldList(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ui64 offset) {
 	ui64 tokenCount = tArr.GetCount();
 	ui64 returnVal = 0;
+	Node currentNode = {0, 0, 0, 0, 0};
+	ui64 lastPropertyState = 0;
 	
 	loop i, offset..tokenCount {
 		ref<Token> token = tArr.At(i);
 		bool isClosing = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_CURLY_CLOSE);
+		bool shouldExit = false;
 		if isClosing {
 			break;
 		}
@@ -1775,43 +1795,58 @@ ui64 ParseFieldList(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		currentNode.typeIndex = typeIndex;
 		currentNode.tokenIndex = i + toSkip;
 		ui64 fieldNodeState = nodeCount;
+		lastPropertyState = nodeCount;
 		nodeArr.AddNode(\currentNode);
 
 		loop j, i + toSkip..tokenCount {
-			nodeCount = nodeArr.GetCount();
 			currentNode.firstChild = -1;
-			currentNode.nextSibling = nodeCount + 1;
+			currentNode.nextSibling = 0;
 			currentNode.type = _cPARSER_NODETYPE_FIELD;
 			currentNode.typeIndex = typeIndex;
 			currentNode.tokenIndex = j;
+			//ref<Token> debugT = tArr.At(j);
+			//PrintToken(debugT);
 			
 			bool isEnd = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_SEMICOLON);
 			if isEnd {
 				currentNode.nextSibling = -1;
+				nodeCount = nodeArr.GetCount();
 				nodeArr.AddNode(\currentNode);
 				toSkip += 1;
 				break;
 			}
-			bool isClassEnd = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_KEYWORD_IDENTIFIER);
+			bool isClassEnd = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_PARENTHESIS_OPEN);
 			if isClassEnd {
-				return returnVal;
+				shouldExit = true;
+				break;
 			}
 
-			isSyntaxCorrect = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_OR);
+			bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_OR);
 			if !isSyntaxCorrect {
 				stdout.write("[Parser]: Expected '|' or ';' for struct/class field but got ");
 				ref<Token> wrongToken = tArr.At(j + 1);
 				PrintToken(wrongToken);
 				SYS_EXIT(1);
 			}
+			nodeCount = nodeArr.GetCount();
+			currentNode.nextSibling = nodeCount + 1;
 			nodeArr.AddNode(\currentNode);
-			toSkip += 2; // Both name and |
-			i += 1;
+			toSkip += 2;
+			j += 1;
 		}
 
+		if shouldExit {
+			nodeArr.DeleteLast();
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateNS(nodeCount - 1, -1);
+			return returnVal;
+		}
 		i += toSkip;
 		returnVal += (toSkip + 1);
+		nodeCount = nodeArr.GetCount();
+		nodeArr.UpdateNS(fieldNodeState, nodeCount);
 	}
+	nodeArr.UpdateNS(lastPropertyState, -1);
 	return returnVal;
 }
 
@@ -1828,18 +1863,25 @@ ui64 ParseStruct(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr,
 	ui64 structNodeState = nodeCount;
 	nodeArr.AddNode(\currentNode);
 
-	ui64 returnVal = 1;
+	ui64 returnVal = 2;
 
-	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_CURLY_OPEN);
+	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_OPEN);
 	if !isSyntaxCorrect {
 		stdout.write("[Parser]: Expected a '{' for the definition of struct but got ");
-		ref<Token> curlyToken = tArr.At((offset + returnVal) + 1);
+		ref<Token> curlyToken = tArr.At(offset + returnVal);
 		PrintToken(curlyToken);
 		SYS_EXIT(1);
 	}
 	returnVal += 1;
 	
 	returnVal += ParseFieldList(tArr, nodeArr, typeArr, offset + 3);
+	isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_CLOSE);
+	if !isSyntaxCorrect {
+		stdout.write("[Parser]: Expected a '}' for the closing of struct but got ");
+		ref<Token> curlyToken = tArr.At(offset + returnVal);
+		PrintToken(curlyToken);
+		SYS_EXIT(1);
+	}
 
 	nodeCount = nodeArr.GetCount();
 	nodeArr.UpdateNS(structNodeState, nodeCount);
@@ -1857,34 +1899,35 @@ void ParseClass(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, 
 	ui64 classNodeState = nodeCount;
 	nodeArr.AddNode(\currentNode);
 
-	ui64 returnVal = 1;
+	ui64 returnVal = 2;
 
-	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_CURLY_OPEN);
+	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_OPEN);
 	if !isSyntaxCorrect {
 		stdout.write("[Parser]: Expected a '{' for the definition of class but got ");
-		ref<Token> curlyToken = tArr.At((offset + returnVal) + 1);
+		ref<Token> curlyToken = tArr.At(offset + returnVal);
 		PrintToken(curlyToken);
 		SYS_EXIT(1);
 	}
 	returnVal += 1;
-	
-	returnVal += ParseFieldList(tArr, nodeArr, typeArr, offset + 3);
+
+	returnVal += ParseFieldList(tArr, nodeArr, typeArr, offset + returnVal);
 
 	bool isEnd = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_CLOSE);
 	if isEnd {
 		nodeCount = nodeArr.GetCount();
-		nodeArr.UpdateNS(structNodeState, nodeCount);
+		nodeArr.UpdateNS(classNodeState, nodeCount);
 		return returnVal;
 	}
-	
-	nodeCount = nodeArr.GetCount();
-	nodeArr.UpdateNS(nodeCount - 1, nodeCount);
+
+	ui64 lastFunctionState = 0;
 	loop i, offset + returnVal..tokenCount {
-		bool isEnd = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_CURLY_CLOSE);
+		isEnd = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_CURLY_CLOSE);
 		if isEnd {
+			nodeArr.UpdateNS(lastFunctionState, -1);
 			break;
 		}
 
+		lastFunctionState = nodeArr.GetCount();
 		ui64 toSkip = ParseFunction(tArr, nodeArr, typeArr, i);
 		returnVal += (toSkip + 1);
 		i += toSkip;
@@ -1929,12 +1972,22 @@ void Parse(ref<TokenArr> tArr, ref<NodeArr> nodes, ref<TypeArr> typeArr) {
 			
 			if isStruct {
 				i += ParseStruct(tArr, nodes, typeArr, i + 1, true);
+				skip;
 			} else if isClass {
 				i += ParseClass(tArr, nodes, typeArr, i + 1, true);
+				skip;
 			} else {
 				stdout.writeln("[Parser]: Unexpected aligned token, expected 'class' or 'struct' but got ");
 				PrintToken(nextTokenPtr);
 				SYS_EXIT(1);
+			}
+		} else {
+			if isStruct {
+				i += ParseStruct(tArr, nodes, typeArr, i, false);
+				skip;
+			} else if isClass {
+				i += ParseClass(tArr, nodes, typeArr, i, false);
+				skip;
 			}
 		}
 		
