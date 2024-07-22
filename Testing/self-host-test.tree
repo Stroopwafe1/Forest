@@ -1,0 +1,3 @@
+ui8 main(array<ref<ui8> > argv) {
+	return 69;
+}

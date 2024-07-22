@@ -1,7 +1,7 @@
-i32 main(string[] argv) {
+i32 main(array<ref<ui8> > argv) {
 	stdout.write("Hello, ");
 	stdout.writeln("World!");
 	stdout.writeln("Hello, World!"); // Prints hello world
 	stdout.writeln("Hello!" * 6);
-	return (5 * 8) + 1;
+	return 5 * 8 + 1;
 }

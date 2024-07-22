@@ -1,0 +1,62 @@
+struct Test1 {
+	ui8 first|t|b|a;
+	ui16 second;
+	f8 third;
+	f16 fourth;
+}
+
+class Test2 {
+	i8 prop|size;
+	bool test;
+
+	void DoStuff(ui16 a, bool b) {
+		if b {
+			prop = a;
+		}
+	}
+}
+
+ui8 main(array<ref<ui8> > argv) {
+	Test1 s = { 0, 1, 2.0, 3.0 };
+	Test2 c = { 0, true };
+	c.DoStuff(2, false);
+	return 0;
+}
+
+/*
+DEF_CLASS Test2
+DEF_FUNC DoStuff (type void)
+LOAD_CONTEXT, 0
+LOAD_PARAM, 2
+BRANCH_TRUE
+LOAD_PARAM, 1
+SET_MEM ctx + 0
+END_BRANCH
+END_FUNC
+END_CLASS
+
+DEF_FUNC main
+ALLOC_STACK, 6
+LOAD_LITERAL, 0
+SET_MEM stack+0
+LOAD_LITERAL, 1
+SET_MEM stack+1
+LOAD_LITERAL, 2.0
+SET_MEM stack+3
+LOAD_LITERAL, 3.0
+SET_MEM stack+4
+
+ALLOC_STACK, 2
+LOAD_LITERAL, 0
+SET_MEM stack+6
+LOAD_LITERAL, 1
+SET_MEM stack+7
+SET_CONTEXT stack+6
+LOAD_LITERAL, 2
+SET_PARAM 1
+LOAD_LITERAL, 0
+SET_PARAM 2
+CALL Test2_DoStuff
+LOAD_LITERAL, 0
+SET_RETURN
+*/

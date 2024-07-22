@@ -1,4 +1,4 @@
-i32 main(string[] argv) {
+i32 main(array<ref<ui8> > argv) {
 	loop i, 0..100 {
 		stdout.write(i);
 		stdout.write(" ");
