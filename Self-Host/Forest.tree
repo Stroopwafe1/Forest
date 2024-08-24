@@ -23,24 +23,26 @@ ui8 _cTOKENTYPE_GREATER_THAN = 19;
 ui8 _cTOKENTYPE_SHIFT_RIGHT = 20;
 ui8 _cTOKENTYPE_REFERENCE_OF = 21;
 ui8 _cTOKENTYPE_DEREFERENCE = 22;
+ui8 _cTOKENTYPE_BOOL_OR = 23;
+ui8 _cTOKENTYPE_BOOL_AND = 24;
 // Syntax
-ui8 _cTOKENTYPE_DOT = 23;
-ui8 _cTOKENTYPE_RANGE = 24;
-ui8 _cTOKENTYPE_COLON = 25;
-ui8 _cTOKENTYPE_PARENTHESIS_OPEN = 26;
-ui8 _cTOKENTYPE_PARENTHESIS_CLOSE = 27;
-ui8 _cTOKENTYPE_SQUARE_OPEN = 28;
-ui8 _cTOKENTYPE_SQUARE_CLOSE = 29;
-ui8 _cTOKENTYPE_CURLY_OPEN = 30;
-ui8 _cTOKENTYPE_CURLY_CLOSE = 31;
-ui8 _cTOKENTYPE_COMMA = 32;
-ui8 _cTOKENTYPE_MACRO = 33;
-ui8 _cTOKENTYPE_SINGLE_QUOTE = 34;
-ui8 _cTOKENTYPE_DOUBLE_QUOTE = 35;
-ui8 _cTOKENTYPE_SEMICOLON = 36;
-ui8 _cTOKENTYPE_SINGLELINE_COMMENT = 37;
-ui8 _cTOKENTYPE_MULTILINE_COMMENT = 38;
-ui8 _cTOKENTYPE_NAMESPACE = 39;
+ui8 _cTOKENTYPE_DOT = 25;
+ui8 _cTOKENTYPE_RANGE = 26;
+ui8 _cTOKENTYPE_COLON = 27;
+ui8 _cTOKENTYPE_PARENTHESIS_OPEN = 28;
+ui8 _cTOKENTYPE_PARENTHESIS_CLOSE = 29;
+ui8 _cTOKENTYPE_SQUARE_OPEN = 30;
+ui8 _cTOKENTYPE_SQUARE_CLOSE = 31;
+ui8 _cTOKENTYPE_CURLY_OPEN = 32;
+ui8 _cTOKENTYPE_CURLY_CLOSE = 33;
+ui8 _cTOKENTYPE_COMMA = 34;
+ui8 _cTOKENTYPE_MACRO = 35;
+ui8 _cTOKENTYPE_SINGLE_QUOTE = 36;
+ui8 _cTOKENTYPE_DOUBLE_QUOTE = 37;
+ui8 _cTOKENTYPE_SEMICOLON = 38;
+ui8 _cTOKENTYPE_SINGLELINE_COMMENT = 39;
+ui8 _cTOKENTYPE_MULTILINE_COMMENT = 40;
+ui8 _cTOKENTYPE_NAMESPACE = 41;
 
 ui8 _cTOKENTYPE_ASSIGNMENT = 64; // To be used as a bit flag
 ui8 _cTOKENTYPE_EQUALITY = 128;
@@ -122,38 +124,58 @@ ui8 _cANALYSER_INSTRTYPE_DEF_FUNC = 1;
 ui8 _cANALYSER_INSTRTYPE_END_FUNC = 2;
 ui8 _cANALYSER_INSTRTYPE_DEF_CLASS = 3;
 ui8 _cANALYSER_INSTRTYPE_END_CLASS = 4;
-//ui8 _cANALYSER_INSTRTYPE_SET_LITERAL = 5;
+ui8 _cANALYSER_INSTRTYPE_IF = 5;
 ui8 _cANALYSER_INSTRTYPE_RETURN = 6;
 ui8 _cANALYSER_INSTRTYPE_DEF_PARAM = 7;
 ui8 _cANALYSER_INSTRTYPE_DEF_VAR = 8;
 ui8 _cANALYSER_INSTRTYPE_WITH_TYPE = 9;
-ui8 _cANALYSER_INSTRTYPE_WITH_VALUE = 10;
+ui8 _cANALYSER_INSTRTYPE_SET_VALUE = 10;
 ui8 _cANALYSER_INSTRTYPE_WITH_STRING = 11;
 ui8 _cANALYSER_INSTRTYPE_WITH_LIST = 12;
 ui8 _cANALYSER_INSTRTYPE_CLEAR_VARS = 13;
 ui8 _cANALYSER_INSTRTYPE_CMP_VALUE = 14;
 ui8 _cANALYSER_INSTRTYPE_CMP_STRING = 15;
 ui8 _cANALYSER_INSTRTYPE_CMP_LIST = 16;
-ui8 _cANALYSER_INSTRTYPE_IF_UNSIGNED_LT = 17;
-ui8 _cANALYSER_INSTRTYPE_IF_UNSIGNED_LTE = 18;
-ui8 _cANALYSER_INSTRTYPE_IF_UNSIGNED_EQ = 19;
-ui8 _cANALYSER_INSTRTYPE_IF_UNSIGNED_GT = 20;
-ui8 _cANALYSER_INSTRTYPE_IF_UNSIGNED_GTE = 20;
-ui8 _cANALYSER_INSTRTYPE_IF_SIGNED_LT = 21;
-ui8 _cANALYSER_INSTRTYPE_IF_SIGNED_LTE = 22;
-ui8 _cANALYSER_INSTRTYPE_IF_SIGNED_EQ = 23;
-ui8 _cANALYSER_INSTRTYPE_IF_SIGNED_GT = 24;
-ui8 _cANALYSER_INSTRTYPE_IF_SIGNED_GTE = 25;
+ui8 _cANALYSER_INSTRTYPE_JMP_UNSIGNED_LT = 17;
+ui8 _cANALYSER_INSTRTYPE_JMP_UNSIGNED_LTE = 18;
+ui8 _cANALYSER_INSTRTYPE_JMP_EQ = 19;
+ui8 _cANALYSER_INSTRTYPE_JMP_UNSIGNED_GT = 20;
+ui8 _cANALYSER_INSTRTYPE_JMP_UNSIGNED_GTE = 20;
+ui8 _cANALYSER_INSTRTYPE_JMP_SIGNED_LT = 21;
+ui8 _cANALYSER_INSTRTYPE_JMP_SIGNED_LTE = 22;
+// Empty, used to be signed EQ, but that is the same as unsigned
+ui8 _cANALYSER_INSTRTYPE_JMP_SIGNED_GT = 24;
+ui8 _cANALYSER_INSTRTYPE_JMP_SIGNED_GTE = 25;
 ui8 _cANALYSER_INSTRTYPE_END_IF = 26;
 ui8 _cANALYSER_INSTRTYPE_ELSE = 27;
-ui8 _cANALYSER_INSTRTYPE_END_ELSE = 28;
+ui8 _cANALYSER_INSTRTYPE_ELSE_IF = 28;
 ui8 _cANALYSER_INSTRTYPE_LOAD_INTEGER = 29;
 ui8 _cANALYSER_INSTRTYPE_LOAD_FLOAT = 30;
-ui8 _cANALYSER_INSTRTYPE_LOAD_STRING = 30;
+ui8 _cANALYSER_INSTRTYPE_LOAD_STRING = 31;
+ui8 _cANALYSER_INSTRTYPE_ADD = 32;
+ui8 _cANALYSER_INSTRTYPE_SUB = 33;
+ui8 _cANALYSER_INSTRTYPE_MULT = 34;
+ui8 _cANALYSER_INSTRTYPE_DIV = 35;
+ui8 _cANALYSER_INSTRTYPE_MOD = 36;
+ui8 _cANALYSER_INSTRTYPE_POWER = 37;
+ui8 _cANALYSER_INSTRTYPE_WITH_STACK = 38;
+ui8 _cANALYSER_INSTRTYPE_LOAD_VARIABLE = 39;
+ui8 _cANALYSER_INSTRTYPE_DEF_LOOP = 40;
+//ui8 _cANALYSER_INSTRTYPE_SET_RANGE_MIN = 41;
+//ui8 _cANALYSER_INSTRTYPE_SET_RANGE_MAX = 42;
+ui8 _cANALYSER_INSTRTYPE_CMP_VARIABLE = 43;
+ui8 _cANALYSER_INSTRTYPE_JMP_LABEL = 44;
+ui8 _cANALYSER_INSTRTYPE_DEF_LOOP_HEADER = 45;
+ui8 _cANALYSER_INSTRTYPE_DEF_LOOP_BODY = 46;
+ui8 _cANALYSER_INSTRTYPE_DEF_LOOP_FOOTER = 47;
+ui8 _cANALYSER_INSTRTYPE_DEF_LOOP_BREAKDOWN = 48;
+ui8 _cANALYSER_INSTRTYPE_END_LOOP = 49;
+ui8 _cANALYSER_INSTRTYPE_INC = 50;
 
 ui64[1024] s_token_index_array;
 ui16 s_token_index_array_count = 0;
 ui64[1024] s_func_byte_offsets;
+ui64[1024] s_label_bytes;
 ui64[1024] s_string_table_offsets;
 ui16 s_string_table_offsets_count = 0;
 
@@ -254,6 +276,7 @@ class TokenArr {
 			memcopy2(newRef, tokens, count * 34);
 			dealloc(tokens, (size * 34) + 34);
 			tokens = newRef;
+			memcopy2(newRef + (count * 34), token, 34);
 			size = s;
 			count = c;
 		} else {
@@ -502,7 +525,7 @@ void Tokenise(ref<TokenArr> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 			currentToken.text = source + i;
 			textLength = 1;
 		} else if byte == '=' {
-			if ((currentType >= _cTOKENTYPE_MINUS) & (currentType <= _cTOKENTYPE_DEREFERENCE)) | (currentType == _cTOKENTYPE_ASSIGNMENT) {
+			if ((currentType >= _cTOKENTYPE_MINUS) & (currentType <= _cTOKENTYPE_BOOL_AND)) | (currentType == _cTOKENTYPE_ASSIGNMENT) {
 				currentToken.type = currentType + _cTOKENTYPE_ASSIGNMENT;
 				currentToken.textLength = textLength + 1;
 				EndToken(tokens, \currentToken);
@@ -534,21 +557,31 @@ void Tokenise(ref<TokenArr> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				textLength = 1;
 			}
 		} else if byte == '|' {
-			currentToken.type = currentType;
-			currentToken.textLength = textLength;
-			EndToken(tokens, \currentToken);
-			currentType = _cTOKENTYPE_OR;
-			currentToken.column = start;
-			currentToken.text = source + i;
-			textLength = 1;
+			if currentType == _cTOKENTYPE_OR {
+				textLength += 1;
+				currentToken.type = _cTOKENTYPE_BOOL_OR;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_OR;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
 		} else if byte == '&' {
-			currentToken.type = currentType;
-			currentToken.textLength = textLength;
-			EndToken(tokens, \currentToken);
-			currentType = _cTOKENTYPE_MODULUS;
-			currentToken.column = start;
-			currentToken.text = source + i;
-			textLength = 1;
+			if currentType == _cTOKENTYPE_AND {
+				textLength += 1;
+				currentToken.type = _cTOKENTYPE_BOOL_AND;
+			} else {
+				currentToken.type = currentType;
+				currentToken.textLength = textLength;
+				EndToken(tokens, \currentToken);
+				currentType = _cTOKENTYPE_MODULUS;
+				currentToken.column = start;
+				currentToken.text = source + i;
+				textLength = 1;
+			}
 		} else if byte == '*' {
 			if currentType == _cTOKENTYPE_MULTIPLY {
 				currentToken.type = _cTOKENTYPE_POWER_OF;
@@ -750,6 +783,7 @@ class TypeArr {
 			memcopy2(newRef, types, count * 14);
 			dealloc(types, (size * 14) + 14);
 			types = newRef;
+			memcopy2(newRef + (count * 14), type, 14);
 			size = s;
 			count = c;
 		} else {
@@ -778,6 +812,18 @@ class Node {
 
 	void SetNS(i32 ns) {
 		nextSibling = ns;
+	}
+
+	void SetFC(i32 fc) {
+		firstChild = fc;
+	}
+
+	ui64 GetFC() {
+		return firstChild;
+	}
+
+	ui64 GetTokenIndex() {
+		return tokenIndex;
 	}
 
 	void PrintNode() {
@@ -815,6 +861,7 @@ class NodeArr {
 			memcopy2(newRef, nodes, count * 22);
 			dealloc(nodes, (size * 22) + 22);
 			nodes = newRef;
+			memcopy2(newRef + (count * 22), node, 22);
 			size = s;
 			count = c;
 		} else {
@@ -839,8 +886,25 @@ class NodeArr {
 		node.SetNS(ns);
 	}
 
+	void UpdateFC(ui64 index, i32 fc) {
+		ref<Node> node = nodes + (index * 22);
+		node.SetFC(fc);
+	}
+
 	ref<Node> At(ui64 index) {
 		return nodes + (index * 22);
+	}
+
+	ref<Node> Pop() {
+		ref<Node> returnValue = nodes + ((count - 1) * 22);
+		ui64 c = count - 1;
+		count = c;
+		return returnValue;
+	}
+
+	void UndoPop() {
+		ui64 c = count + 1;
+		count = c;
 	}
 }
 
@@ -1030,6 +1094,26 @@ ui64 ParseExpressionProperty(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offs
 	return 0;
 }
 
+bool IsOperator(ref<Token> tokenPtr) {
+	Token token = @tokenPtr;
+	if ((token.type) >= _cTOKENTYPE_MINUS) & ((token.type) <= _cTOKENTYPE_BOOL_AND) {
+		return true;
+	}
+	ui16 assignmentType = (token.type) ^ _cTOKENTYPE_ASSIGNMENT;
+	if (assignmentType >= _cTOKENTYPE_MINUS) & (assignmentType <= _cTOKENTYPE_BOOL_AND) {
+		return true;
+	} else if (token.type) == _cTOKENTYPE_EQUALITY {
+		return true;
+	}
+	return false;
+}
+
+ui64[128] s_expression_indices;
+ui64 s_expression_indices_count = 0;
+ui64[128] s_expression_stack;
+ui64 s_expression_stack_count = 0;
+ui8[150] s_precedences;
+
 // TODO(#2): Would be nice if we could detect if we are parsing a function call expression and parse it as that instead of just expression
 // TODO(#3): Just really expand on this; Try to actually make a kind of tree, give different expression types, EXPR_VARIABLE, EXPR_PROPERTY, EXPR_FUNC_CALL, EXPR_INIT_LIST, EXPR_CLASS_FUNC_CALL
 // It would be nice if I could build a tree without the spamming of parentheses, but it's the most important that these above get grouped together first.
@@ -1039,6 +1123,7 @@ ui64 ParseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64
 	ui64 returnValue = 0;
 	Node currentNode = { 0, 0, 0, 0, 0 };
 	NodeArr nodes = @nodeArr;
+	ui64 startCount = nodeArr.GetCount();
 	loop i, offset..max {
 		bool end = IsTokenSpecifiedType(tArr, i, endType);
 		bool isNextEnd = IsTokenSpecifiedType(tArr, i + 1, endType);
@@ -1129,6 +1214,158 @@ ui64 ParseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64
 		nodeArr.AddNode(\currentNode);
 		returnValue += 1;
 	}
+	ui64 endCount = nodeArr.GetCount();
+	// Actually make the tree now
+	// 1. Loop from node count beginning to node count now
+	// 2. if operator, save the precedence
+	// 3. if we come across another operator, compare precedences
+	// 4. build tree
+	s_precedences[_cTOKENTYPE_MINUS] = 10;
+	s_precedences[_cTOKENTYPE_PLUS] = 10;
+	s_precedences[_cTOKENTYPE_MULTIPLY] = 20;
+	s_precedences[_cTOKENTYPE_POWER_OF] = 30;
+	s_precedences[_cTOKENTYPE_DIVIDE] = 20;
+	s_precedences[_cTOKENTYPE_MODULUS] = 20;
+	s_precedences[_cTOKENTYPE_XOR] = 40;
+	s_precedences[_cTOKENTYPE_OR] = 40;
+	s_precedences[_cTOKENTYPE_AND] = 40;
+	s_precedences[_cTOKENTYPE_NOT] = 40;
+	s_precedences[_cTOKENTYPE_NEGATE] = 40;
+	s_precedences[_cTOKENTYPE_LESS_THAN] = 6;
+	s_precedences[_cTOKENTYPE_SHIFT_LEFT] = 35;
+	s_precedences[_cTOKENTYPE_GREATER_THAN] = 6;
+	s_precedences[_cTOKENTYPE_SHIFT_RIGHT] = 35;
+	s_precedences[_cTOKENTYPE_REFERENCE_OF] = 45;
+	s_precedences[_cTOKENTYPE_DEREFERENCE] = 45;
+	s_precedences[_cTOKENTYPE_BOOL_OR] = 3;
+	s_precedences[_cTOKENTYPE_BOOL_AND] = 3;
+	s_precedences[_cTOKENTYPE_NOT | _cTOKENTYPE_ASSIGNMENT] = 5;
+	s_precedences[_cTOKENTYPE_EQUALITY] = 5;
+	s_precedences[_cTOKENTYPE_LESS_THAN | _cTOKENTYPE_ASSIGNMENT] = 6;
+	s_precedences[_cTOKENTYPE_GREATER_THAN | _cTOKENTYPE_ASSIGNMENT] = 6;
+
+	NodeArr exprArr = {0, 0, 0};
+	exprArr.New(endCount - startCount);
+	NodeArr tempStack = {0, 0, 0};
+	tempStack.New(endCount - startCount);
+	ui8 lastPrecedence = 0;
+	ui64 it = startCount;
+	s_expression_indices_count = 0;
+	s_expression_stack_count = 0;
+	loop {
+		ref<Node> expressionPtr = nodeArr.At(it);
+		Node expression = @expressionPtr;
+		ref<Token> tokenPtr = tArr.At(expression.tokenIndex);
+		Token token = @tokenPtr;
+		bool isOperator = IsOperator(tokenPtr);
+		if (token.type) == _cTOKENTYPE_INTEGER {
+			exprArr.AddNode(expressionPtr);
+			s_expression_indices[s_expression_indices_count] = it;
+			s_expression_indices_count += 1;
+		} else if isOperator {
+			ui8 newPrecedence = s_precedences[token.type];
+			if lastPrecedence == 0 {
+				ref<Node> expr = exprArr.Pop();
+				Node temp = @expr;
+				exprArr.AddNode(expressionPtr);
+				exprArr.AddNode(\temp);
+
+				ui64 index = s_expression_indices[s_expression_indices_count - 1];
+				s_expression_indices[s_expression_indices_count - 1] = it;
+				s_expression_indices[s_expression_indices_count] = index;
+				s_expression_indices_count += 1;
+				
+				lastPrecedence = newPrecedence;
+				it = expression.nextSibling;
+				skip;
+			}
+			
+			if newPrecedence < lastPrecedence {
+				// pop-push to temp until op found with less or equal precedence (not including that op)
+				// pop-push from temp once
+				// push current op
+				// pop-push from temp until empty
+				loop {
+					ui64 exprCount = exprArr.GetCount();
+					if exprCount == 0 {
+						break;
+					}
+					ref<Node> exprPtr = exprArr.Pop();
+					s_expression_indices_count -= 1;
+					ui64 index = s_expression_indices[s_expression_indices_count];
+					
+					Node expr = @exprPtr;
+					ref<Token> tPtr = tArr.At(expr.tokenIndex);
+					Token t = @tPtr;
+					if IsOperator(tPtr) {
+						ui8 prec = s_precedences[t.type];
+						if prec <= newPrecedence {
+							exprArr.UndoPop();
+							s_expression_indices_count += 1;
+							
+							ref<Node> tempExpr = tempStack.Pop();
+							s_expression_stack_count -= 1;
+							ui64 tempIndex = s_expression_stack[s_expression_stack_count];
+							
+							exprArr.AddNode(tempExpr);
+							exprArr.AddNode(expressionPtr);
+							s_expression_indices[s_expression_indices_count] = tempIndex;
+							s_expression_indices[s_expression_indices_count + 1] = it;
+							s_expression_indices_count += 2;
+							
+							ui64 tempCount = tempStack.GetCount();
+							loop j, 0..tempCount {
+								tempExpr = tempStack.Pop();
+								s_expression_stack_count -= 1;
+								tempIndex = s_expression_stack[s_expression_stack_count];
+								
+								exprArr.AddNode(tempExpr);
+								s_expression_indices[s_expression_indices_count] = tempIndex;
+								s_expression_indices_count += 1;
+							}
+							break;
+						}
+					}
+					tempStack.AddNode(\expr);
+					s_expression_stack[s_expression_stack_count] = index;
+					s_expression_stack_count += 1;
+				}
+			} else if newPrecedence >= lastPrecedence {	
+				ref<Node> expr = exprArr.Pop();
+				Node temp = @expr;
+				exprArr.AddNode(expressionPtr);
+				exprArr.AddNode(\temp);
+				
+				ui64 index = s_expression_indices[s_expression_indices_count - 1];
+				s_expression_indices[s_expression_indices_count - 1] = it;
+				s_expression_indices[s_expression_indices_count] = index;
+				s_expression_indices_count += 1;
+			}
+			lastPrecedence = newPrecedence;
+		} else if (token.type) == _cTOKENTYPE_KEYWORD_IDENTIFIER {
+			exprArr.AddNode(expressionPtr);
+			s_expression_indices[s_expression_indices_count] = it;
+			s_expression_indices_count += 1;
+		}
+		if (expression.nextSibling) == -1 {
+			break;
+		}
+		it = expression.nextSibling;
+	}
+	// We have the expressions in reverse-polish notation in a stack
+	// Update next siblings for all
+	// Update main node array
+	s_expression_indices_count -= 1;
+	ui64 index = s_expression_indices[s_expression_indices_count];
+	nodeArr.UpdateFC(startCount - 1, index);
+	
+	loop c, 0..s_expression_indices_count {
+		ui64 toIndex = s_expression_indices[(s_expression_indices_count - c) - 1];
+		nodeArr.UpdateNS(index, toIndex);
+		index = toIndex;
+	}
+	
+	nodeArr.UpdateNS(index, -1);
 	return returnValue;
 }
 
@@ -1367,6 +1604,15 @@ ui64 ParseVarAssignment(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 			toSkip += localToSkip;
 		}
 	}
+
+	nodeCount = nodeArr.GetCount();
+	currentNode.type = _cPARSER_NODETYPE_ASSIGNMENT;
+	currentNode.firstChild = nodeCount + 1;
+	currentNode.nextSibling = -1;
+	currentNode.typeIndex = -1;
+	currentNode.tokenIndex = offset + toSkip;
+	nodeArr.AddNode(\currentNode);
+	toSkip += 1;
 
 	toSkip += ParseExpression(tArr, nodeArr, offset + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
 	nodeCount = nodeArr.GetCount();
@@ -2216,9 +2462,13 @@ void SetupTypeArr(ref<TypeArr> typeArr) {
 	typeArr.AddType(\ttype);
 }
 
-struct Instr {
+class Instr {
 	ui8 type;
 	ui64 value;
+
+	void UpdateValue(ui64 val) {
+		value = val;
+	}
 }
 
 class InstrArr {
@@ -2241,6 +2491,7 @@ class InstrArr {
 			memcopy2(newRef, instructions, count * 9);
 			dealloc(instructions, (size * 9) + 9);
 			instructions = newRef;
+			memcopy2(newRef + (count * 9), instr, 9);
 			size = s;
 			count = c;
 		} else {
@@ -2258,11 +2509,17 @@ class InstrArr {
 	ref<Instr> At(ui64 index) {
 		return instructions + (index * 9);
 	}
+
+	void UpdateValue(ui64 index, ui64 value) {
+		ref<Instr> instruction = instructions + (index * 9);
+		instruction.UpdateValue(value);
+	}
 }
 
 struct Variable {
 	ui64 nodeIndex;
-	bool inScope;
+	ui64 tokenIndex;
+	i32 offset;
 }
 
 class VariableArr {
@@ -2272,7 +2529,7 @@ class VariableArr {
 
 	void New(ui64 _size) {
 		size = _size;
-		variables = alloc((size * 9) + 9);
+		variables = alloc((size * 20) + 20);
 		count = 0;
 	}
 
@@ -2281,15 +2538,16 @@ class VariableArr {
 		if (count + 1) == size {
 			ui64 s = size * 2;
 			ui64 c = count + 1;
-			ref<Variable> newRef = alloc((s * 9) + 9);
-			memcopy2(newRef, variables, count * 9);
-			dealloc(variables, (size * 9) + 9);
+			ref<Variable> newRef = alloc((s * 20) + 20);
+			memcopy2(newRef, variables, count * 20);
+			dealloc(variables, (size * 20) + 20);
 			variables = newRef;
+			memcopy2(newRef + (count * 20), var, 20);
 			size = s;
 			count = c;
 		} else {
 			ui64 c = count;
-			memcopy2(variables + (count * 9), var, 9);
+			memcopy2(variables + (count * 20), var, 20);
 			c += 1;
 			count = c;
 		}
@@ -2300,15 +2558,96 @@ class VariableArr {
 	}
 
 	ref<Variable> At(ui64 index) {
-		return variables + (index * 9);
+		return variables + (index * 20);
+	}
+
+	ui64 FindVarIndex(ref<TokenArr> tArr, ui64 tokenIndex) {
+		ui64 result = -1;
+		loop i, 0..count {
+			ref<Token> comparePtr = tArr.At(tokenIndex);
+			ref<Variable> variablePtr = variables + (i * 20);
+			Variable variable = @variablePtr;
+			Token compare = @comparePtr;
+			
+			ref<Token> localPtr = tArr.At(variable.tokenIndex);
+			Token base = @localPtr;
+			if (base.textLength) != (compare.textLength) {
+				result = -1;
+				skip;
+			}
+			bool equals = StrEquals(base.text, compare.text, base.textLength);
+			if equals {
+				return i;
+			} else {
+				result = -1;
+			}
+		}
+		return result;
 	}
 }
 
-ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref<InstrArr> instrArr, ui64 offset) {
+ui64 AnalyseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref<InstrArr> instrArr, ui64 offset) {
+	Instr currentInstr = {0, 0, 0}; // type, valueType, value
+	ui64 i = offset;
+	loop {
+		ref<Node> exprNodePtr = nodeArr.At(i);
+		Node exprNode = @exprNodePtr;
+		// Obviously the below code should depend on the node type, token type, expressions, etc...
+		// But for now, just parsing `return 0;` is good enough and I should allow myself that.
+		ref<Token> tokenPtr = tArr.At(exprNode.tokenIndex);
+		Token token = @tokenPtr;
+
+		if (token.type) == _cTOKENTYPE_INTEGER {
+			ui64 number = StringToUI64(token.text, token.textLength);
+			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_INTEGER;
+			currentInstr.value = number;
+			instrArr.AddInstr(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_PLUS {
+			currentInstr.type = _cANALYSER_INSTRTYPE_ADD;
+			currentInstr.value = 0;
+			instrArr.AddInstr(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_MINUS {
+			currentInstr.type = _cANALYSER_INSTRTYPE_SUB;
+			currentInstr.value = 0;
+			instrArr.AddInstr(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_MULTIPLY {
+			currentInstr.type = _cANALYSER_INSTRTYPE_MULT;
+			currentInstr.value = 0;
+			instrArr.AddInstr(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_DIVIDE {
+			currentInstr.type = _cANALYSER_INSTRTYPE_DIV;
+			currentInstr.value = 0;
+			instrArr.AddInstr(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_MODULUS {
+			currentInstr.type = _cANALYSER_INSTRTYPE_MOD;
+			currentInstr.value = 0;
+			instrArr.AddInstr(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_POWER_OF {
+			currentInstr.type = _cANALYSER_INSTRTYPE_POWER;
+			currentInstr.value = 0;
+			instrArr.AddInstr(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_KEYWORD_IDENTIFIER {
+			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
+			currentInstr.value = exprNode.tokenIndex;
+			instrArr.AddInstr(\currentInstr);
+		}
+		
+		if (exprNode.nextSibling) == -1 {
+			return i;
+		}
+		i = exprNode.nextSibling;
+	}
+	return 0;
+}
+
+ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref<InstrArr> instrArr, ui64 offset, ref<ui64> labelCountPtr) {
 	Instr currentInstr = {0, 0, 0}; // type, valueType, value
 	ui64 nodeCount = nodeArr.GetCount();
 	ui64 lastNodeIndex = offset;
-	loop i, offset + 1..nodeCount {
+	ui64 i = offset + 1;
+	ui64 stackSize = 0;
+	ui64 labelCount = @labelCountPtr;
+	loop {
 		ref<Node> nodePtr = nodeArr.At(i);
 		Node node = @nodePtr;
 		if (node.type) == _cPARSER_NODETYPE_RETURN {
@@ -2319,35 +2658,195 @@ ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr,
 				currentInstr.value = 0;
 				instrArr.AddInstr(\currentInstr);
 			} else {
-				loop j, (node.firstChild)..nodeCount {
-					ref<Node> exprNodePtr = nodeArr.At(j);
-					Node exprNode = @exprNodePtr;
-					// Obviously the below code should depend on the node type, token type, expressions, etc...
-					// But for now, just parsing `return 0;` is good enough and I should allow myself that.
-					ref<Token> tokenPtr = tArr.At(exprNode.tokenIndex);
-					Token token = @tokenPtr;
-					ui64 number = StringToUI64(token.text, token.textLength);
-					currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_INTEGER;
-					currentInstr.value = number;
-					instrArr.AddInstr(\currentInstr);
-					
-					if (exprNode.nextSibling) == -1 {
-						lastNodeIndex = j;
-						break;
-					}
-				}
+				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, node.firstChild);
 				currentInstr.type = _cANALYSER_INSTRTYPE_RETURN;
 				currentInstr.value = 1;
+				ui64 state = instrArr.GetCount();
 				instrArr.AddInstr(\currentInstr);
 			}
+		} else if (node.type) == _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT {
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_VAR;
+			currentInstr.value = i;
+			instrArr.AddInstr(\currentInstr);
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_TYPE;
+			currentInstr.value = node.typeIndex;
+			instrArr.AddInstr(\currentInstr);
+
+			ref<Type> varTypePtr = typeArr.At(node.typeIndex);
+			Type varType = @varTypePtr;
+			stackSize += varType.byteSize;
+
+			ref<Node> childPtr = nodeArr.At(node.firstChild);
+			i32 fc = childPtr.GetFC();
+			ref<Node> nextChildPtr = nodeArr.At(fc);
+			Node child = @nextChildPtr;
+			if (child.type) == _cPARSER_NODETYPE_EXPRESSION {
+				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, fc);
+				currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
+				currentInstr.value = i;
+				instrArr.AddInstr(\currentInstr);
+			} else {
+				stdout.write("[Compiler]: Error: Unknown variable declaration assignment child ");
+				ui64 childType = child.type;
+				stdout.writeln(childType);
+				SYS_EXIT(1);
+			}
+		} else if (node.type) == _cPARSER_NODETYPE_VARIABLE_ASSIGNMENT {
+			ref<Node> childPtr = nodeArr.At(node.firstChild);
+			Node child = @childPtr;
+			ref<Token> tokenPtr = tArr.At(child.tokenIndex);
+			Token token = @tokenPtr;
+
+			AnalyseExpression(tArr, nodeArr, typeArr, instrArr, child.firstChild);
+
+			// Check type of assignment
+			ui16 assignmentType = (token.type) ^ _cTOKENTYPE_ASSIGNMENT;
+
+			if assignmentType != 0 {
+				// We have an operator assignment instruction (+=, -=, *=, etc...)
+				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
+				currentInstr.value = node.tokenIndex;
+				instrArr.AddInstr(\currentInstr);
+			}
+			
+			if assignmentType == _cTOKENTYPE_PLUS {
+				currentInstr.type = _cANALYSER_INSTRTYPE_ADD;
+				currentInstr.value = 0;
+				instrArr.AddInstr(\currentInstr);
+			} else {
+				stdout.write("[Compiler]: Error: Unknown assignment type ");
+				stdout.writeln(assignmentType);
+				SYS_EXIT(1);
+			}
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
+			currentInstr.value = i;
+			instrArr.AddInstr(\currentInstr);
+		} else if (node.type) == _cPARSER_NODETYPE_LOOP {
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP;
+			currentInstr.value = labelCount;
+			instrArr.AddInstr(\currentInstr);
+			ui64 startLabel = labelCount;
+			labelCount += 1;
+			ui64 headerLabel = labelCount;
+
+			ui64 currentState = instrArr.GetCount();
+			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_STACK;
+			currentInstr.value = 0;
+			instrArr.AddInstr(\currentInstr);
+
+			ui64 localStackSize = 0;
+			ui64 jmpState = 0;
+			ref<Node> childPtr = nodeArr.At(node.firstChild);
+			Node child = @childPtr;
+			bool hasVariable = (child.type) == _cPARSER_NODETYPE_VARIABLE_DECLARATION;
+			ui64 blockOffset = node.firstChild;
+			if hasVariable {
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEF_VAR;
+				currentInstr.value = node.firstChild;
+				instrArr.AddInstr(\currentInstr);
+				ref<Node> variableNodePtr = nodeArr.At(node.firstChild);
+				Node variableNode = @variableNodePtr;
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_WITH_TYPE;
+				currentInstr.value = 4; // NOTE: Hardcoded to be UI64. Will need to find some way to discover the actual type
+				instrArr.AddInstr(\currentInstr);
+				localStackSize += 8;
+
+				// NOTE: We might have to check if the loop has a step node. Assuming not for now
+				ref<Node> rangeMinPtr = nodeArr.At(child.nextSibling);
+				Node rangeMin = @rangeMinPtr;
+				
+				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, rangeMin.firstChild);
+				currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
+				currentInstr.value = node.firstChild;
+				instrArr.AddInstr(\currentInstr);
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP_HEADER;
+				currentInstr.value = headerLabel;
+				instrArr.AddInstr(\currentInstr);
+				labelCount += 1;
+
+				ref<Node> rangeMaxPtr = nodeArr.At(rangeMin.nextSibling);
+				Node rangeMax = @rangeMaxPtr;
+				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, rangeMax.firstChild);
+				// currentInstr.type = _cANALYSER_INSTRTYPE_SET_RANGE_MAX;
+				// currentInstr.value = node.firstChild;
+				// instrArr.AddInstr(\currentInstr);
+				blockOffset = rangeMax.nextSibling;
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_CMP_VARIABLE;
+				currentInstr.value = variableNode.tokenIndex;
+				instrArr.AddInstr(\currentInstr);
+
+				// NOTE: UNSIGNED because of the above hardcoded UI64 for the iterator
+				currentInstr.type = _cANALYSER_INSTRTYPE_JMP_UNSIGNED_LT;
+				currentInstr.value = 2; // Jump two instructions, this one and the next instruction
+				instrArr.AddInstr(\currentInstr);
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LABEL;
+				currentInstr.value = labelCount + 2;
+				jmpState = instrArr.GetCount();
+				instrArr.AddInstr(\currentInstr);
+			}
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP_BODY;
+			currentInstr.value = labelCount;
+			labelCount += 1;
+			instrArr.AddInstr(\currentInstr);
+			localStackSize += AnalyseBody(tArr, nodeArr, typeArr, instrArr, blockOffset, \labelCount);
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP_FOOTER;
+			currentInstr.value = labelCount;
+			labelCount += 1;
+			instrArr.AddInstr(\currentInstr);
+
+			if hasVariable {
+				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
+				currentInstr.value = child.tokenIndex;
+				instrArr.AddInstr(\currentInstr);
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_INC;
+				currentInstr.value = 1;
+				instrArr.AddInstr(\currentInstr);
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
+				currentInstr.value = node.firstChild;
+				instrArr.AddInstr(\currentInstr);
+			}
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LABEL;
+			currentInstr.value = headerLabel;
+			instrArr.AddInstr(\currentInstr);
+
+			instrArr.UpdateValue(jmpState, labelCount);
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP_BREAKDOWN;
+			currentInstr.value = labelCount;
+			labelCount += 1;
+			instrArr.AddInstr(\currentInstr);
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_END_LOOP;
+			currentInstr.value = startLabel;
+			instrArr.AddInstr(\currentInstr);
+
+			instrArr.UpdateValue(currentState, localStackSize);
+		} else {
+			stdout.write("[Compiler#AnalyseBody]: ERROR: Unknown node type ");
+			ui64 type = node.type;
+			stdout.writeln(type);
+			SYS_EXIT(1);
 		}
 
 		// This should remain as the very last thing
 		if (node.nextSibling) == -1 {
-			return lastNodeIndex;
+			memcopy2(labelCountPtr, \labelCount, 8);
+			return stackSize;
 		}
+		i = node.nextSibling;
 	}
-	return lastNodeIndex;
+	
+	memcopy2(labelCountPtr, \labelCount, 8);
+	return stackSize;
 }
 
 void Analyse(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref<InstrArr> instrArr) {
@@ -2364,22 +2863,7 @@ void Analyse(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref
 		ref<Node> nextNodePtr = nodeArr.At(i);
 		Node nextNode = @nextNodePtr;
 		
-		
-		if (nextNode.type) == _cPARSER_NODETYPE_VARIABLE_DECLARATION {
-			// ALLOC_DATA, index, 1
-		} else if (nextNode.type) == _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT {
-			// ALLOC_DATA, index, 1
-			// Foreach field/index:
-			// eval expression
-			// SET_DATA, offset, type*index/field offset
-		} else if ((nextNode.type) == _cPARSER_NODETYPE_STRUCT_ALIGNED) | ((nextNode.type) == _cPARSER_NODETYPE_STRUCT) {
-			// Ignore this, structs are only used for collection of data, which themselves don't get compiled
-		} else if ((nextNode.type) == _cPARSER_NODETYPE_CLASS_ALIGNED) | ((nextNode.type) == _cPARSER_NODETYPE_CLASS) {
-			// Ignore the field list and parse the class functions.
-			// DEF_CLASS, index 1
-			// analyse every function
-			// END_CLASS, index 1
-		} else if (nextNode.type) == _cPARSER_NODETYPE_FUNCTION {
+		if (nextNode.type) == _cPARSER_NODETYPE_FUNCTION {
 			// DEF_FUNCTION
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_FUNC;
 			currentInstr.value = i;
@@ -2387,6 +2871,13 @@ void Analyse(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref
 
 			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_TYPE;
 			currentInstr.value = nextNode.typeIndex;
+			instrArr.AddInstr(\currentInstr);
+
+			ui64 stackSize = 0;
+
+			ui64 currentState = instrArr.GetCount();
+			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_STACK;
+			currentInstr.value = 0;
 			instrArr.AddInstr(\currentInstr);
 
 			ref<Node> paramListPtr = nodeArr.At(i + 1);
@@ -2404,20 +2895,31 @@ void Analyse(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref
 				currentInstr.value = argNode.typeIndex;
 				instrArr.AddInstr(\currentInstr);
 
+				ref<Type> varTypePtr = typeArr.At(argNode.typeIndex);
+				Type varType = @varTypePtr;
+				stackSize += varType.byteSize;
+
 				if (argNode.nextSibling) == -1 {
-					i = j;
 					break;
 				}
 			}
 			
 			// analyse body
 			ui64 offset = paramList.nextSibling;
-			i = AnalyseBody(tArr, nodeArr, typeArr, instrArr, offset);
+			ui64 labelCount = 0;
+			stackSize += AnalyseBody(tArr, nodeArr, typeArr, instrArr, offset, \labelCount);
+
+			instrArr.UpdateValue(currentState, stackSize);
 			
 			// END_FUNCTION
 			currentInstr.type = _cANALYSER_INSTRTYPE_END_FUNC;
 			currentInstr.value = i;
 			instrArr.AddInstr(\currentInstr);
+		} else {
+			stdout.write("[Compiler#Analyse]: ERROR: Unknown node type ");
+			ui64 type = nextNode.type;
+			stdout.writeln(type);
+			SYS_EXIT(1);
 		}
 		
 		i = nextNode.nextSibling;
@@ -2429,7 +2931,11 @@ void PrintInstrArray(ref<InstrArr> instrArr) {
 	loop i, 0..instrCount {
 		ref<Instr> instrPtr = instrArr.At(i);
 		Instr instruction = @instrPtr;
-		if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_FUNC {
+		if (instruction.type) == _cANALYSER_INSTRTYPE_NONE {
+			stdout.write("NONE ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_FUNC {
 			stdout.write("DEF_FUNC ");
 			ui64 value = instruction.value;
 			stdout.writeln(value);
@@ -2445,14 +2951,103 @@ void PrintInstrArray(ref<InstrArr> instrArr) {
 			stdout.write("WITH_TYPE ");
 			ui64 value = instruction.value;
 			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_STACK {
+			stdout.write("WITH_STACK ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_VAR {
+			stdout.write("DEF_VAR ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_VALUE {
+			stdout.write("SET_VALUE ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_INTEGER {
 			stdout.write("LOAD_INTEGER ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_VARIABLE {
+			stdout.write("LOAD_VARIABLE ");
 			ui64 value = instruction.value;
 			stdout.writeln(value);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
 			stdout.write("RETURN ");
 			ui64 value = instruction.value;
 			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_ADD {
+			stdout.write("ADD ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SUB {
+			stdout.write("SUB ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_MULT {
+			stdout.write("MULT ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DIV {
+			stdout.write("DIV ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_MOD {
+			stdout.write("MOD ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_POWER {
+			stdout.write("POWER ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		}  else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP {
+			stdout.write("DEF_LOOP ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		//} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_RANGE_MAX {
+		//	stdout.write("SET_RANGE_MAX ");
+		//	ui64 value = instruction.value;
+		//	stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_VARIABLE {
+			stdout.write("CMP_VARIABLE ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LABEL {
+			stdout.write("JMP_LABEL ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_HEADER {
+			stdout.write("DEF_LOOP_HEADER ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_BODY {
+			stdout.write("DEF_LOOP_BODY ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_FOOTER {
+			stdout.write("DEF_LOOP_FOOTER ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_BREAKDOWN {
+			stdout.write("DEF_LOOP_BREAKDOWN ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_LOOP {
+			stdout.write("END_LOOP ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_INC {
+			stdout.write("INC ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_UNSIGNED_LT {
+			stdout.write("JMP_UNSIGNED_LT ");
+			ui64 value = instruction.value;
+			stdout.writeln(value);
+		} else {
+			stdout.write("[Compiler#PrintInstruction]: ERROR: Unknown instruction type ");
+			ui64 type = instruction.type;
+			stdout.writeln(type);
+			SYS_EXIT(1);
 		}
 	}
 }
@@ -2607,6 +3202,10 @@ class ByteArr {
 		memcopy2(bytes + startOffset, src, byteSize);
 	}
 
+	void UpdateByte(ui64 offset, ui8 byte) {
+		memcopy2(bytes + offset, \byte, 1);
+	}
+
 	ui64 GetCount() {
 		return count;
 	}
@@ -2749,6 +3348,150 @@ ui8 GetSymbolInfo(ui8 binding, ui8 type) {
 	return (binding << 4) + (type & 0xF);
 }
 
+void MoveRBP(ref<ByteArr> bytes, i32 offset, ui8 reg, ui8 size) {
+	/*
+	[0] => rax
+	[1] => rcx
+	[2] => rdx
+	[3] => rbx
+	[4] => rsp
+	[5] => rbp
+	[6] => rsi
+	[7] => rdi
+	 */
+	ui8 modRM = 0;
+	ui8 rex = 0;
+	bool small = false;
+	if (offset <= 127) & (offset >= -128) {
+		modRM = 0x45 + ((reg % 8) * 8);
+		small = true;
+	} else {
+		modRM = 0x85 + ((reg % 8) * 8);
+	}
+	if reg > 7 {
+		rex = 0x4C;
+	} else {
+		rex = 0x48;
+	}
+	if size == 8 {
+		bytes.AddByte(rex);
+	}
+	if size == 1 {
+		bytes.AddByte(0x88);
+	} else {
+		bytes.AddByte(0x89);
+	}
+	bytes.AddByte(modRM);
+	if small {
+		bytes.AddByte(offset);
+	} else {
+		bytes.AddBytes(\offset, 4);
+	}
+}
+
+ui8 GetREX(bool wide, bool reg, bool rm, bool index) {
+	ui8 rex = 0x40;
+	if wide {
+		rex |= 0x8;
+	}
+	if reg {
+		rex |= 0x4;
+	}
+	if index {
+		rex |= 0x2;
+	}
+	if rm {
+		rex |= 0x1;
+	}
+	return rex;
+}
+
+void MoveFromRBP(ref<ByteArr> bytes, i32 offset, ui8 reg, ui8 size, ui8 desiredSize) {
+	// REX.W + 8B /r if size == desiredSize
+	// REX.W + 0F B6/7 /r
+	ui8 modRM = 0;
+	ui8 rex = 0;
+	bool small = false;
+	if (offset <= 127) & (offset >= -128) {
+		modRM = 0x45 + ((reg % 8) * 8);
+		small = true;
+	} else {
+		modRM = 0x85 + ((reg % 8) * 8);
+	}
+	if reg > 7 {
+		rex = 0x4C;
+	} else {
+		rex = 0x48;
+	}
+	if (size == 8) | (desiredSize == 8) {
+		bytes.AddByte(rex);
+	}
+	if (desiredSize >= 4) & (size <= 2) {
+		// movzx
+		bytes.AddByte(0x0F);
+		if size == 1 {
+			bytes.AddByte(0xB6);
+		} else {
+			bytes.AddByte(0xB7);
+		}
+	} else {
+		// mov
+		if size == 1 {
+			bytes.AddByte(0x8A);
+		} else {
+			bytes.AddByte(0x8B);
+		}
+	}
+	bytes.AddByte(modRM);
+	if small {
+		bytes.AddByte(offset);
+	} else {
+		bytes.AddBytes(\offset, 4);
+	}
+}
+
+void CompareFromRBP(ref<ByteArr> bytes, i32 offset, ui8 reg, ui8 size) {
+	// REX.W + 39 /r (+-bit
+	// REX + 38 /r (8-bit)
+	ui8 modRM = 0;
+	bool wide = (size == 8);
+	bool needsReg = (reg > 7);
+	ui8 rex = GetREX(wide, needsReg, false, false);
+	bool small = false;
+	if (offset <= 127) & (offset >= -128) {
+		modRM = 0x45 + ((reg % 8) * 8);
+		small = true;
+	} else {
+		modRM = 0x85 + ((reg % 8) * 8);
+	}
+	
+	if rex != 0x40 {
+		bytes.AddByte(rex);
+	}
+	
+	// cmp
+	if size == 1 {
+		bytes.AddByte(0x38);
+	} else {
+		bytes.AddByte(0x39);
+	}
+	
+	bytes.AddByte(modRM);
+	
+	if small {
+		bytes.AddByte(offset);
+	} else {
+		bytes.AddBytes(\offset, 4);
+	}
+}
+
+ui64[128] s_undefined_jumps;
+ui64[128] s_jump_labels;
+ui64 s_jump_count = 0;
+
+ui64[128] s_stack_sizes;
+ui64 s_stack_count = 0;
+
 void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref<InstrArr> instrArr, i32 fd, ref<ui8> fileName) {
 	ByteArr bytes = {0, 0, 0};
 	bytes.New(1024);
@@ -2794,6 +3537,16 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		0x0f, 0x05 // syscall
 	};
 	bytes.AddBytes(\hiddenStart, 46);
+	bool[8] regsInUse = { false, false, false, false, false, false, false, false };
+	ui64 stackVariables = 0;
+	ui64 paramCount = 0;
+	ui64 offset = 0;
+	VariableArr variables = {0, 0, 0};
+	variables.New(128);
+	Variable currentVar = {0, 0, 0};
+	ui8 lastInstructionType = 0;
+	ui64 instructionCounter = 0;
+	ui64 lastJumpState = 0;
 	loop i, 0..instrCount {
 		ref<Instr> instrPtr = instrArr.At(i);
 		Instr instruction = @instrPtr;
@@ -2824,30 +3577,314 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_FUNC {
 			// Add epilogue
+			// add stack to rsp (REX.W + 83 /0 ib)
+			// 0x48, 0x83, 0xC4
+			ui8[3] addRsp = {
+				0x48, 0x83, 0xC4
+			};
+			bytes.AddBytes(\addRsp, 3);
+			s_stack_count -= 1;
+			ui8 stackSize = s_stack_sizes[s_stack_count];
+			bytes.AddByte(stackSize);
 			ui8[2] epilogue = {
 				0x5D, // pop rbp
 				0xC3, // ret
 			};
 			bytes.AddBytes(\epilogue, 2);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_STACK {
+			if (instruction.value) < 255 {
+				ui8[3] subRsp = {
+					0x48, 0x83, 0xEC
+				};
+				bytes.AddBytes(\subRsp, 3);
+				bytes.AddByte(instruction.value);
+			}
+			s_stack_sizes[s_stack_count] = instruction.value;
+			s_stack_count += 1;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP {
+			ui64 currentByteCount = bytes.GetCount();
+			s_label_bytes[instruction.value] = currentByteCount;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_HEADER {
+			ui64 currentByteCount = bytes.GetCount();
+			s_label_bytes[instruction.value] = currentByteCount;
+	    } else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_BODY {
+			ui64 currentByteCount = bytes.GetCount();
+			s_label_bytes[instruction.value] = currentByteCount;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_FOOTER {
+			ui64 currentByteCount = bytes.GetCount();
+			s_label_bytes[instruction.value] = currentByteCount;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_BREAKDOWN {
+			ui64 currentByteCount = bytes.GetCount();
+			s_label_bytes[instruction.value] = currentByteCount;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_LOOP {
+			ui8[3] addRsp = {
+				0x48, 0x83, 0xC4
+			};
+			bytes.AddBytes(\addRsp, 3);
+			s_stack_count -= 1;
+			ui8 stackSize = s_stack_sizes[s_stack_count];
+			bytes.AddByte(stackSize);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_PARAM {
 			// Add it to some kind of symbols array with offset
+			currentVar.nodeIndex = instruction.value;
+			ref<Node> node = nodeArr.At(instruction.value);
+			currentVar.tokenIndex = node.GetTokenIndex();
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_VAR {
+			currentVar.nodeIndex = instruction.value;
+			ref<Node> node = nodeArr.At(instruction.value);
+			currentVar.tokenIndex = node.GetTokenIndex();
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_VALUE {
+			//ref<Node> nodePtr = nodeArr.At(currentVar.nodeIndex);
+			ref<Node> nodePtr = nodeArr.At(instruction.value);
+			Node node = @nodePtr;
+			ui64 index = variables.FindVarIndex(tArr, node.tokenIndex);
+			if index == -1 {
+				stdout.write("[Compiler]: Error: Unknown variable ");
+				ref<Token> t = tArr.At(node.tokenIndex);
+				PrintToken(t);
+				SYS_EXIT(1);
+			}
+			ref<Variable> variablePtr = variables.At(index);
+			Variable variable = @variablePtr;
+			ref<Node> definingNodePtr = nodeArr.At(variable.nodeIndex);
+			Node definingNode = @definingNodePtr;
+			ref<Type> typePtr = typeArr.At(definingNode.typeIndex);
+			Type type = @typePtr;
+			MoveRBP(\bytes, variable.offset, 0, type.byteSize);
+			regsInUse[0] = false;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_VARIABLE {
+			ui64 index = variables.FindVarIndex(tArr, instruction.value);
+			if index == -1 {
+				stdout.write("[Compiler]: Error: Unknown variable ");
+				ref<Token> t = tArr.At(instruction.value);
+				PrintToken(t);
+				SYS_EXIT(1);
+			}
+			ref<Variable> variablePtr = variables.At(index);
+			Variable variable = @variablePtr;
+			ref<Node> nodePtr = nodeArr.At(variable.nodeIndex);
+			Node node = @nodePtr;
+			ref<Type> typePtr = typeArr.At(node.typeIndex);
+			Type type = @typePtr;
+			bool inUse = regsInUse[0];
+			if inUse {
+				MoveFromRBP(\bytes, variable.offset, 3, type.byteSize, 8);
+				regsInUse[3] = true;
+			} else {
+				MoveFromRBP(\bytes, variable.offset, 0, type.byteSize, 8);
+				regsInUse[0] = true;
+			}
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_VARIABLE {
+			ui64 index = variables.FindVarIndex(tArr, instruction.value);
+			if index == -1 {
+				stdout.write("[Compiler]: Error: Unknown variable ");
+				ref<Token> t = tArr.At(instruction.value);
+				PrintToken(t);
+				SYS_EXIT(1);
+			}
+			ref<Variable> variablePtr = variables.At(index);
+			Variable variable = @variablePtr;
+			ref<Node> nodePtr = nodeArr.At(variable.nodeIndex);
+			Node node = @nodePtr;
+			ref<Type> typePtr = typeArr.At(node.typeIndex);
+			Type type = @typePtr;
+			CompareFromRBP(\bytes, variable.offset, 0, type.byteSize);
+			regsInUse[0] = false;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LABEL {
+			ui64 byteOffsetLabel = s_label_bytes[instruction.value];
+			if byteOffsetLabel == 0 {
+				stdout.writeln("[Compiler]: Error: Jumping to unknown label");
+				s_undefined_jumps[s_jump_count] = bytes.GetCount();
+				s_jump_labels[s_jump_count] = instruction.value;
+				s_jump_count += 1;
+			}
+			bytes.AddByte(0xE9);
+			i64 currentByteCount = bytes.GetCount();
+			bytes.AddUI32(byteOffsetLabel - (currentByteCount + 4));
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_UNSIGNED_LT {
+			instructionCounter = instruction.value;
+			bytes.AddByte(0x72); // JB
+			lastJumpState = bytes.GetCount();
+			bytes.AddByte(0x0);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_INTEGER {
-			ui8[3] movRax = {
-				0x48, 0xC7, 0xC0
-			};
-			bytes.AddBytes(\movRax, 3);
-			bytes.AddUI32(instruction.value);
+			ui64 counter = 1;
+			loop {
+				ref<Instr> nextInstrPtr = instrArr.At(i + counter);
+				Instr nextInstr = @nextInstrPtr;
+				if (nextInstr.type) != _cANALYSER_INSTRTYPE_LOAD_INTEGER {
+					break;
+				}
+				counter += 1;
+			}
+			if counter == 1 {
+				bool inUse = regsInUse[0];
+				if !inUse {
+					ui8[3] movRax = {
+						0x48, 0xC7, 0xC0
+					};
+					bytes.AddBytes(\movRax, 3);
+					regsInUse[0] = true;
+				} else {
+					ui8[3] movRbx = {
+						0x48, 0xC7, 0xC3
+					};
+					bytes.AddBytes(\movRbx, 3);
+					regsInUse[3] = true;
+				}
+				bytes.AddUI32(instruction.value);
+			} else if counter == 2 {
+				ui8[3] movRax = {
+					0x48, 0xC7, 0xC0
+				};
+				bytes.AddBytes(\movRax, 3);
+				bytes.AddUI32(instruction.value);
+				regsInUse[0] = true;
+
+				ref<Instr> loadSecondPtr = instrArr.At(i + 1);
+				Instr loadSecond = @loadSecondPtr;
+				ui8[3] movRbx = {
+					0x48, 0xC7, 0xC3
+				};
+				bytes.AddBytes(\movRbx, 3);
+				bytes.AddUI32(loadSecond.value);
+				regsInUse[3] = true;
+				i += 1;
+			} else {
+				loop j, 0..counter - 2 {
+					ref<Instr> nextInstrPtr = instrArr.At(i + j);
+					Instr nextInstr = @nextInstrPtr;
+					bytes.AddByte(0x68); // Push imm32
+					bytes.AddUI32(nextInstr.value);
+					stackVariables += 1;
+				}
+				ref<Instr> aPtr = instrArr.At(i + (counter - 2));
+				ref<Instr> bPtr = instrArr.At(i + (counter - 1));
+				Instr a = @aPtr;
+				Instr b = @bPtr;
+
+				ui8[3] movRax = {
+					0x48, 0xC7, 0xC0
+				};
+				bytes.AddBytes(\movRax, 3);
+				bytes.AddUI32(a.value);
+				regsInUse[0] = true;
+
+				ui8[3] movRbx = {
+					0x48, 0xC7, 0xC3
+				};
+				bytes.AddBytes(\movRbx, 3);
+				bytes.AddUI32(b.value);
+				regsInUse[3] = true;
+				i += (counter - 1);
+			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
 			// Restore however many stack allocations this block has had
 			// Add 0xC3
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_TYPE {
+			ref<Type> typePtr = typeArr.At(instruction.value);
+			Type type = @typePtr;
+			ui16 size = type.byteSize;
+			
+			if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_PARAM {
+				offset += size;
+				currentVar.offset = offset * -1;
+				variables.AddVar(\currentVar);
+				// mov [rbp-offset], param index
+				// paramCount += 1
+				ui8[6] regs = { 7, 6, 2, 1, 8, 9 };
+				if paramCount < 6 {
+					MoveRBP(\bytes, size * -1, regs[paramCount], size);
+				} else {
+					stdout.writeln("[Compiler]: TODO: More than 6 parameters for a function is not supported yet");
+					SYS_EXIT(1);
+				}
+				paramCount += 1;
+			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_VAR {
+				offset += size;
+				currentVar.offset = offset * -1;
+				variables.AddVar(\currentVar);
+			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_FUNC {
+			} else {
+				stdout.write("[Compiler]: Error: Unknown WITH_TYPE ");
+				stdout.writeln(lastInstructionType);
+				SYS_EXIT(1);
+			}
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_INC {
+			ui8[3] inc = {
+				0x48, 0xFF, 0xC0
+			}; // inc rax
+			bytes.AddBytes(\inc, 3);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_ADD {
+			bool hasSecond = regsInUse[3];
+			if !hasSecond {
+				if stackVariables == 0 {
+					stdout.writeln("[Compiler]: Error: No variable available for add");
+					SYS_EXIT(1);
+				}
+				bytes.AddByte(0x5B); // Pop rbx
+			}
+			ui8[3] add = {
+				0x48, 0x01, 0xD8
+			};
+			bytes.AddBytes(\add, 3);
+			regsInUse[0] = true;
+			regsInUse[3] = false;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SUB {
+			bool hasSecond = regsInUse[3];
+			if !hasSecond {
+				if stackVariables == 0 {
+					stdout.writeln("[Compiler]: Error: No variable available for sub");
+					SYS_EXIT(1);
+				}
+				bytes.AddByte(0x5B); // Pop rbx
+			}
+			ui8[3] sub = {
+				0x48, 0x29, 0xD8
+			};
+			bytes.AddBytes(\sub, 3);
+			regsInUse[0] = true;
+			regsInUse[3] = false;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_MULT {
+			bool hasSecond = regsInUse[3];
+			if !hasSecond {
+				if stackVariables == 0 {
+					stdout.writeln("[Compiler]: Error: No variable available for mul");
+					SYS_EXIT(1);
+				}
+				bytes.AddByte(0x5B); // Pop rbx
+			}
+			ui8[3] mul = {
+				0x48, 0xF7, 0xE3
+			}; // mul rbx
+			bytes.AddBytes(\mul, 3);
+			regsInUse[0] = true;
+			regsInUse[2] = true;
+			regsInUse[3] = false;
 		} else {
-			stdout.write("Error: Unexpected instruction ");
+			stdout.write("[Compiler#CompileToELF64]: Error: Unexpected instruction ");
 			ui64 instructionType = instruction.type;
 			stdout.writeln(instructionType);
 			SYS_EXIT(1);
 		}
+		lastInstructionType = instruction.type;
+		if instructionCounter != 0 {
+			instructionCounter -= 1;
+			if instructionCounter == 0 {
+				ui64 currCount = bytes.GetCount();
+				ui8 relativeOffset = currCount - lastJumpState;
+				bytes.UpdateByte(lastJumpState, (relativeOffset - 1));
+			}
+		}
 	}
+
+	loop i, 0..s_jump_count {
+		ui64 byteToUpdate = s_undefined_jumps[i] + 1;
+		ui64 labelValue = s_jump_labels[i];
+		ui64 labelByteOffset = s_label_bytes[labelValue];
+		i32 relativeOffset = labelByteOffset - (byteToUpdate + 4);
+		bytes.UpdateBytes(\relativeOffset, byteToUpdate, 4);
+	}
+	
 	ui64 newCount = bytes.GetCount();
 	ui64 textSectionSize = newCount - byteCount;
 	ui64 padding = (16 - (newCount % 16)) % 16;

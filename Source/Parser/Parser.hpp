@@ -281,7 +281,7 @@ namespace forest::parser {
 		std::optional<Statement> tryParseVariableDeclaration();
 		std::optional<Statement> tryParseVariableAssignment();
 		std::optional<Statement> tryParseIfStatement();
-		Expression* expectExpression(Statement& statementContext, bool collapse = false);
+		Expression* expectExpression(Statement& statementContext, bool collapse = false, bool parsingSpecial = false);
 
 		std::vector<Token>::iterator mCurrentToken;
 		std::vector<Token>::iterator mTokensEnd;

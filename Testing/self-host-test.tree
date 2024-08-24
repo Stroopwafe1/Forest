@@ -1,3 +1,8 @@
 ui8 main(array<ref<ui8> > argv) {
-	return 69;
+	ui16 value = 2 + 3 * 4 * 5 - 6;
+	ui8 test = 0;
+	if value == 56 {
+		test = 1;
+	}
+	return test;
 }

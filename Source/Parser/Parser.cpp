@@ -375,7 +375,7 @@ namespace forest::parser {
 
 		Statement s;
 		s.mType = Statement_Type::FUNC_CALL;
-		Expression* content = expectExpression(s);
+		Expression* content = expectExpression(s, false, true);
 
 		std::optional<Token> rparen = expectOperator(")");
 
@@ -1368,7 +1368,7 @@ namespace forest::parser {
 		return Type {id->mText, getTypeFromName(id->mText), {}, sizeCache[id->mText], sizeCache[id->mText]};
 	}
 
-	Expression* Parser::expectExpression(Statement& statementContext, bool collapse) {
+	Expression* Parser::expectExpression(Statement& statementContext, bool collapse, bool parsingSpecial) {
 		std::vector<Token>::iterator saved = mCurrentToken;
 		// While no semicolon for variable assignment or return call, parse
 		// While no ')' for function calls or if-statements, parse
@@ -1457,7 +1457,7 @@ namespace forest::parser {
 					node->mChildren.push_back(left);
 					node->mChildren.push_back(right);
 					nodes.push_back(node);
-					if (variables.find(identifier.value().mText) == variables.end() && !parsingProperty) {
+					if (variables.find(identifier.value().mText) == variables.end() && !parsingProperty && !parsingSpecial) {
 						std::cerr << "[Parser]: Unknown variable '" << identifier.value().mText << "' at " << identifier.value() << std::endl;
 						return nullptr;
 					}
@@ -1528,9 +1528,8 @@ namespace forest::parser {
 					expectOperator(")"); // We discard this value because we don't need it
 					nodes.push_back(node);
 				} else {
-					if (variables.find(identifier.value().mText) == variables.end() && !parsingProperty) {
-						std::cerr << "[Parser]: Unknown variable '" << identifier.value().mText << "' at " << identifier.value() << std::endl;
-						return nullptr;
+					if (variables.find(identifier.value().mText) == variables.end() && !parsingProperty && !parsingSpecial) {
+						std::cerr << "[Parser]: Warning: Possibly Unknown variable '" << identifier.value().mText << "' at " << identifier.value() << std::endl;
 					}
 					Expression* node = new Expression;
 					node->mValue = identifier.value();
