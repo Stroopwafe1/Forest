@@ -1,8 +1,9 @@
+ui8 returnSub2(ui16 value) {
+	return value - 2;
+}
+
 ui8 main(array<ref<ui8> > argv) {
 	ui16 value = 2 + 3 * 4 * 5 - 6;
-	ui8 test = 0;
-	if value == 56 {
-		test = 1;
-	}
+	ui8 test = returnSub2(value);
 	return test;
 }
