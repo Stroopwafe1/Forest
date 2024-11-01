@@ -176,6 +176,21 @@ ui8 _cANALYSER_INSTRTYPE_INC = 50;
 ui8 _cANALYSER_INSTRTYPE_SET_ARG = 51;
 ui8 _cANALYSER_INSTRTYPE_CALL_FUNC = 52;
 
+ui8 _cANALYSER_INSTRTYPE_DEBUG_SPECIAL = 100;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_COPY = 101;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_PC = 102;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE = 103;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_SET_FILE = 104;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_SET_COLUMN = 105;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_NEGATE_STATEMENT = 106;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_SET_BASIC_BLOCK = 107;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_CONST_ADD_PC = 108;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_FIXED_ADVANCE_PC = 109;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END = 110;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_SET_EPILOGUE_BEGIN = 111;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_SET_ISA = 112;
+ui8 _cANALYSER_INSTRTYPE_DEBUG_STATEMENT = 113; // Custom for helping compiler determine how many bytes and line(s) to advance by using last values
+
 ui8 _cANALYSER_INSTRVALUE_NONE = 0;
 ui8 _cANALYSER_INSTRVALUE_VARIABLE = 1;
 ui8 _cANALYSER_INSTRVALUE_MEMORY = 2;
@@ -987,6 +1002,41 @@ ui64 GetTypeIndexFromName(ref<TypeArr> typArr, ref<Token> t) {
 	return 15;
 }
 
+ref<ui8> GetNameFromTypeIndex(ui64 typeType) {
+	if typeType == _cPARSER_TYPETYPE_VOID {
+		return "void";
+	} else if typeType == _cPARSER_TYPETYPE_UI8 {
+		return "ui8";
+	} else if typeType == _cPARSER_TYPETYPE_UI16 {
+		return "ui16";
+	} else if typeType == _cPARSER_TYPETYPE_UI32 {
+		return "ui32";
+	} else if typeType == _cPARSER_TYPETYPE_UI64 {
+		return "ui64";
+	} else if typeType == _cPARSER_TYPETYPE_I8 {
+		return "i8";
+	} else if typeType == _cPARSER_TYPETYPE_I16 {
+		return "i16";
+	} else if typeType == _cPARSER_TYPETYPE_I32 {
+		return "i32";
+	} else if typeType == _cPARSER_TYPETYPE_I64 {
+		return "i64";
+	} else if typeType == _cPARSER_TYPETYPE_F8 {
+		return "f8";
+	} else if typeType == _cPARSER_TYPETYPE_F16 {
+		return "f16";
+	} else if typeType == _cPARSER_TYPETYPE_F32 {
+		return "f32";
+	} else if typeType == _cPARSER_TYPETYPE_F64 {
+		return "f64";
+	} else if typeType == _cPARSER_TYPETYPE_BOOL {
+		return "bool";
+	} else if typeType == _cPARSER_TYPETYPE_CHAR {
+		return "char";
+	}
+	return "";
+}
+
 bool IsTokenSpecifiedType(ref<TokenArr> tArr, ui64 offset, ui16 desiredType) {
 	TokenArr tokens = @tArr;
 	if offset >= (tokens.count) {
@@ -998,6 +1048,7 @@ bool IsTokenSpecifiedType(ref<TokenArr> tArr, ui64 offset, ui16 desiredType) {
 }
 
 // Returns how much to increment i by
+// TODO: We do nothing with the child types if recursing from ref< or array<
 ui16 ParseType(ref<TokenArr> tArr, ref<TypeArr> typeArr, ui64 offset) {
 	TokenArr tokens = @tArr;
 	TypeArr typesArr = @typeArr;
@@ -2601,6 +2652,10 @@ class VariableArr {
 ui64 AnalyseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref<InstrArr> instrArr, ui64 offset) {
 	Instr currentInstr = {0, 0, 0}; // type, valueType, value
 	ui64 i = offset;
+	
+	currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+	instrArr.AddInstr(\currentInstr);
+	
 	loop {
 		ref<Node> exprNodePtr = nodeArr.At(i);
 		Node exprNode = @exprNodePtr;
@@ -2608,6 +2663,7 @@ ui64 AnalyseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> ty
 		// But for now, just parsing `return 0;` is good enough and I should allow myself that.
 		ref<Token> tokenPtr = tArr.At(exprNode.tokenIndex);
 		Token token = @tokenPtr;
+		
 
 		if (token.type) == _cTOKENTYPE_INTEGER {
 			ui64 number = StringToUI64(token.text, token.textLength);
@@ -2700,6 +2756,9 @@ ui64 AnalyseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> ty
 				}
 			}
 
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+			instrArr.AddInstr(\currentInstr);
+			
 			currentInstr.type = _cANALYSER_INSTRTYPE_CALL_FUNC;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 			currentInstr.value = exprNode.tokenIndex;
@@ -2722,6 +2781,8 @@ ui64 AnalyseExpression(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> ty
 ui64[128] s_ifs;
 ui64 s_ifs_count = 0;
 
+ui64 s_line_number = 1;
+
 ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref<InstrArr> instrArr, ui64 offset, ref<ui64> labelCountPtr) {
 	Instr currentInstr = {0, 0, 0}; // type, valueType, value
 	ui64 nodeCount = nodeArr.GetCount();
@@ -2732,9 +2793,26 @@ ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr,
 	bool parsingIf = false;
 	ui64 startingIfs = s_ifs_count;
 
+	//currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_BASIC_BLOCK;
+	//instrArr.AddInstr(\currentInstr);
+
 	loop {
 		ref<Node> nodePtr = nodeArr.At(i);
 		Node node = @nodePtr;
+
+		ref<Token> tPtr = tArr.At(node.tokenIndex);
+		Token t = @tPtr;
+		
+		if (t.line) != s_line_number {
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
+			currentInstr.value = (t.line) - s_line_number;
+			instrArr.AddInstr(\currentInstr);
+			s_line_number = t.line;
+		}
+		
+		currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+		instrArr.AddInstr(\currentInstr);
+		
 		if parsingIf {
 			if ((node.type) != _cPARSER_NODETYPE_ELSE) & ((node.type) != _cPARSER_NODETYPE_ELSE_IF) {
 				loop j, startingIfs..s_ifs_count {
@@ -2747,6 +2825,7 @@ ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr,
 				labelCount += 1;
 				instrArr.AddInstr(\currentInstr);
 				parsingIf = false;
+
 			} else {
 				ui64 ifState = instrArr.GetCount();
 				s_ifs[s_ifs_count] = ifState;
@@ -2934,6 +3013,9 @@ ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr,
 			bool hasVariable = (child.type) == _cPARSER_NODETYPE_VARIABLE_DECLARATION;
 			ui64 blockOffset = node.firstChild;
 			if hasVariable {
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+				instrArr.AddInstr(\currentInstr);
+				
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEF_VAR;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 				currentInstr.value = node.firstChild;
@@ -2951,6 +3033,9 @@ ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr,
 				ref<Node> rangeMinPtr = nodeArr.At(child.nextSibling);
 				Node rangeMin = @rangeMinPtr;
 
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+				instrArr.AddInstr(\currentInstr);
+				
 				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, rangeMin.firstChild);
 				currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
@@ -2965,6 +3050,8 @@ ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr,
 
 				ref<Node> rangeMaxPtr = nodeArr.At(rangeMin.nextSibling);
 				Node rangeMax = @rangeMaxPtr;
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+				instrArr.AddInstr(\currentInstr);
 				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, rangeMax.firstChild);
 				// currentInstr.type = _cANALYSER_INSTRTYPE_SET_RANGE_MAX;
 				// currentInstr.value = node.firstChild;
@@ -3002,6 +3089,9 @@ ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr,
 			instrArr.AddInstr(\currentInstr);
 
 			if hasVariable {
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+				instrArr.AddInstr(\currentInstr);
+				
 				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 				currentInstr.value = child.tokenIndex;
@@ -3036,6 +3126,9 @@ ui64 AnalyseBody(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr,
 			instrArr.AddInstr(\currentInstr);
 
 			instrArr.UpdateValue(currentState, localStackSize);
+			
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+			instrArr.AddInstr(\currentInstr);
 		} else {
 			stdout.write("[Compiler#AnalyseBody]: ERROR: Unknown node type ");
 			ui64 type = node.type;
@@ -3069,6 +3162,15 @@ void Analyse(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref
 	loop {
 		ref<Node> nextNodePtr = nodeArr.At(i);
 		Node nextNode = @nextNodePtr;
+
+		ref<Token> tPtr = tArr.At(nextNode.tokenIndex);
+		Token t = @tPtr;
+		if (t.line) != s_line_number {
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
+			currentInstr.value = (t.line) - s_line_number;
+			instrArr.AddInstr(\currentInstr);
+			s_line_number = t.line;
+		}
 
 		if (nextNode.type) == _cPARSER_NODETYPE_FUNCTION {
 			// DEF_FUNCTION
@@ -3121,10 +3223,15 @@ void Analyse(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref
 				// analyse body
 				bodyOffset = child.nextSibling;
 			}
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END;
+			instrArr.AddInstr(\currentInstr);
 			ui64 labelCount = 0;
 			stackSize += AnalyseBody(tArr, nodeArr, typeArr, instrArr, bodyOffset, \labelCount);
 
 			instrArr.UpdateValue(currentState, stackSize);
+			
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_EPILOGUE_BEGIN;
+			instrArr.AddInstr(\currentInstr);
 
 			// END_FUNCTION
 			currentInstr.type = _cANALYSER_INSTRTYPE_END_FUNC;
@@ -3222,6 +3329,23 @@ void PrintInstrArray(ref<InstrArr> instrArr) {
 			stdout.write("SET_ARG ");
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CALL_FUNC {
 			stdout.write("CALL_FUNC ");
+		} else if (instruction.type) >= 100 {
+			if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END {
+				stdout.write("DBG_PROLOGUE_END ");
+			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_EPILOGUE_BEGIN {
+				stdout.write("DBG_EPILOGUE_BEGIN ");
+			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE {
+				stdout.write("DBG_ADVANCE_LINE ");
+			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_STATEMENT {
+				stdout.write("DBG_STATEMENT ");
+			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_BASIC_BLOCK {
+				stdout.write("DBG_BASIC_BLOCK ");
+			} else {
+				stdout.write("<Debugging instruction> ");
+				ui64 type = instruction.type;
+				stdout.write(type);
+				stdout.write(" ");
+			}
 		} else {
 			stdout.write("[Compiler#PrintInstruction]: ERROR: Unknown instruction type ");
 			ui64 type = instruction.type;
@@ -3445,7 +3569,7 @@ class ByteArr {
 		count = c;
 	}
 
-	void AddBytes(ref<ui8> address, ui8 byteSize) {
+	void AddBytes(ref<ui8> address, ui64 byteSize) {
 		if (count + byteSize) >= size {
 			ui64 s = size * 2;
 			ref<ui8> newRef = alloc(s + 1);
@@ -3529,6 +3653,12 @@ struct Elf64SymbolTableEntry {
 	ui16 sectionHeaderIndex;
 	ui64 value;
 	ui64 size;
+}
+
+struct Elf64RelocationAddendEntry {
+	ui64 offset;
+	ui64 info;
+	i64 addend;
 }
 
 struct DwarfCompilationUnitHeader {
@@ -3616,6 +3746,10 @@ ui16 _cSHN_HIRESERVE = 0xFFFF;
 
 ui8 GetSymbolInfo(ui8 binding, ui8 type) {
 	return (binding << 4) + (type & 0xF);
+}
+
+ui64 GetRelocationInfo(ui64 symbol, ui64 type) {
+	return (symbol << 32) + (type & 0xffffffff);
 }
 
 void MoveRBP(ref<ByteArr> bytes, i32 offset, ui8 reg, ui8 size) {
@@ -3777,7 +3911,16 @@ ui64 s_debug_abbrev_size = 0;
 ui64 s_offset_debug_line = 0;
 ui64 s_debug_line_size = 0;
 
+ui64[128] s_relocation_offsets;
+ui64 s_relocation_offset_count = 0;
+
+ui8[256] s_file_name;
 ui8[256] s_dir_path;
+ui64 s_dir_path_length = 0;
+
+ref<ByteArr> s_debug_info = 0;
+ref<ByteArr> s_debug_abbrev = 0;
+ui64 s_debug_index = 1;
 
 void AddSymbolTableEntry(ref<ByteArr> bytes, ui32 name, ui8 info, ui16 sectionHeaderIndex, ui64 value, ui64 size) {
 	Elf64SymbolTableEntry entry = {
@@ -3791,14 +3934,14 @@ void AddSymbolTableEntry(ref<ByteArr> bytes, ui32 name, ui8 info, ui16 sectionHe
 	bytes.AddBytes(\entry, 0x18);
 }
 
-void AddDebugInfo(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, i32 fd, ref<ui8> fileName, ref<ByteArr> bytes) {
-	ByteArr abbrevBytes = {0, 0, 0};
-	abbrevBytes.New(1024);
+ui16 GetLineNumberOpcode(ui8 lineIncrement, ui8 opcodeAdvance) {
+	ui8 lineBase = 0;
+	ui8 lineRange = 10;
+	ui8 opcodeBase = 13;
+	return ((lineIncrement - lineBase) + (lineRange * opcodeAdvance)) + opcodeBase;
+}
 
-	ByteArr infoBytes = {0, 0, 0};
-	infoBytes.New(1024);
-
-	//stdout.writeln(fd);
+void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 	// HACK: The file descriptor SHOULDNT be above 9, so we can just convert it to an ascii char
 	ui8[16] procPath = { '/', 'p', 'r', 'o', 'c', '/', 's', 'e', 'l', 'f', '/', 'f', 'd', '/', fd + '0', 0 };
 
@@ -3813,83 +3956,148 @@ void AddDebugInfo(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr
 	stdout.writeln("Directory of file");
 	SYS_WRITE(1, \s_dir_path, lastSlash);
 	stdout.writeln("");
+	s_dir_path_length = lastSlash;
 
 	DwarfCompilationUnitHeader cuh = {
 		0, // We are going to be updating the length when we're done
 		5, // Version 5
 		1, // DW_UT_compile
 		8, // Address size
-		0 // Abbreviation offset is 0 for some reason, maybe because relocation? 
+		0 // Abbreviation offset is 0 for some reason, maybe because relocation?
 	};
-	infoBytes.AddBytes(\cuh, 12);
+	s_debug_info.AddBytes(\cuh, 12);
+	s_relocation_offsets[s_relocation_offset_count] = 8;
+	s_relocation_offset_count += 1;
 
-	ui64 abbrevIndex = 1;
+	s_debug_abbrev.AddULEB128(s_debug_index);
+	s_debug_info.AddULEB128(s_debug_index);
+	s_debug_index += 1;
+	s_debug_abbrev.AddULEB128(0x11);
+	s_debug_abbrev.AddByte(1); // Yes children
 
-	abbrevBytes.AddULEB128(abbrevIndex);
-	infoBytes.AddULEB128(abbrevIndex);
-	abbrevBytes.AddULEB128(0x11);
-	abbrevBytes.AddByte(0); // No children for now
+	s_debug_abbrev.AddULEB128(0x11); // DW_AT_low_pc
+	s_debug_abbrev.AddULEB128(0x01); // DW_FORM_addr
+	s_debug_info.AddUI64(0); // It's gonna be relocated anyways (text section)
 
-	
-	abbrevBytes.AddULEB128(0x11); // DW_AT_low_pc
-	abbrevBytes.AddULEB128(0x01); // DW_FORM_addr
-	infoBytes.AddUI64(0); // It's gonna be relocated anyways (text section)
+	s_debug_abbrev.AddULEB128(0x12); // DW_AT_hi_pc
+	s_debug_abbrev.AddULEB128(0x07); // DW_FORM_data8
+	//ui8 added = s_debug_info.AddSLEB128(s_executable_code_size);
+	//s_debug_info.AddSame(0, 8 - added);
+	s_debug_info.AddUI64(s_executable_code_size);
 
-	abbrevBytes.AddULEB128(0x12); // DW_AT_hi_pc
-	abbrevBytes.AddULEB128(0x07); // DW_FORM_data8
-	ui8 added = infoBytes.AddSLEB128(s_executable_code_size);
-	infoBytes.AddSame(0, 8 - added);
+	s_debug_abbrev.AddULEB128(0x13); // DW_AT_language
+	s_debug_abbrev.AddULEB128(0x06); // DW_FORM_data4
+	//added = s_debug_info.AddULEB128(0x8000); // DW_LANG_lo_user (custom language)
+	//s_debug_info.AddSame(0, 4 - added);
+	s_debug_info.AddUI32(0x8000);
 
-	abbrevBytes.AddULEB128(0x13); // DW_AT_language
-	abbrevBytes.AddULEB128(0x06); // DW_FORM_data4
-	added = infoBytes.AddULEB128(0x8000); // DW_LANG_lo_user (custom language)
-	infoBytes.AddSame(0, 4 - added);
-
-	abbrevBytes.AddULEB128(0x03); // DW_AT_name
-	abbrevBytes.AddULEB128(0x08); // DW_FORM_string
+	s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+	s_debug_abbrev.AddULEB128(0x08); // DW_FORM_string
 	ui64 fileNameLength = GetLengthOfCstring(fileName);
-	infoBytes.AddBytes(fileName, fileNameLength + 1);
+	s_debug_info.AddBytes(fileName, fileNameLength + 1);
 
-	abbrevBytes.AddULEB128(0x25); // DW_AT_producer
-	abbrevBytes.AddULEB128(0x08); // string
-	infoBytes.AddBytes("Forest 0.0.1", 12);
-	infoBytes.AddByte(0); // Null terminated
+	s_debug_abbrev.AddULEB128(0x25); // DW_AT_producer
+	s_debug_abbrev.AddULEB128(0x08); // string
+	s_debug_info.AddBytes("Forest 0.0.1", 12);
+	s_debug_info.AddByte(0); // Null terminated
 
-	abbrevBytes.AddULEB128(0x1b); // DW_AT_comp_dir
-	abbrevBytes.AddULEB128(0x08); // string
-	infoBytes.AddBytes(\s_dir_path, lastSlash + 1);
+	s_debug_abbrev.AddULEB128(0x1b); // DW_AT_comp_dir
+	s_debug_abbrev.AddULEB128(0x08); // string
+	s_debug_info.AddBytes(\s_dir_path, lastSlash + 1);
 
+	s_debug_abbrev.AddULEB128(0x10); // DW_AT_stmt_list
+	s_debug_abbrev.AddULEB128(0x17); // DW_FORM_sec_offset
+	s_relocation_offsets[s_relocation_offset_count] = s_debug_info.GetCount();
+	s_relocation_offset_count += 1;
+	s_debug_info.AddUI32(0); // It's gonna be relocated anyways (line nr section)
 
-	abbrevBytes.AddULEB128(0x10); // DW_AT_stmt_list
-	abbrevBytes.AddULEB128(0x17); // DW_FORM_sec_offset
-	infoBytes.AddUI32(0); // It's gonna be relocated anyways (line nr section)
+	s_debug_abbrev.AddByte(0); // End entry
+	s_debug_abbrev.AddByte(0); // End entry
+}
 
-	abbrevBytes.AddByte(0); // End entry
-	abbrevBytes.AddByte(0);
-	abbrevBytes.AddByte(0);
-	ui32 endInfoState = infoBytes.GetCount();
-	infoBytes.AddByte(0);
-	infoBytes.AddByte(0);
-	infoBytes.AddByte(0);
-	infoBytes.AddByte(0);
+void DebugAddString(ref<ui8> str, ui64 strLen) {
+	s_debug_abbrev.AddULEB128(0x08); // string
+	s_debug_info.AddBytes(str, strLen + 1);
+}
 
-	s_debug_info_size = infoBytes.GetCount();
+ui8 DebugGetEncoding(ui8 typeType) {
+	if (typeType >= _cPARSER_TYPETYPE_UI8) & (typeType <= _cPARSER_TYPETYPE_UI64) {
+		return 0x07; // DW_ATE_unsigned
+	} else if (typeType >= _cPARSER_TYPETYPE_I8) & (typeType <= _cPARSER_TYPETYPE_I64) {
+		return 0x05; // DW_ATE_signed
+	} else if (typeType >= _cPARSER_TYPETYPE_F8) & (typeType <= _cPARSER_TYPETYPE_F64) {
+		return 0x04; // DW_ATE_float
+	} else if typeType == _cPARSER_TYPETYPE_BOOL {
+		return 0x02; // DW_ATE_boolean
+	} else if typeType == _cPARSER_TYPETYPE_CHAR {
+		return 0x08; // DW_ATE_unsigned_char
+	}
+	return 0;
+}
+
+void DebugAddEncoding(ui8 encoding) {
+	s_debug_abbrev.AddULEB128(0x3e); // DW_AT_encoding
+	s_debug_abbrev.AddULEB128(0x0b); // DW_FORM_data1
+	s_debug_info.AddByte(encoding);
+}
+
+void DebugAddTypes(ref<TypeArr> typeArr) {
+	ui64 typeCount = typeArr.GetCount();
+	loop i, 1..typeCount {
+		ref<Type> typePtr = typeArr.At(i);
+		Type type = @typePtr;
+		if i >= _cPARSER_TYPETYPE_REF {
+			break;
+		}
+
+		s_debug_abbrev.AddULEB128(s_debug_index);
+		s_debug_info.AddULEB128(s_debug_index);
+		s_debug_index += 1;
+
+		s_debug_abbrev.AddULEB128(0x24); // DW_BASE_TYPE
+		s_debug_abbrev.AddByte(0); // No children
+		s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+		ref<ui8> typeName = GetNameFromTypeIndex(i);
+		ui64 len = GetLengthOfCstring(typeName);
+		DebugAddString(typeName, len);
+		ui8 encoding = DebugGetEncoding(type.typeType);
+		DebugAddEncoding(encoding);
+		s_debug_abbrev.AddULEB128(0x0b); // DW_AT_byte_size
+		s_debug_abbrev.AddULEB128(0x0b); // DW_FORM_data1
+		s_debug_info.AddByte(type.byteSize);
+		
+		s_debug_abbrev.AddByte(0); // Ending every type with a null entry is required apparently
+		s_debug_abbrev.AddByte(0);
+	}
+	// TODO: All types with child types cannot be gotten yet because I forgot to add them in parsing
+}
+
+void AddDebugInfo(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref<ByteArr> bytes) {
+	//stdout.writeln(fd);
+	ui32 endInfoState = s_debug_info.GetCount();
+
+	s_debug_info_size = s_debug_info.GetCount();
 	ui32 toUpdateLength = endInfoState - 4;
-	infoBytes.UpdateBytes(\toUpdateLength, 0, 4);
-	bytes.AddBytes(infoBytes.bytes, s_debug_info_size);
+	s_debug_info.UpdateBytes(\toUpdateLength, 0, 4);
+
+	ref<ui8> startBytes = s_debug_info.At(0);
+	bytes.AddBytes(startBytes, s_debug_info_size);
 	ui64 byteCount = bytes.GetCount();
+	
 	ui8 padding = (8 - (byteCount % 8)) % 8;
 	s_offset_debug_abbrev = byteCount + padding;
 	bytes.AddSame(0, padding);
 
-	s_debug_abbrev_size = abbrevBytes.GetCount();
-	bytes.AddBytes(abbrevBytes.bytes, s_debug_abbrev_size);
+	s_debug_abbrev_size = s_debug_abbrev.GetCount();
+	startBytes = s_debug_abbrev.At(0);
+	bytes.AddBytes(startBytes, s_debug_abbrev_size);
 	byteCount = bytes.GetCount();
 	padding = (8 - (byteCount % 8)) % 8;
 	s_offset_debug_line = byteCount + padding;
 	bytes.AddSame(0, padding);
 
 	// Add debug line info
+	ui64 lineLengthState = bytes.GetCount();
 	bytes.AddUI32(0x48); // Length
 	bytes.AddUI16(5); // Version
 	bytes.AddByte(8); // Address Size
@@ -3899,30 +4107,60 @@ void AddDebugInfo(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr
 	bytes.AddByte(1); // Minimum instruction length
 	bytes.AddByte(1); // Maximum operations per instruction
 	bytes.AddByte(1); // Default is statement
-	bytes.AddByte(0xFB); // Line base is -5 for some reason
-	bytes.AddByte(0x0e); // Line range is 14?
+	bytes.AddByte(0x0); // Line base is 0 for some reason
+	bytes.AddByte(0xa); // Line range is 10
 	bytes.AddByte(0x0d); // Opcode base (just a default value for DWARF-3 and higher)
-	bytes.AddByte(0); // Standard opcode lengths, 0 is no opcodes I guess? I don't fucking know
+	bytes.AddByte(0); // Standard opcode lengths. I still don't know what the fuck this is but the following 12 values are required (stolen from a gcc compiled object file
+	bytes.AddByte(1);
+	bytes.AddByte(1);
+	bytes.AddByte(1);
+	bytes.AddByte(1);
+	bytes.AddByte(0);
+	bytes.AddByte(0);
+	bytes.AddByte(0);
+	bytes.AddByte(1);
+	bytes.AddByte(0);
+	bytes.AddByte(0);
+	bytes.AddByte(1);
+	
 	bytes.AddByte(1); // Directory entry format count
 	bytes.AddULEB128(1); // DW_LNCT_PATH (part of directory_entry_format)
 	bytes.AddULEB128(8); // DW_FORM_STRING (part of directory_entry_format)
 	bytes.AddULEB128(1); // Directories count
-	bytes.AddBytes(\s_dir_path, lastSlash + 1); // Directory 
+	bytes.AddBytes(\s_dir_path, s_dir_path_length + 1); // Directory 
 	bytes.AddByte(1); // File name entry count
 	bytes.AddULEB128(1); // DW_LNCT_PATH (part of file_name_entry_format)
 	bytes.AddULEB128(8); // DW_FORM_STRING (part of file_name_entry_format)
 	bytes.AddULEB128(1); // File name count
-	bytes.AddBytes(fileName, fileNameLength + 1); // File name
+	ui64 fileNameLength = GetLengthOfCstring(\s_file_name);
+	bytes.AddBytes(\s_file_name, fileNameLength + 1); // File name
 
 	byteCount = bytes.GetCount();
 	s_debug_line_size = byteCount - s_offset_debug_line;
 	ui32 actualHeaderLength = byteCount - (headerState + 4);
+	ui32 actualLineNumberLength = byteCount - (lineLengthState + 4);
 	bytes.UpdateBytes(\actualHeaderLength, headerState, 4);
+	bytes.UpdateBytes(\actualLineNumberLength, lineLengthState, 4);
 }
 
 void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeArr, ref<InstrArr> instrArr, i32 fd, ref<ui8> fileName) {
 	ByteArr bytes = {0, 0, 0};
 	bytes.New(1024);
+
+	ByteArr abbrevBytes = {0, 0, 0};
+	abbrevBytes.New(1024);
+
+	ByteArr infoBytes = {0, 0, 0};
+	infoBytes.New(1024);
+
+	s_debug_info = \infoBytes;
+	s_debug_abbrev = \abbrevBytes;
+
+	DebugAddHeader(fd, fileName);
+	DebugAddTypes(typeArr);
+
+	ByteArr lineInfoBytes = {0, 0, 0};
+	lineInfoBytes.New(1024);
 
 	Elf64Header header = {
 		0x7F, 'E', 'L', 'F',
@@ -3979,6 +4217,22 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 	ui8 lastInstructionType = 0;
 	ui64 instructionCounter = 0;
 	ui64 lastJumpState = 0;
+
+	ui64 dbgLastOpcodeByte = 0;
+	ui64 dbgLastLine = 1;
+	ui64 line = 1;
+
+	lineInfoBytes.AddByte(0); // Specify Extended opcode
+	lineInfoBytes.AddULEB128(9); // size 9
+	lineInfoBytes.AddByte(0x2); // DW_LNE_set_address
+	ui64 lineRelaState = lineInfoBytes.GetCount();
+	lineInfoBytes.AddUI64(0);
+	lineInfoBytes.AddByte(0x4); // DW_LNS_set_file
+	lineInfoBytes.AddByte(0);
+	
+	lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_PC - 100);
+	lineInfoBytes.AddULEB128(46);
+	dbgLastOpcodeByte = 46;
 	loop i, 0..instrCount {
 		ref<Instr> instrPtr = instrArr.At(i);
 		Instr instruction = @instrPtr;
@@ -3991,6 +4245,7 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 			s_token_index_array[s_token_index_array_count] = funcNode.tokenIndex;
 			s_func_byte_offsets[s_token_index_array_count] = byteOffset;
 			s_token_index_array_count += 1;
+
 
 			ref<Token> funcToken = tArr.At(funcNode.tokenIndex);
 			Token t = @funcToken;
@@ -4339,6 +4594,49 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 			regsInUse[0] = true;
 			regsInUse[2] = true;
 			regsInUse[3] = false;
+		} else if (instruction.type) >= 100 {
+			// Debugging instructions
+			// if !debug { skip; }
+			ui8 debugByte = (instruction.type) - 100;
+			//if (debugByte == 0) | (debugByte == 13) {
+				ui64 newOpByte = (bytes.GetCount() - byteCount);
+				ui64 opDiff = newOpByte - dbgLastOpcodeByte;
+				ui64 lineDiff = line - dbgLastLine;
+				dbgLastLine = line;
+				dbgLastOpcodeByte = newOpByte;
+				/*if (opDiff == 0) & (lineDiff == 0) {
+					skip;
+				}*/
+				ui16 specialOpcode = GetLineNumberOpcode(lineDiff, opDiff);
+				stdout.write("Increasing line number by: ");
+				stdout.write(lineDiff);
+				stdout.write(" and ops by: ");
+			stdout.write(opDiff);
+			stdout.write(" Opcode: ");
+			stdout.writeln(specialOpcode);
+			if opDiff > 23 {
+				lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_PC - 100);
+				lineInfoBytes.AddULEB128(opDiff);
+				skip;
+			}
+			if lineDiff > 10 {
+				lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE - 100);
+				lineInfoBytes.AddSLEB128(lineDiff);
+				skip;
+			}
+				if specialOpcode > 255 {
+					stdout.write("[Compiler#CompileToELF64]: Error: Debug Line Info opcode > 255. Is ");
+					stdout.writeln(specialOpcode);
+					SYS_EXIT(1);
+				}
+			if (opDiff <= 23) & (lineDiff <= 10) {
+				lineInfoBytes.AddByte(specialOpcode);
+			}
+			/*} else*/ if (debugByte == 3) {
+				line += (instruction.value);
+			} else {
+				lineInfoBytes.AddByte(debugByte);
+			}
 		} else {
 			stdout.write("[Compiler#CompileToELF64]: Error: Unexpected instruction ");
 			ui64 instructionType = instruction.type;
@@ -4356,6 +4654,10 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		}
 	}
 
+	lineInfoBytes.AddByte(0);
+	lineInfoBytes.AddULEB128(1);
+	lineInfoBytes.AddByte(1); // DW_LNE_end_sequence
+
 	loop i, 0..s_jump_count {
 		ui64 byteToUpdate = s_undefined_jumps[i] + 1;
 		ui64 labelValue = s_jump_labels[i];
@@ -4372,7 +4674,7 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 
 	bytes.AddSame(0, padding);
 
-	ui8[71] sectionHeaderStrings = {
+	ui8[105] sectionHeaderStrings = {
 		0,
 		'.', 't', 'e', 'x', 't', 0,
 		'.', 's', 't', 'r', 't', 'a', 'b', 0,
@@ -4380,11 +4682,13 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		'.', 's', 'h', 's', 't', 'r', 't', 'a', 'b', 0,
 		'.', 'd', 'e', 'b', 'u', 'g', '_', 'i', 'n', 'f', 'o', 0,
 		'.', 'd', 'e', 'b', 'u', 'g', '_', 'a', 'b', 'b', 'r', 'e', 'v', 0,
-		'.', 'd', 'e', 'b', 'u', 'g', '_', 'l', 'i', 'n', 'e', 0
+		'.', 'd', 'e', 'b', 'u', 'g', '_', 'l', 'i', 'n', 'e', 0,
+		'.', 'r', 'e', 'l', 'a', '.', 'd', 'e', 'b', 'u', 'g', '_', 'i', 'n', 'f', 'o', 0,
+		'.', 'r', 'e', 'l', 'a', '.', 'd', 'e', 'b', 'u', 'g', '_', 'l', 'i', 'n', 'e', 0,
 	};
-	bytes.AddBytes(\sectionHeaderStrings, 71);
+	bytes.AddBytes(\sectionHeaderStrings, 105);
 	byteCount = bytes.GetCount();
-	ui64 sectionHeaderStringSize = 71;
+	ui64 sectionHeaderStringSize = 105;
 	padding = (16 - (byteCount % 16)) % 16;
 	ui64 offsetToStringTable = byteCount + padding;
 
@@ -4438,24 +4742,37 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 
 	// Required empty first entry
 	AddSymbolTableEntry(\bytes, 0, 0, 0, 0, 0);
+	ui8 symbolCount = 1;
 	
 	// Program file
 	AddSymbolTableEntry(\bytes, s_string_table_offsets[0], GetSymbolInfo(_cSTB_LOCAL, _cSTT_FILE), _cSHN_ABS, 0, 0);
+	ui8 symbolProgramFile = symbolCount;
+	symbolCount += 1;
 	
 	// .text section
 	AddSymbolTableEntry(\bytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), 1, 0, 0);
+	ui8 symbolText = symbolCount;
+	symbolCount += 1;
 
 	// .debug_info
 	AddSymbolTableEntry(\bytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), 5, 0, 0);
+	ui8 symbolDebugInfo = symbolCount;
+	symbolCount += 1;
 
 	// .debug_abbrev
 	AddSymbolTableEntry(\bytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), 6, 0, 0);
+	ui8 symbolDebugAbbrev = symbolCount;
+	symbolCount += 1;
 
 	// .debug_line
 	AddSymbolTableEntry(\bytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), 7, 0, 0);
+	ui8 symbolDebugLine = symbolCount;
+	symbolCount += 1;
 	
 	// _start
 	AddSymbolTableEntry(\bytes, s_string_table_offsets[1], GetSymbolInfo(_cSTB_GLOBAL, _cSTT_NOTYPE), 1, 0, 0);
+	ui8 symbolStart = symbolCount;
+	symbolCount += 1;
 
 	// Loop over functions and add them to the symbol table
 	loop i, 0..s_token_index_array_count {
@@ -4470,13 +4787,47 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 
 	bytes.AddSame(0, padding);
 
-	AddDebugInfo(tArr, nodeArr, typeArr, fd, fileName, \bytes);	
+	AddDebugInfo(tArr, nodeArr, typeArr, \bytes);
+
+	ui64 lineInfoCount = lineInfoBytes.GetCount();
+	bytes.AddBytes(lineInfoBytes.bytes, lineInfoCount);
+	ui32 lineLength = (s_debug_line_size + lineInfoCount) - 4;
+	bytes.UpdateBytes(\lineLength, s_offset_debug_line, 4);
+	s_debug_line_size += lineInfoCount;
 
 	byteCount = bytes.GetCount();
+	padding = (8 - (byteCount % 8)) % 8;
+	ui64 startOfRelaDebugInfo = byteCount + padding;
+	
+	bytes.AddSame(0, padding);
+
+	Elf64RelocationAddendEntry relaEntry = {
+		8, // offset to Abbreviation table in CU header
+		GetRelocationInfo(symbolDebugAbbrev, 0xa),
+		0 // addend 0
+	};
+	bytes.AddBytes(\relaEntry, 0x18);
+
+	relaEntry.offset = s_relocation_offsets[1];
+	relaEntry.info = GetRelocationInfo(symbolDebugLine, 0xa);
+	bytes.AddBytes(\relaEntry, 0x18);
+
+	byteCount = bytes.GetCount();
+	ui64 relaDebugInfoSize = byteCount - startOfRelaDebugInfo;
+	padding = (8 - (byteCount % 8)) % 8;
+	ui64 startOfRelaDebugLine = byteCount + padding;
+	
+	bytes.AddSame(0, padding);
+
+	relaEntry.offset = (lineRelaState + s_debug_line_size) - lineInfoCount;
+	relaEntry.info = GetRelocationInfo(symbolText, 0x1);
+	bytes.AddBytes(\relaEntry, 0x18);
+
+	byteCount = bytes.GetCount();
+	ui64 relaDebugLineSize = byteCount - startOfRelaDebugLine;
 	padding = (16 - (byteCount % 16)) % 16;
 	ui64 startOfSectionHeaders = byteCount + padding;
 	header.sectionHeaderOffset = startOfSectionHeaders;
-	bytes.UpdateBytes(\header, 0, 64);
 
 	bytes.AddSame(0, padding);
 
@@ -4493,6 +4844,7 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		0 // No entrySize
 	};
 	bytes.AddBytes(\section0, 64);
+	ui8 sectionNull = 0;
 
 	Elf64SectionHeader textSection = {
 		1, // Name '.text'
@@ -4507,6 +4859,7 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		0
 	};
 	bytes.AddBytes(\textSection, 64);
+	ui8 sectionText = 1;
 
 	Elf64SectionHeader sectionHeaderStringSection = {
 		23,
@@ -4521,6 +4874,7 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		0
 	};
 	bytes.AddBytes(\sectionHeaderStringSection, 64);
+	ui8 sectionSHStrings = 2;
 
 	Elf64SectionHeader stringTableSection = {
 		7,
@@ -4535,6 +4889,7 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		0
 	};
 	bytes.AddBytes(\stringTableSection, 64);
+	ui8 sectionStrings = 3;
 
 	Elf64SectionHeader symbolTableSection = {
 		15,
@@ -4549,6 +4904,7 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		0x18
 	};
 	bytes.AddBytes(\symbolTableSection, 64);
+	ui8 sectionSymbols = 4;
 
 	Elf64SectionHeader debugInfoSection = {
 		33, // .debug_info
@@ -4563,6 +4919,7 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		0 // no entry size
 	};
 	bytes.AddBytes(\debugInfoSection, 64);
+	ui8 sectionDebugInfo = 5;
 	
 	Elf64SectionHeader debugAbbrevSection = {
 		45, // .debug_abbrev
@@ -4577,6 +4934,7 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		0 // no entry size
 	};
 	bytes.AddBytes(\debugAbbrevSection, 64);
+	ui8 sectionDebugAbbrev = 6;
 
 	Elf64SectionHeader debugLineSection = {
 		59, // .debug_line
@@ -4591,9 +4949,44 @@ void CompileToELF64(ref<TokenArr> tArr, ref<NodeArr> nodeArr, ref<TypeArr> typeA
 		0 // no entry size
 	};
 	bytes.AddBytes(\debugLineSection, 64);
+	ui8 sectionDebugLine = 7;
+
+	Elf64SectionHeader relaDebugInfoSection = {
+		71, // .rela.debug_info
+		_cSHT_RELA,
+		0, // no flags
+		0, // no address
+		startOfRelaDebugInfo,
+		relaDebugInfoSize,
+		sectionSymbols, // always link with symbol table
+		sectionDebugInfo, // Related to the debug info section
+		8, // alignment
+		0x18 // 24 bytes entries
+	};
+	bytes.AddBytes(\relaDebugInfoSection, 64);
+
+	Elf64SectionHeader relaDebugLineSection = {
+		88, // .rela.debug_line
+		_cSHT_RELA,
+		0, // no flags
+		0, // no address
+		startOfRelaDebugLine,
+		relaDebugLineSize,
+		sectionSymbols, // always link with symbol table
+		sectionDebugLine, // Related to the debug info section
+		8, // alignment
+		0x18 // 24 bytes entries
+	};
+	bytes.AddBytes(\relaDebugLineSection, 64);
+
+	byteCount = bytes.GetCount();
+	ui64 amountOfSectionHeaders = (byteCount - startOfSectionHeaders) / 64;
+	header.sectionHeaderEntryCount = amountOfSectionHeaders;
+	bytes.UpdateBytes(\header, 0, 64);
 	
 	SYS_WRITE(fd, bytes.bytes, bytes.count);
 }
+
 
 ui8 main(cstring[] argv) {
 	TokenArr tokens = {0, 0, 0};
@@ -4613,8 +5006,13 @@ ui8 main(cstring[] argv) {
 		stdout.writeln("Could not read from file");
 		return -1;
 	}
+	// HACK: The file descriptor SHOULDNT be above 9, so we can just convert it to an ascii char
+	ui8[16] procPath = { '/', 'p', 'r', 'o', 'c', '/', 's', 'e', 'l', 'f', '/', 'f', 'd', '/', fd + '0', 0 };
+
+	ui64 length = SYS_READLINK(\procPath, \s_file_name, 256);
+	s_file_name[length] = 0;
 	SYS_CLOSE(fd);
-	Tokenise(\tokens, source, sizeRead, argv[1]);
+	Tokenise(\tokens, source, sizeRead, \s_file_name);
 	ui64 tokenCount = tokens.count;
 
 	NodeArr nodes = {0, 0, 0};
@@ -4640,8 +5038,45 @@ ui8 main(cstring[] argv) {
 		stdout.writeln("Could not open output file");
 		return -1;
 	}
-	CompileToELF64(\tokens, \nodes, \types, \instructions, outputFd, argv[1]);
+	CompileToELF64(\tokens, \nodes, \types, \instructions, outputFd, \s_file_name);
 	SYS_CLOSE(outputFd);
 
+	return 0;
+}
+
+
+// Structure idea here
+
+struct Section {
+	ref<ui8> name;
+	ui64 nameLength;
+	ref<ByteArr> bytes;
+	ui32 type;
+	// same as ElfSectionHeader
+}
+
+struct Function {
+	ref<ui8> name;
+	ui64 nameLength;
+	ui64 low_pc;
+	ui64 high_pc;
+	ui64 definingNodeIndex;
+	// rest same as SymbolEntry
+}
+
+ui8 Compile2() {
+	// in compilation step
+	// after every END_FUNC, add a Function struct to the DynArray
+	// For every section I want to add, I can add it wherever I want.
+	// String Table iterates over the Section DynArray for all the names
+	// Symbol table iterates over the Function DynArray, and the Section DynArray
+	// Section Headers iterates over the Section DynArray, and does the padding and offset in the loop
+	
+	// Debugging information gets generated before the section headers, but after the rest
+	// * Making use of the Function DynArray, NodeArray, TypeArray, and TokenArray
+	// * Line number information before every statement.
+	// * * Investigate the compiled test.c example for what it is doing
+	// * * And incrementally add to that example file to understand how it's generating the information
+	
 	return 0;
 }
