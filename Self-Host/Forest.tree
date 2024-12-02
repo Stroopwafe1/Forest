@@ -3981,8 +3981,7 @@ void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 	s_relocation_offset_count += 1;
 	s_debug_info.AddUI32(0); // It's gonna be relocated anyways (line nr section)
 
-	s_debug_abbrev.AddByte(0); // End entry
-	s_debug_abbrev.AddByte(0); // End entry
+	DebugEndChain();
 }
 
 void DebugAddString(ref<ui8> str, ui64 strLen) {
@@ -4011,6 +4010,8 @@ void DebugAddEncoding(ui8 encoding) {
 	s_debug_info.AddByte(encoding);
 }
 
+ui64[128] s_debug_types_offsets;
+
 void DebugAddTypes(ref<DynArray> typeArr) {
 	ui64 typeCount = typeArr.GetCount();
 	loop i, 1..typeCount {
@@ -4019,6 +4020,8 @@ void DebugAddTypes(ref<DynArray> typeArr) {
 		if i >= _cPARSER_TYPETYPE_REF {
 			break;
 		}
+		ui64 currCount = s_debug_info.GetCount();
+		s_debug_types_offsets[i] = currCount;
 
 		s_debug_abbrev.AddULEB128(s_debug_index);
 		s_debug_info.AddULEB128(s_debug_index);
@@ -4036,14 +4039,14 @@ void DebugAddTypes(ref<DynArray> typeArr) {
 		s_debug_abbrev.AddULEB128(0x0b); // DW_FORM_data1
 		s_debug_info.AddByte(type.byteSize);
 		
-		s_debug_abbrev.AddByte(0); // Ending every type with a null entry is required apparently
-		s_debug_abbrev.AddByte(0);
+		DebugEndChain();
 	}
-	s_debug_abbrev.AddByte(0);
 	// TODO: All types with child types cannot be gotten yet because I forgot to add them in parsing
 }
 
-void DebugAddFunction(ref<ui8> name, ui64 byteOffset) {
+ui64 s_debug_function_state = 0;
+
+void DebugAddFunction(ref<ui8> name, ui64 nameLength, ui64 byteOffset) {
 	s_debug_abbrev.AddULEB128(s_debug_index);
 	s_debug_info.AddULEB128(s_debug_index);
 	s_debug_index += 1;
@@ -4052,15 +4055,50 @@ void DebugAddFunction(ref<ui8> name, ui64 byteOffset) {
 	s_debug_abbrev.AddByte(1); // Children
 	s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
 	s_debug_abbrev.AddULEB128(0x08); // string
-	ui64 len = GetLengthOfCstring(name);
-	s_debug_info.AddBytes(name, len);
+	s_debug_info.AddBytes(name, nameLength);
 	s_debug_info.AddByte(0); // Null-terminated
 
 	s_debug_abbrev.AddULEB128(0x11); // DW_AT_low_pc
-	s_debug_abbrev.AddULEB128();
+	s_debug_abbrev.AddULEB128(0x01); // DW_FORM_addr
+	s_debug_info.AddUI64(0); // It's gonna be relocated anyways
+	
+	s_debug_abbrev.AddULEB128(0x12); // DW_AT_hi_pc
+	s_debug_abbrev.AddULEB128(0x07); // DW_FORM_data8
+	s_debug_function_state = s_debug_info.GetCount();
+	s_debug_info.AddUI64(0);
+}
+
+void DebugEndFunction(ui64 functionSize) {
+	s_debug_info.UpdateBytes(\functionSize, s_debug_function_state, 8);
+}
+
+void DebugAddWithType(ui64 typeIndex) {
+	s_debug_abbrev.AddULEB128(0x49); // DW_AT_type
+	s_debug_abbrev.AddULEB128(0x14); // DW_FORM_ref8
+	ui64 offset = s_debug_types_offsets[typeIndex];
+	s_debug_info.AddUI64(offset);
+}
+
+void DebugAddParameter(ref<ui8> name, ui64 nameLength) {
+	s_debug_abbrev.AddULEB128(s_debug_index);
+	s_debug_info.AddULEB128(s_debug_index);
+	s_debug_index += 1;
+
+	s_debug_abbrev.AddULEB128(0x05); // DW_TAG_formal_parameter
+	s_debug_abbrev.AddByte(0); // Children
+	s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+	s_debug_abbrev.AddULEB128(0x08); // string
+	s_debug_info.AddBytes(name, nameLength);
+	s_debug_info.AddByte(0); // Null-terminated
+}
+
+void DebugEndChain() {
+	s_debug_abbrev.AddByte(0);
+	s_debug_abbrev.AddByte(0);
 }
 
 void FinishDebugInfo() {
+	s_debug_abbrev.AddSame(0, 8);
 	ui32 endInfoState = s_debug_info.GetCount();
 	ui32 toUpdateLength = endInfoState - 4;
 	s_debug_info.UpdateBytes(\toUpdateLength, 0, 4);	
@@ -4149,7 +4187,10 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 	ByteArr relaDebugLineBytes = {0, 0, 0};
 	relaDebugLineBytes.New(1024);
 
+	DebugAddHeader(fd, fileName);
+	DebugAddTypes(typeArr);
 	AddDebugInfo(tArr, nodeArr, typeArr, \lineInfoBytes);
+	
 
 	Elf64Header header = {
 		0x7F, 'E', 'L', 'F',
@@ -4222,11 +4263,13 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 	lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_PC - 100);
 	lineInfoBytes.AddULEB128(46);
 	dbgLastOpcodeByte = 46;
+	ui64 lastFunctionOffset = 0;
 	loop i, 0..instrCount {
 		ref<Instr> instrPtr = instrArr.At(i);
 		Instr instruction = @instrPtr;
 		if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_FUNC {
 			ui64 byteOffset = textBytes.GetCount();
+			lastFunctionOffset = byteOffset;
 
 			ref<Node> funcNodePtr = nodeArr.At(instruction.value);
 			Node funcNode = @funcNodePtr;
@@ -4237,6 +4280,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 
 			ref<Token> funcToken = tArr.At(funcNode.tokenIndex);
 			Token t = @funcToken;
+
+			DebugAddFunction(t.text, t.textLength, byteOffset);
 
 			if StrEquals((t.text), "main", 4) {
 				ui32 callAddress = byteOffset - 34;
@@ -4249,7 +4294,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 				0x48, 0x89, 0xE5 // mov rbp, rsp
 			};
 			textBytes.AddBytes(\prologue, 4);
-
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_FUNC {
 			// Add epilogue
 			// add stack to rsp (REX.W + 83 /0 ib)
@@ -4268,6 +4312,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 				0xC3, // ret
 			};
 			textBytes.AddBytes(\epilogue, 2);
+			ui64 byteOffset = textBytes.GetCount();
+			DebugEndFunction(byteOffset - lastFunctionOffset);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_STACK {
 			if (instruction.value) != 0 {
 				if (instruction.value) < 255 {
@@ -4337,6 +4383,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			currentVar.nodeIndex = instruction.value;
 			ref<Node> node = nodeArr.At(instruction.value);
 			currentVar.tokenIndex = node.GetTokenIndex();
+			ref<Token> tPtr = tArr.At(currentVar.tokenIndex);
+			Token t = @tPtr;
+			DebugAddParameter(t.text, t.textLength);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_VAR {
 			currentVar.nodeIndex = instruction.value;
 			ref<Node> node = nodeArr.At(instruction.value);
@@ -4506,6 +4555,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			ref<Type> typePtr = typeArr.At(instruction.value);
 			Type type = @typePtr;
 			ui16 size = type.byteSize;
+			DebugAddWithType(instruction.value);
 
 			if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_PARAM {
 				offset += size;
@@ -4520,11 +4570,13 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 					SYS_EXIT(1);
 				}
 				paramCount += 1;
+				DebugEndChain();
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_VAR {
 				offset += size;
 				currentVar.offset = offset * -1;
 				variables.AddVar(\currentVar);
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_FUNC {
+				DebugEndChain();
 			} else {
 				stdout.write("[Compiler]: Error: Unknown WITH_TYPE ");
 				stdout.writeln(lastInstructionType);
@@ -4654,9 +4706,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 	}
 
 	s_executable_code_size = textBytes.GetCount();
-
-	DebugAddHeader(fd, fileName);
-	DebugAddTypes(typeArr);
 	
 	strBytes.AddByte(0);
 	ui64 stringTableOffset = 1;
