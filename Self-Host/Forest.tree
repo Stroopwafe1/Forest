@@ -323,6 +323,29 @@ class DynArray {
 	ui64 GetCount() {
 		return count;
 	}
+
+	void Update(ui64 startOffset, ref<ui8> src) {
+		memcopy2(data + startOffset, src, entrySize);
+	}
+
+	ui64 Find(ui64 fieldOffset, ref<ui8> needle, ui64 needleSize) {
+		ui64 foundIndex = -1;
+		loop i, 0..count {
+			ref<ui8> src = (data + (i * entrySize) + fieldOffset);
+			bool localFound = true;
+			loop j, 0..needleSize {
+				if src[j] != needle[j] {
+					localFound = false;
+					break;
+				}
+			}
+			if localFound {
+				foundIndex = i;
+				break;
+			}
+		}
+		return foundIndex;
+	}
 }
 
 void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8> file) {
@@ -782,12 +805,28 @@ void EndToken(ref<DynArray> tokens, ref<Token> token) {
 struct Type {
 	i32 firstChild;
 	i32 nextSibling;
-	//i32 extraIndex; // Extra index is to index into the structs/classes array, depending on the TypeType. Structs/Classes will have the name of the struct/class. Name is not necessary for the base types.
+	i32 extraIndex; // Extra index is to index into the structs/classes array, depending on the TypeType. Structs/Classes will have the name of the struct/class. Name is not necessary for the base types.
 	ui16 byteSize;
 	i16 align;
 	bool signed;
 	ui8 typeType; // VOID, UI8, UI16, UI32, UI64, I8, I16, I32, I64, F8, F16, F32, F64, BOOL, CHAR, REF, ARRAY, STRUCT, CLASS
-} // (size 14)
+} // (size 18)
+
+struct Struct { // Also valid for classes
+	ref<ui8> name;
+	ui64 nameLength;
+	ui64 firstFieldIndex; // Points to the first field in the dynamic array of fields. Every next field is + sizeof(Field)
+	ui64 fieldCount;
+}
+struct Field {
+	ui64 typeIndex;
+	ui64 startTokenIndex; // Points to the first name/alias of this field. We know every next alias is + 2 tokens
+	ui64 aliasCount;
+	ui64 offset;
+}
+
+ref<DynArray> s_struct_array = 0;
+ref<DynArray> s_field_array = 0;
 
 class Node {
 	i32 firstChild;
@@ -1004,8 +1043,11 @@ bool IsTokenSpecifiedType(ref<DynArray> tArr, ui64 offset, ui16 desiredType) {
 	return (token.type) == desiredType;
 }
 
+ui64[256] s_nested_types;
+ui64 s_nested_type_depth = 0;
+
+ui64 s_generic_brackets_length = 0;
 // Returns how much to increment i by
-// TODO: We do nothing with the child types if recursing from ref< or array<
 ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 	DynArray tokens = @tArr;
 	DynArray typesArr = @typeArr;
@@ -1023,17 +1065,43 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 	}
 	ui16 returnVal = 1;
 	ui64 childTypeIndex = GetTypeIndexFromName(typeArr, t);
-	// if childType == 15, it's not a primitive type
-	ref<Type> childTypePtr = typeArr.At(childTypeIndex);
-	Type childType = @childTypePtr;
-
 	t = tArr.At(offset + 1);
 	Token nextToken = @t;
 	ttype = nextToken.type;
+
+	// if childType == 15, it's not a primitive type
+	if childTypeIndex == 15 {
+		bool isRef = StrEquals(token.text, "ref", 3);
+		bool isArr = StrEquals(token.text, "array", 5);
+		if isRef | isArr {
+		} else {
+			ui64 structIndex = s_struct_array.Find(0, token.text, token.textLength);
+			if structIndex == -1 {
+				stdout.write("[Parser]: Could not find struct or class with the name ");
+				PrintToken(t);
+				SYS_EXIT(1);
+				return 0;
+			}
+
+			ui64 structAsTypeIndex = typeArr.Find(8, \structIndex, 4);
+			if structAsTypeIndex == -1 {
+				stdout.write("[Parser]: Could not find type information for struct or class with the name ");
+				PrintToken(t);
+				SYS_EXIT(1);
+				return 0;
+			}
+
+			childTypeIndex = structAsTypeIndex;
+		}
+	}
+
 	if ttype == _cTOKENTYPE_SQUARE_OPEN {
+		ref<Type> childTypePtr = typeArr.At(childTypeIndex);
+		Type childType = @childTypePtr;
 		bool isNextLiteral = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_INTEGER);
 		Type typ = {
 			childTypeIndex,
+			-1,
 			-1,
 			childType.byteSize,
 			childType.align,
@@ -1068,33 +1136,43 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 		typeArr.Add(\typ);
 	}
 	else if ttype == _cTOKENTYPE_LESS_THAN {
+		s_generic_brackets_length += 1;
 		bool isRef = StrEquals(token.text, "ref", 3);
 		bool isArr = StrEquals(token.text, "array", 5);
 		ui64 typeCount = typeArr.GetCount();
+		Type typ = {
+			typeCount + 1,
+			-1,
+			-1,
+			8,
+			8,
+			false,
+			_cPARSER_TYPETYPE_REF
+		};
 		if isRef {
-			Type typ = {
-				typeCount + 1,
-				-1,
-				8,
-				8,
-				false,
-				_cPARSER_TYPETYPE_REF
-			};
-			typeArr.Add(\typ);
+			typ.typeType = _cPARSER_TYPETYPE_REF;
 		} else if isArr {
-			Type typ = {
-				typeCount + 1,
-				-1,
-				8,
-				8,
-				false,
-				_cPARSER_TYPETYPE_ARRAY
-			};
-			typeArr.Add(\typ);
+			typ.typeType = _cPARSER_TYPETYPE_ARRAY;
 		}
+		typeArr.Add(\typ);
+		s_nested_type_depth += 1;
 		ui16 depth = ParseType(tArr, typeArr, offset + 2);
+		ui64 referencingIndex = s_nested_types[s_nested_type_depth];
+		s_nested_type_depth -= 1;
+		if referencingIndex < 15 {
+			typ.firstChild = referencingIndex;
+			typeArr.Update(typeCount, \typ);
+		}
 		bool hasClosing = IsTokenSpecifiedType(tArr, (offset + 2) + depth, _cTOKENTYPE_GREATER_THAN);
-		if !hasClosing {
+		if hasClosing {
+			s_generic_brackets_length -= 1;
+		} else {
+			hasClosing = IsTokenSpecifiedType(tArr, (offset + 2) + depth, _cTOKENTYPE_SHIFT_RIGHT);
+			if hasClosing {
+				s_generic_brackets_length -= 2;
+			}
+		}
+		if s_generic_brackets_length != 0 {
 			stdout.write("[Parser]: Unbalanced angle brackets, expected a '>' to close the ");
 			PrintToken(\token);
 			stdout.write(" but got ");
@@ -1104,7 +1182,13 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 		}
 		returnVal += (2 + depth);
 	} else {
+		if s_nested_type_depth > 0 {
+			s_nested_types[s_nested_type_depth] = childTypeIndex;
+		}
 		return returnVal;
+	}
+	if s_nested_type_depth > 0 {
+		s_nested_types[s_nested_type_depth] = childTypeIndex;
 	}
 
 	return returnVal;
@@ -2155,12 +2239,14 @@ ui64 ParseFunction(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeA
 	return returnVal;
 }
 
-ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ui64 offset) {
+ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ui64 offset, bool isAligned) {
 	ui64 tokenCount = tArr.GetCount();
 	ui64 returnVal = 0;
 	Node currentNode = {0, 0, 0, 0, 0};
 	ui64 lastPropertyState = 0;
 
+	ui64 byteSize = 0;
+	ui64 alignment = 0;
 	loop i, offset..tokenCount {
 		ref<Token> token = tArr.At(i);
 		bool isClosing = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_CURLY_CLOSE);
@@ -2186,6 +2272,14 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 		lastPropertyState = nodeCount;
 		nodeArr.AddNode(\currentNode);
 
+		Field f = {
+			typeIndex,
+			i + toSkip,
+			0,
+			byteSize
+		};
+
+		ui64 aliasCount = 1;
 		loop j, i + toSkip..tokenCount {
 			currentNode.firstChild = -1;
 			currentNode.nextSibling = 0;
@@ -2221,12 +2315,40 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			nodeArr.AddNode(\currentNode);
 			toSkip += 2;
 			j += 1;
+			aliasCount += 1;
 		}
+		f.aliasCount = aliasCount;
+		ref<Type> typePtr = typeArr.At(typeIndex);
+		Type type = @typePtr;
+		if isAligned {
+			if (type.align) > alignment {
+				alignment = type.align;
+			}
+			ui8 padding = ((type.align) - (byteSize % (type.align))) % (type.align);
+			byteSize += padding;
+		}
+		s_field_array.Add(\f);
 
 		if shouldExit {
 			nodeArr.DeleteLast();
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateNS(nodeCount - 1, -1);
+
+			if isAligned {
+				byteSize += (alignment - (byteSize % alignment)) % alignment;
+			}
+
+			Type structType = {
+				-1,
+				-1,
+				s_struct_array.GetCount(),
+				byteSize,
+				alignment,
+				false,
+				_cPARSER_TYPETYPE_STRUCT
+			};
+			typeArr.Add(\structType);
+
 			return returnVal;
 		}
 		i += toSkip;
@@ -2234,6 +2356,21 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 		nodeCount = nodeArr.GetCount();
 		nodeArr.UpdateNS(fieldNodeState, nodeCount);
 	}
+	if isAligned {
+		byteSize += (alignment - (byteSize % alignment)) % alignment;
+	}
+
+	Type structType = {
+		-1,
+		-1,
+		s_struct_array.GetCount(),
+		byteSize,
+		alignment,
+		false,
+		_cPARSER_TYPETYPE_STRUCT
+	};
+	typeArr.Add(\structType);
+
 	nodeArr.UpdateNS(lastPropertyState, -1);
 	return returnVal;
 }
@@ -2251,6 +2388,15 @@ ui64 ParseStruct(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 	ui64 structNodeState = nodeCount;
 	nodeArr.AddNode(\currentNode);
 
+	ref<Token> structTokenPtr = tArr.At(offset + 1);
+	Token structToken = @structTokenPtr;
+	Struct s = {
+		structToken.text,
+		structToken.textLength,
+		s_field_array.GetCount(),
+		0
+	};
+
 	ui64 returnVal = 2;
 
 	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_OPEN);
@@ -2262,7 +2408,11 @@ ui64 ParseStruct(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 	}
 	returnVal += 1;
 
-	returnVal += ParseFieldList(tArr, nodeArr, typeArr, offset + 3);
+	ui64 fieldCountCache = s_field_array.GetCount();
+	returnVal += ParseFieldList(tArr, nodeArr, typeArr, offset + 3, isAligned);
+	s.firstFieldIndex = fieldCountCache;
+	s.fieldCount = s_field_array.GetCount() - fieldCountCache;
+
 	isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_CLOSE);
 	if !isSyntaxCorrect {
 		stdout.write("[Parser]: Expected a '}' for the closing of struct but got ");
@@ -2273,6 +2423,8 @@ ui64 ParseStruct(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 
 	nodeCount = nodeArr.GetCount();
 	nodeArr.UpdateNS(structNodeState, nodeCount);
+	// Adding of the struct type is inside the field list function
+	s_struct_array.Add(\s);
 	return returnVal;
 }
 
@@ -2287,6 +2439,15 @@ void ParseClass(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr,
 	ui64 classNodeState = nodeCount;
 	nodeArr.AddNode(\currentNode);
 
+	ref<Token> classTokenPtr = tArr.At(offset + 1);
+	Token classToken = @classTokenPtr;
+	Struct c = {
+		classToken.text,
+		classToken.textLength,
+		s_field_array.GetCount(),
+		0
+	};
+
 	ui64 returnVal = 2;
 
 	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_OPEN);
@@ -2298,7 +2459,10 @@ void ParseClass(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr,
 	}
 	returnVal += 1;
 
-	returnVal += ParseFieldList(tArr, nodeArr, typeArr, offset + returnVal);
+	ui64 fieldCountCache = s_field_array.GetCount();
+	returnVal += ParseFieldList(tArr, nodeArr, typeArr, offset + returnVal, isAligned);
+	c.firstFieldIndex = fieldCountCache;
+	c.fieldCount = s_field_array.GetCount() - fieldCountCache;
 
 	bool isEnd = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_CLOSE);
 	if isEnd {
@@ -2323,6 +2487,7 @@ void ParseClass(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr,
 
 	nodeCount = nodeArr.GetCount();
 	nodeArr.UpdateNS(classNodeState, nodeCount);
+	s_struct_array.Add(\c);
 	return returnVal;
 }
 
@@ -2406,6 +2571,7 @@ void Parse(ref<DynArray> tArr, ref<NodeArr> nodes, ref<DynArray> typeArr) {
 
 void SetupTypeArray(ref<DynArray> typeArr) {
 	Type ttype = {
+		-1,
 		-1,
 		-1,
 		0,
@@ -3881,6 +4047,8 @@ ui64 s_debug_abbrev_size = 0;
 ui64 s_offset_debug_line = 0;
 ui64 s_debug_line_size = 0;
 
+ui64 s_debug_info_high_pc = 0;
+
 ui64[128] s_relocation_offsets;
 ui64 s_relocation_offset_count = 0;
 
@@ -3891,6 +4059,8 @@ ui64 s_dir_path_length = 0;
 ref<ByteArr> s_debug_info = 0;
 ref<ByteArr> s_debug_abbrev = 0;
 ui64 s_debug_index = 1;
+ref<ByteArr> s_rela_debug_info = 0;
+ui64 s_symbol_text = 0;
 
 void AddSymbolTableEntry(ref<ByteArr> bytes, ui32 name, ui8 info, ui16 sectionHeaderIndex, ui64 value, ui64 size) {
 	Elf64SymbolTableEntry entry = {
@@ -3947,12 +4117,21 @@ void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 
 	s_debug_abbrev.AddULEB128(0x11); // DW_AT_low_pc
 	s_debug_abbrev.AddULEB128(0x01); // DW_FORM_addr
+	
+	Elf64RelocationAddendEntry rela = {
+		s_debug_info.GetCount(),
+		GetRelocationInfo(s_symbol_text, 0xa),
+		0
+	};
+	s_rela_debug_info.AddBytes(\rela, 0x18);
+	
 	s_debug_info.AddUI64(0); // It's gonna be relocated anyways (text section)
 
 	s_debug_abbrev.AddULEB128(0x12); // DW_AT_hi_pc
 	s_debug_abbrev.AddULEB128(0x07); // DW_FORM_data8
 	//ui8 added = s_debug_info.AddSLEB128(s_executable_code_size);
 	//s_debug_info.AddSame(0, 8 - added);
+	s_debug_info_high_pc = s_debug_info.GetCount();
 	s_debug_info.AddUI64(s_executable_code_size);
 
 	s_debug_abbrev.AddULEB128(0x13); // DW_AT_language
@@ -4060,6 +4239,14 @@ void DebugAddFunction(ref<ui8> name, ui64 nameLength, ui64 byteOffset) {
 
 	s_debug_abbrev.AddULEB128(0x11); // DW_AT_low_pc
 	s_debug_abbrev.AddULEB128(0x01); // DW_FORM_addr
+
+	Elf64RelocationAddendEntry rela = {
+		s_debug_info.GetCount(),
+		GetRelocationInfo(s_symbol_text, 0xa),
+		byteOffset
+	};
+	s_rela_debug_info.AddBytes(\rela, 0x18);
+	
 	s_debug_info.AddUI64(0); // It's gonna be relocated anyways
 	
 	s_debug_abbrev.AddULEB128(0x12); // DW_AT_hi_pc
@@ -4186,6 +4373,45 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 	relaDebugInfoBytes.New(1024);
 	ByteArr relaDebugLineBytes = {0, 0, 0};
 	relaDebugLineBytes.New(1024);
+
+	s_rela_debug_info = \relaDebugInfoBytes;
+	
+	/* String section table
+	[0]: Nullbyte
+	[1]: Program file name
+	[2]: _start
+	[3..N]: function names in order of s_token_index_array
+	 */
+	shstrBytes.AddByte(0);
+	ref<ui8> name = ".text";
+	ui64 nameLength = GetLengthOfCstring(name);
+	ui64 nameOffset = shstrBytes.AddBytes(name, nameLength + 1);
+	Section section = {
+		name,
+		nameLength + 1,
+		\textBytes,
+		nameOffset,
+		_cSHT_PROGBITS, // type
+		_cSHF_ALLOC | _cSHF_EXECINSTR,	// flags
+		0, // link
+		0, // info
+		16, // align
+		0 // entrySize
+	};
+	ui64 textIndex = sections.Add(\section);
+	
+	// Required empty first entry
+	AddSymbolTableEntry(\symBytes, 0, 0, 0, 0, 0);
+	ui8 localSymbolCount = 0;
+	
+	// Program file
+	AddSymbolTableEntry(\symBytes, s_string_table_offsets[0], GetSymbolInfo(_cSTB_LOCAL, _cSTT_FILE), _cSHN_ABS, 0, 0);
+	localSymbolCount += 1;
+	
+	// .text section symbol
+	AddSymbolTableEntry(\symBytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), textIndex, 0, 0);
+	localSymbolCount += 1;
+	s_symbol_text = localSymbolCount;
 
 	DebugAddHeader(fd, fileName);
 	DebugAddTypes(typeArr);
@@ -4706,6 +4932,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 	}
 
 	s_executable_code_size = textBytes.GetCount();
+	s_debug_info.UpdateBytes(\s_executable_code_size, s_debug_info_high_pc, 8);
 	
 	strBytes.AddByte(0);
 	ui64 stringTableOffset = 1;
@@ -4739,30 +4966,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 		s_string_table_offsets[s_string_table_offsets_count] = stringTableOffset;
 		s_string_table_offsets_count += 1;
 	}
-	/* String section table
-	[0]: Nullbyte
-	[1]: Program file name
-	[2]: _start
-	[3..N]: function names in order of s_token_index_array
-	 */
-
-	shstrBytes.AddByte(0);
-	ref<ui8> name = ".text";
-	ui64 nameLength = GetLengthOfCstring(name);
-	ui64 nameOffset = shstrBytes.AddBytes(name, nameLength + 1);
-	Section section = {
-		name,
-		nameLength + 1,
-		\textBytes,
-		nameOffset,
-		_cSHT_PROGBITS, // type
-		_cSHF_ALLOC | _cSHF_EXECINSTR,	// flags
-		0, // link
-		0, // info
-		16, // align
-		0 // entrySize
-	};
-	ui64 textIndex = sections.Add(\section);
 
 	name = ".strtab";
 	nameLength = GetLengthOfCstring(name);
@@ -4793,20 +4996,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 	nameOffset = shstrBytes.AddBytes(name, nameLength + 1);
 	section = { name, nameLength + 1, \lineInfoBytes, nameOffset, _cSHT_PROGBITS, 0, 0, 0, 1, 0 };
 	ui64 debugLineIndex = sections.Add(\section);
-
-
-	// Required empty first entry
-	AddSymbolTableEntry(\symBytes, 0, 0, 0, 0, 0);
-	ui8 localSymbolCount = 0;
-	
-	// Program file
-	AddSymbolTableEntry(\symBytes, s_string_table_offsets[0], GetSymbolInfo(_cSTB_LOCAL, _cSTT_FILE), _cSHN_ABS, 0, 0);
-	localSymbolCount += 1;
-	
-	// .text section
-	AddSymbolTableEntry(\symBytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), textIndex, 0, 0);
-	localSymbolCount += 1;
-	ui64 symbolText = localSymbolCount;
 
 	// .debug_info
 	AddSymbolTableEntry(\symBytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), debugInfoIndex, 0, 0);
@@ -4844,7 +5033,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 	relaDebugInfoBytes.AddBytes(\relaEntry, 0x18);
 
 	relaEntry.offset = lineRelaState;
-	relaEntry.info = GetRelocationInfo(symbolText, 0x1);
+	relaEntry.info = GetRelocationInfo(s_symbol_text, 0x1);
 	relaDebugLineBytes.AddBytes(\relaEntry, 0x18);
 	
 	name = ".symtab";
@@ -4968,9 +5157,18 @@ ui8 main(cstring[] argv) {
 
 	NodeArr nodes = {0, 0, 0};
 	nodes.New(tokenCount);
-	DynArray types = {0, 0, 0, 14};
+	DynArray types = {0, 0, 0, 18};
 	types.New(256);
 	SetupTypeArray(\types);
+
+	DynArray structs = {0, 0, 0, 32};
+	structs.New(256);
+	s_struct_array = \structs;
+
+	DynArray fields = {0, 0, 0, 24};
+	fields.New(256);
+	s_field_array = \fields;
+
 	Parse(\tokens, \nodes, \types);
 
 	PrintASTAsDot(\tokens, \nodes);
