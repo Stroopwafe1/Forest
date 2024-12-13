@@ -500,7 +500,7 @@ namespace forest::parser {
 
 			tokens.push_back(currentToken);
 		} else if (currentToken.mType == TokenType::SINGLELINE_COMMENT || currentToken.mType == TokenType::MULTILINE_COMMENT) {
-			std::cout << "Ignoring comment: " << currentToken.mText << std::endl;
+			//std::cout << "Ignoring comment: " << currentToken.mText << std::endl;
 		} else if (currentToken.mType != TokenType::NOTHING) {
 			tokens.push_back(currentToken);
 		}

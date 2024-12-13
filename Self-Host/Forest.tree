@@ -208,6 +208,100 @@ ui64[1024] s_label_bytes;
 ui64[1024] s_string_table_offsets;
 ui16 s_string_table_offsets_count = 0;
 
+struct Token {
+	ui16 type;
+	ui32 line;
+	ui32 column;
+	ref<ui8> file;
+	ref<ui8> text;
+	ui64 textLength;
+}
+
+class Node {
+	i32 firstChild;
+	i32 nextSibling;
+	ui16 type;
+	i32 typeIndex;
+	ui64 tokenIndex;
+
+	void SetNS(i32 ns) {
+		nextSibling = ns;
+	}
+
+	void SetFC(i32 fc) {
+		firstChild = fc;
+	}
+
+	ui64 GetFC() {
+		return firstChild;
+	}
+
+	ui64 GetTokenIndex() {
+		return tokenIndex;
+	}
+
+	void PrintNode() {
+		stdout.write("Node: FC(");
+		stdout.write(firstChild);
+		stdout.write(") NS(");
+		stdout.write(nextSibling);
+		stdout.write(") Type(");
+		stdout.write(type);
+		stdout.write(") TypeIndex(");
+		stdout.write(typeIndex);
+		stdout.write(") TokenIndex(");
+		stdout.write(tokenIndex);
+		stdout.write(")");
+	}
+}// (size 22)
+
+struct Type {
+	i32 firstChild;
+	i32 nextSibling;
+	i32 extraIndex; // Extra index is to index into the structs/classes array, depending on the TypeType. Structs/Classes will have the name of the struct/class. Name is not necessary for the base types.
+	ui16 byteSize;
+	i16 align;
+	bool signed;
+	ui8 typeType; // VOID, UI8, UI16, UI32, UI64, I8, I16, I32, I64, F8, F16, F32, F64, BOOL, CHAR, REF, ARRAY, STRUCT, CLASS
+} // (size 18)
+
+struct Struct { // Also valid for classes
+	ref<ui8> name;
+	ui64 nameLength;
+	ui64 firstFieldIndex; // Points to the first field in the dynamic array of fields. Every next field is + sizeof(Field)
+	ui64 fieldCount;
+}
+
+struct Field {
+	ui64 typeIndex;
+	ui64 startTokenIndex; // Points to the first name/alias of this field. We know every next alias is + 2 tokens
+	ui64 aliasCount;
+	ui64 offset;
+}
+
+struct Instr {
+	ui8 type;
+	ui8 valueType;
+	ui64 value;
+}
+
+struct Variable {
+	ui64 nodeIndex;
+	ui64 tokenIndex;
+	ref<ui8> name;
+	ui64 nameLength;
+	i32 offset;
+}
+
+struct Function {
+	ref<ui8> name;
+	ui64 nameLength;
+	ui64 low_pc;
+	ui64 high_pc;
+	ui64 definingNodeIndex;
+	// rest same as SymbolEntry
+}
+
 void memcopy2(ref<ui8> dest, ref<ui8> src, ui64 bytes) {
 	loop i, 0..bytes {
 		dest[i] = src[i];
@@ -261,14 +355,7 @@ ui64 StringToUI64(ref<ui8> text, ui64 textLength) {
 	return returnValue;
 }
 
-struct Token {
-	ui16 type;
-	ui32 line;
-	ui32 column;
-	ref<ui8> file;
-	ref<ui8> text;
-	ui64 textLength;
-}
+
 
 void PrintToken(ref<Token> token) {
 	Token t = @token;
@@ -297,6 +384,7 @@ class DynArray {
 		count = 0;
 	}
 
+	// TODO: Has a bug on resizing
 	void Add(ref<ui8> entry) {
 		if (count + 1) == size {
 			ui64 s = size * 2;
@@ -306,7 +394,8 @@ class DynArray {
 			data = newRef;
 			size = s;
 		}
-		memcopy2(data + (count * entrySize), entry, entrySize);
+		ref<ui8> offset = data + (count * entrySize);
+		memcopy2(offset, entry, entrySize);
 		ui64 c = count;
 		c += 1;
 		count = c;
@@ -328,24 +417,41 @@ class DynArray {
 		memcopy2(data + startOffset, src, entrySize);
 	}
 
+	void UpdateField(ui64 index, ui64 fieldOffset, ref<ui8> src, ui64 length) {
+		ref<ui8> offset = (data + (entrySize * index)) + fieldOffset;
+		memcopy2(offset, src, length);
+	}
+
 	ui64 Find(ui64 fieldOffset, ref<ui8> needle, ui64 needleSize) {
 		ui64 foundIndex = -1;
 		loop i, 0..count {
 			ref<ui8> src = (data + (i * entrySize) + fieldOffset);
-			bool localFound = true;
-			loop j, 0..needleSize {
-				if src[j] != needle[j] {
-					localFound = false;
-					break;
-				}
-			}
-			if localFound {
+			bool equals = StrEquals(src, needle, needleSize);
+			if equals {
 				foundIndex = i;
 				break;
 			}
 		}
 		return foundIndex;
 	}
+
+	ref<ui8> Pop() {
+		ref<ui8> returnValue = data + ((count - 1) * entrySize);
+		ui64 c = count - 1;
+		count = c;
+		return returnValue;
+	}
+
+	void UndoPop() {
+		ui64 c = count + 1;
+		count = c;
+	}
+
+	void DeleteLast() {
+		ui64 c = count - 1;
+		count = c;
+	}
+
 }
 
 void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8> file) {
@@ -802,136 +908,8 @@ void EndToken(ref<DynArray> tokens, ref<Token> token) {
 	}
 }
 
-struct Type {
-	i32 firstChild;
-	i32 nextSibling;
-	i32 extraIndex; // Extra index is to index into the structs/classes array, depending on the TypeType. Structs/Classes will have the name of the struct/class. Name is not necessary for the base types.
-	ui16 byteSize;
-	i16 align;
-	bool signed;
-	ui8 typeType; // VOID, UI8, UI16, UI32, UI64, I8, I16, I32, I64, F8, F16, F32, F64, BOOL, CHAR, REF, ARRAY, STRUCT, CLASS
-} // (size 18)
-
-struct Struct { // Also valid for classes
-	ref<ui8> name;
-	ui64 nameLength;
-	ui64 firstFieldIndex; // Points to the first field in the dynamic array of fields. Every next field is + sizeof(Field)
-	ui64 fieldCount;
-}
-struct Field {
-	ui64 typeIndex;
-	ui64 startTokenIndex; // Points to the first name/alias of this field. We know every next alias is + 2 tokens
-	ui64 aliasCount;
-	ui64 offset;
-}
-
 ref<DynArray> s_struct_array = 0;
 ref<DynArray> s_field_array = 0;
-
-class Node {
-	i32 firstChild;
-	i32 nextSibling;
-	ui16 type;
-	i32 typeIndex;
-	ui64 tokenIndex;
-
-	void SetNS(i32 ns) {
-		nextSibling = ns;
-	}
-
-	void SetFC(i32 fc) {
-		firstChild = fc;
-	}
-
-	ui64 GetFC() {
-		return firstChild;
-	}
-
-	ui64 GetTokenIndex() {
-		return tokenIndex;
-	}
-
-	void PrintNode() {
-		stdout.write("Node: FC(");
-		stdout.write(firstChild);
-		stdout.write(") NS(");
-		stdout.write(nextSibling);
-		stdout.write(") Type(");
-		stdout.write(type);
-		stdout.write(") TypeIndex(");
-		stdout.write(typeIndex);
-		stdout.write(") TokenIndex(");
-		stdout.write(tokenIndex);
-		stdout.write(")");
-	}
-}// (size 22)
-
-class NodeArr {
-	ui64 size;
-	ui64 count;
-	ref<Node> nodes;
-
-	void New(ui64 _size) {
-		size = _size;
-		nodes = alloc((size * 22) + 22);
-		count = 0;
-	}
-
-	void AddNode(ref<Node> node) {
-		// If count exceeded size, realloc and move
-		if (count + 1) == size {
-			ui64 s = size * 2;
-			ui64 c = count + 1;
-			ref<Node> newRef = alloc((s * 22) + 22);
-			memcopy2(newRef, nodes, count * 22);
-			dealloc(nodes, (size * 22) + 22);
-			nodes = newRef;
-			memcopy2(newRef + (count * 22), node, 22);
-			size = s;
-			count = c;
-		} else {
-			ui64 c = count;
-			memcopy2(nodes + (count * 22), node, 22);
-			c += 1;
-			count = c;
-		}
-	}
-
-	void DeleteLast() {
-		ui64 c = count - 1;
-		count = c;
-	}
-
-	ui64 GetCount() {
-		return count;
-	}
-
-	void UpdateNS(ui64 index, i32 ns) {
-		ref<Node> node = nodes + (index * 22);
-		node.SetNS(ns);
-	}
-
-	void UpdateFC(ui64 index, i32 fc) {
-		ref<Node> node = nodes + (index * 22);
-		node.SetFC(fc);
-	}
-
-	ref<Node> At(ui64 index) {
-		return nodes + (index * 22);
-	}
-
-	ref<Node> Pop() {
-		ref<Node> returnValue = nodes + ((count - 1) * 22);
-		ui64 c = count - 1;
-		count = c;
-		return returnValue;
-	}
-
-	void UndoPop() {
-		ui64 c = count + 1;
-		count = c;
-	}
-}
 
 ui64 GetTypeIndexFromName(ref<DynArray> typArr, ref<Token> t) {
 	Token token = @t;
@@ -1194,7 +1172,7 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 	return returnVal;
 }
 
-ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64 max) {
+ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, ui64 max) {
 
 	return 0;
 }
@@ -1222,10 +1200,10 @@ ui8[150] s_precedences;
 // TODO(#3): Just really expand on this; Try to actually make a kind of tree, give different expression types, EXPR_VARIABLE, EXPR_PROPERTY, EXPR_FUNC_CALL, EXPR_INIT_LIST, EXPR_CLASS_FUNC_CALL
 // It would be nice if I could build a tree without the spamming of parentheses, but it's the most important that these above get grouped together first.
 // Because I want to have EXPR_FUNC_CALL EXPRESSION(+) EXPRESSION, instead of EXPRESSION(ident) EXPRESSION(open_paren) EXPRESSION(arg) EXPRESSION(close_paren) EXPRESSION(+) EXPRESSION
-ui64 ParseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64 max, ui16 endType) {
+ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, ui64 max, ui16 endType) {
 	ui64 returnValue = 0;
 	Node currentNode = { 0, 0, 0, 0, 0 };
-	NodeArr nodes = @nodeArr;
+	DynArray nodes = @nodeArr;
 	ui64 startCount = nodeArr.GetCount();
 	loop i, offset..max {
 		bool end = IsTokenSpecifiedType(tArr, i, endType);
@@ -1277,7 +1255,7 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64
 						}
 						currentNode.typeIndex = -1;
 						currentNode.tokenIndex = i;
-						nodeArr.AddNode(\currentNode);
+						nodeArr.Add(\currentNode);
 						shouldSkip = true;
 						returnValue += 1;
 					}
@@ -1290,7 +1268,7 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64
 					currentNode.firstChild = nodeCount + 1;
 					currentNode.typeIndex = -1;
 					currentNode.tokenIndex = i;
-					nodeArr.AddNode(\currentNode);
+					nodeArr.Add(\currentNode);
 
 					ui64 toSkip = ParseFunctionCall(tArr, nodeArr, i, true);
 					i += toSkip;
@@ -1301,9 +1279,10 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64
 					isNextEnd = IsTokenSpecifiedType(tArr, i + 1, endType);
 					isNextMax = (i + 1) == max;
 					if isNextEnd | isNextMax {
-						nodeArr.UpdateNS(exprNodeState, -1);
+						i32 reset = -1;
+						nodeArr.UpdateField(exprNodeState, 4, \reset, 4);
 					} else {
-						nodeArr.UpdateNS(exprNodeState, nodeCount);
+						nodeArr.UpdateField(exprNodeState, 4, \nodeCount, 4);
 					}
 					break;
 				}
@@ -1323,11 +1302,12 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64
 		}
 		currentNode.typeIndex = -1;
 		currentNode.tokenIndex = i;
-		nodeArr.AddNode(\currentNode);
+		nodeArr.Add(\currentNode);
 		returnValue += 1;
 	}
 	ui64 endCount = nodeArr.GetCount();
-	nodeArr.UpdateNS(endCount - 1, -1);
+	i32 reset = -1;
+	nodeArr.UpdateField(endCount - 1, 4, \reset, 4);
 
 	s_precedences[_cTOKENTYPE_MINUS] = 10;
 	s_precedences[_cTOKENTYPE_PLUS] = 10;
@@ -1441,19 +1421,19 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, ui64
 	// Update main node array
 	s_expression_indices_count -= 1;
 	ui64 index = s_expression_indices[s_expression_indices_count];
-	nodeArr.UpdateFC(startCount - 1, index);
+	nodeArr.UpdateField(startCount - 1, 0, \index, 4);
 
 	loop c, 0..s_expression_indices_count {
 		ui64 toIndex = s_expression_indices[(s_expression_indices_count - c) - 1];
-		nodeArr.UpdateNS(index, toIndex);
+		nodeArr.UpdateField(index, 4, \toIndex, 4);
 		index = toIndex;
 	}
 
-	nodeArr.UpdateNS(index, -1);
+	nodeArr.UpdateField(index, 4, \reset, 4);
 	return returnValue;
 }
 
-ui64 ParseFunctionCall(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, bool asExpr) {
+ui64 ParseFunctionCall(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, bool asExpr) {
 	DynArray tokens = @tArr;
 
 	ui64 nodeCount = nodeArr.GetCount();
@@ -1465,7 +1445,7 @@ ui64 ParseFunctionCall(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, bo
 		.typeIndex = -1;
 	};
 	ui64 funcCallNodeState = nodeCount;
-	nodeArr.AddNode(\currentNode);
+	nodeArr.Add(\currentNode);
 	ui64 toSkip = 0;
 
 	loop j, offset..tokens.count {
@@ -1483,7 +1463,7 @@ ui64 ParseFunctionCall(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, bo
 			currentNode.nextSibling = -1;
 			currentNode.tokenIndex = j;
 			currentNode.typeIndex = -1;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			toSkip += 1;
 			break;
 		}
@@ -1495,7 +1475,7 @@ ui64 ParseFunctionCall(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, bo
 			currentNode.nextSibling = nodeCount + 1;
 			currentNode.tokenIndex = j;
 			currentNode.typeIndex = -1;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			localToSkip += 1;
 		}
 		equals = IsTokenSpecifiedType(tArr, j + 1, _cTOKENTYPE_DOT);
@@ -1506,7 +1486,7 @@ ui64 ParseFunctionCall(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, bo
 			currentNode.nextSibling = nodeCount + 1;
 			currentNode.tokenIndex = j;
 			currentNode.typeIndex = -1;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			localToSkip += 1;
 		}
 		j += localToSkip;
@@ -1527,7 +1507,7 @@ ui64 ParseFunctionCall(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, bo
 	currentNode.tokenIndex = toSkip + offset;
 	currentNode.typeIndex = -1;
 	ui64 argListState = nodeArr.GetCount();
-	nodeArr.AddNode(\currentNode);
+	nodeArr.Add(\currentNode);
 	toSkip += 1; // Skip paren open
 
 	// Following loop is necessary to detect end of argument parsing. We try parsing until a ',' but if there's only one argument it would parse too much.
@@ -1565,16 +1545,17 @@ ui64 ParseFunctionCall(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, bo
 			currentNode.tokenIndex = offset + toSkip;
 			currentNode.typeIndex = -1;
 			ui64 argNodeState = nodeCount;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 
 			localToSkip += ParseExpression(tArr, nodeArr, j, matchingParen, _cTOKENTYPE_COMMA);
 			bool hasNextArgument = (j + localToSkip) != matchingParen;
 			if hasNextArgument {
 				nodeCount = nodeArr.GetCount();
-				nodeArr.UpdateNS(argNodeState, nodeCount);
+				nodeArr.UpdateField(argNodeState, 4, \nodeCount, 4);
 				toSkip += 1;
 			} else {
-				nodeArr.UpdateNS(argNodeState, -1);
+				i32 reset = -1;
+				nodeArr.UpdateField(argNodeState, 4, \reset, 4);
 				toSkip += localToSkip;
 				break;
 			}
@@ -1582,7 +1563,8 @@ ui64 ParseFunctionCall(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, bo
 			toSkip += localToSkip;
 		}
 	} else {
-		nodeArr.UpdateFC(argListState, -1);
+		i32 reset = -1;
+		nodeArr.UpdateField(argListState, 0, \reset, 4);
 	}
 	assert = IsTokenSpecifiedType(tArr, offset + toSkip, _cTOKENTYPE_PARENTHESIS_CLOSE);
 	if !assert {
@@ -1605,14 +1587,15 @@ ui64 ParseFunctionCall(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset, bo
 
 	nodeCount = nodeArr.GetCount();
 	if asExpr {
-		nodeArr.UpdateNS(funcCallNodeState, -1);
+		i32 reset = -1;
+		nodeArr.UpdateField(funcCallNodeState, 4, \reset, 4);
 	} else {
-		nodeArr.UpdateNS(funcCallNodeState, nodeCount);
+		nodeArr.UpdateField(funcCallNodeState, 4, \nodeCount, 4);
 	}
 	return toSkip;
 }
 
-ui64 ParseVarAssignment(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset) {
+ui64 ParseVarAssignment(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset) {
 	DynArray tokens = @tArr;
 	// First, find the '(' or any of the '=' e.g. '+=' '/=' '*=' etc...
 	bool isAssignment = false;
@@ -1642,7 +1625,7 @@ ui64 ParseVarAssignment(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 	};
 
 	ui64 currentNodeState = nodeCount;
-	nodeArr.AddNode(\currentNode);
+	nodeArr.Add(\currentNode);
 	ui64 toSkip = 1;
 
 	// very.nested.array[39 + 30].property.also.should.be.supported = true
@@ -1666,7 +1649,7 @@ ui64 ParseVarAssignment(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 				}
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = j + 1;
-				nodeArr.AddNode(\currentNode);
+				nodeArr.Add(\currentNode);
 				localToSkip += 1;
 			} else if isArrayIndex {
 				bool continuesProp = IsTokenSpecifiedType(tArr, j+2, _cTOKENTYPE_DOT);
@@ -1683,12 +1666,12 @@ ui64 ParseVarAssignment(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 				currentNode.tokenIndex = j;
 				nodeCount = nodeArr.GetCount();
 				ui64 nodeState = nodeCount;
-				nodeArr.AddNode(\currentNode);
+				nodeArr.Add(\currentNode);
 				localToSkip += ParseExpression(tArr, nodeArr, j + 1, assignmentIndex, _cTOKENTYPE_SQUARE_CLOSE);
 
 				if continuesProp | continuesIndex {
 					nodeCount = nodeArr.GetCount();
-					nodeArr.UpdateNS(nodeState, nodeCount);
+					nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 				}
 			} else {
 				break;
@@ -1704,16 +1687,16 @@ ui64 ParseVarAssignment(ref<DynArray> tArr, ref<NodeArr> nodeArr, ui64 offset) {
 	currentNode.nextSibling = -1;
 	currentNode.typeIndex = -1;
 	currentNode.tokenIndex = offset + toSkip;
-	nodeArr.AddNode(\currentNode);
+	nodeArr.Add(\currentNode);
 	toSkip += 1;
 
 	toSkip += ParseExpression(tArr, nodeArr, offset + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
 	nodeCount = nodeArr.GetCount();
-	nodeArr.UpdateNS(currentNodeState, nodeCount);
+	nodeArr.UpdateField(currentNodeState, 4, \nodeCount, 4);
 	return toSkip;
 }
 
-ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ui64 offset) {
+ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset) {
 	DynArray types = @typeArr;
 	DynArray tokens = @tArr;
 	ui64 currType = types.count;
@@ -1735,7 +1718,7 @@ ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray>
 		currentNode.firstChild = nodeCount + 1;
 		currentNode.nextSibling = 0;
 		ui64 nodeState = nodeCount;
-		nodeArr.AddNode(\currentNode);
+		nodeArr.Add(\currentNode);
 		toSkip += 1;
 
 		nodeCount = nodeArr.GetCount();
@@ -1744,18 +1727,18 @@ ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray>
 		currentNode.nextSibling = -1;
 		currentNode.typeIndex = -1;
 		currentNode.tokenIndex = offset + toSkip;
-		nodeArr.AddNode(\currentNode);
+		nodeArr.Add(\currentNode);
 		toSkip += 1;
 
 		toSkip += ParseExpression(tArr, nodeArr, offset + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
 		nodeCount = nodeArr.GetCount();
-		nodeArr.UpdateNS(nodeState, nodeCount);
+		nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 	} else {
 		currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
 		currentNode.firstChild = -1;
 		nodeCount = nodeArr.GetCount();
 		currentNode.nextSibling = nodeCount + 1;
-		nodeArr.AddNode(\currentNode);
+		nodeArr.Add(\currentNode);
 	}
 
 	bool hasSemi = IsTokenSpecifiedType(tArr, offset + toSkip, _cTOKENTYPE_SEMICOLON);
@@ -1769,7 +1752,7 @@ ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray>
 }
 
 // ParseBody parses until the matching '}'. Its returnValue is the offset from given offset to that matching bracket
-ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ui64 offset) {
+ui64 ParseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset) {
 	DynArray tokens = @tArr;
 	DynArray types = @typeArr;
 	bool hasBody = IsTokenSpecifiedType(tArr, offset, _cTOKENTYPE_CURLY_OPEN);
@@ -1782,7 +1765,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 	ui64 nodeCount = nodeArr.GetCount();
 	Node currentNode = { nodeCount + 1, -1, _cPARSER_NODETYPE_BLOCK, -1, offset };
 	ui64 lastStatementState = nodeCount;
-	nodeArr.AddNode(\currentNode);
+	nodeArr.Add(\currentNode);
 	ui64 returnVal = 1;
 
 	bool hasElse = false;
@@ -1802,10 +1785,10 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 				currentNode.tokenIndex = i - 1;
 				ui64 nodeState = nodeCount;
 				lastStatementState = nodeCount;
-				nodeArr.AddNode(\currentNode);
+				nodeArr.Add(\currentNode);
 				toSkip += ParseBody(tArr, nodeArr, typeArr, i);
 				nodeCount = nodeArr.GetCount();
-				nodeArr.UpdateNS(nodeState, nodeCount);
+				nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 
 				i += toSkip;
 				returnVal += (toSkip + 1);
@@ -1828,7 +1811,8 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 		}
 
 		if (nextToken.type) == _cTOKENTYPE_CURLY_CLOSE {
-			nodeArr.UpdateNS(lastStatementState, -1);
+			i32 reset = -1;
+			nodeArr.UpdateField(lastStatementState, 4, \reset, 4);
 			break;
 		}
 
@@ -1842,7 +1826,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 			currentNode.tokenIndex = i;
 			ui64 nodeState = nodeCount;
 			lastStatementState = nodeCount;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			toSkip += 1;
 
 			toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_SEMICOLON);
@@ -1854,7 +1838,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 				SYS_EXIT(1);
 			}
 			nodeCount = nodeArr.GetCount();
-			nodeArr.UpdateNS(nodeState, nodeCount);
+			nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 			i += toSkip;
 			returnVal += (toSkip + 1);
 			skip;
@@ -1870,7 +1854,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 			nodeCount = nodeArr.GetCount();
 			ui64 nodeState = nodeCount;
 			lastStatementState = nodeCount;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			toSkip += 1;
 			bool hasSemi = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
 			if !hasSemi {
@@ -1880,7 +1864,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 				SYS_EXIT(1);
 			}
 			nodeCount = nodeArr.GetCount();
-			nodeArr.UpdateNS(nodeState, nodeCount);
+			nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 			i += toSkip;
 			returnVal += (toSkip + 1);
 			skip;
@@ -1896,7 +1880,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 			nodeCount = nodeArr.GetCount();
 			ui64 nodeState = nodeCount;
 			lastStatementState = nodeCount;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			toSkip += 1;
 			bool hasSemi = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_SEMICOLON);
 			if !hasSemi {
@@ -1906,7 +1890,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 				SYS_EXIT(1);
 			}
 			nodeCount = nodeArr.GetCount();
-			nodeArr.UpdateNS(nodeState, nodeCount);
+			nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 			i += toSkip;
 			returnVal += (toSkip + 1);
 			skip;
@@ -1927,7 +1911,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 			currentNode.tokenIndex = i;
 			ui64 nodeState = nodeCount;
 			lastStatementState = nodeCount;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			toSkip += 1;
 
 			nodeCount = nodeArr.GetCount();
@@ -1937,12 +1921,12 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 			currentNode.tokenIndex = i + toSkip;
 			currentNode.type = _cPARSER_NODETYPE_CONDITION;
 			ui64 condNodeState = nodeCount;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 
 			toSkip += ParseExpression(tArr, nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
 
 			nodeCount = nodeArr.GetCount();
-			nodeArr.UpdateNS(condNodeState, nodeCount);
+			nodeArr.UpdateField(condNodeState, 4, \nodeCount, 4);
 
 			if toSkip == 1 {
 				stdout.write("[Parser]: Expected an expression for the ");
@@ -1959,7 +1943,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 				SYS_EXIT(1);
 			}
 			nodeCount = nodeArr.GetCount();
-			nodeArr.UpdateNS(nodeState, nodeCount);
+			nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 			i += toSkip;
 			returnVal += (toSkip + 1);
 			skip;
@@ -1983,7 +1967,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 			currentNode.tokenIndex = i;
 			ui64 loopNodeState = nodeCount;
 			lastStatementState = nodeCount;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			toSkip += 1;
 
 			bool isSimpleLoop = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_CURLY_OPEN);
@@ -2002,7 +1986,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 				currentNode.nextSibling = nodeCount + 1;
 				currentNode.typeIndex = 0;
 				currentNode.tokenIndex = i + 1;
-				nodeArr.AddNode(\currentNode);
+				nodeArr.Add(\currentNode);
 				toSkip += 1;
 
 				bool hasStep = IsTokenSpecifiedType(tArr, i + 2, _cTOKENTYPE_COLON);
@@ -2015,12 +1999,12 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 					currentNode.typeIndex = -1;
 					currentNode.tokenIndex = i + 2;
 					ui64 stepNodeState = nodeCount;
-					nodeArr.AddNode(\currentNode);
+					nodeArr.Add(\currentNode);
 					toSkip += 1;
 
 					toSkip += ParseExpression(tArr, nodeArr, i + 2, tokens.count, _cTOKENTYPE_COMMA);
 					nodeCount = nodeArr.GetCount()
-					nodeArr.UpdateNS(stepNodeState, nodeCount);
+					nodeArr.UpdateField(stepNodeState, 4, \nodeCount, 4);
 				}
 				toSkip += 1; // Skip comma
 
@@ -2031,10 +2015,10 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = i + toSkip;
 				ui64 rangeMinNodeState = nodeCount;
-				nodeArr.AddNode(\currentNode);
+				nodeArr.Add(\currentNode);
 				toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_RANGE);
 				nodeCount = nodeArr.GetCount();
-				nodeArr.UpdateNS(rangeMinNodeState, nodeCount);
+				nodeArr.UpdateField(rangeMinNodeState, 4, \nodeCount, 4);
 				toSkip += 1; // Skip range
 
 				currentNode.type = _cPARSER_NODETYPE_RANGE_MAX;
@@ -2043,16 +2027,16 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 				currentNode.typeIndex = -1;
 				currentNode.tokenIndex = i + toSkip;
 				nodeCount = nodeArr.GetCount();
-				nodeArr.AddNode(\currentNode);
+				nodeArr.Add(\currentNode);
 				ui64 rangeMaxNodeState = nodeCount;
 				toSkip += ParseExpression(tArr, nodeArr, i + toSkip, tokens.count, _cTOKENTYPE_CURLY_OPEN);
 				nodeCount = nodeArr.GetCount();
-				nodeArr.UpdateNS(rangeMaxNodeState, nodeCount);
+				nodeArr.UpdateField(rangeMaxNodeState, 4, \nodeCount, 4);
 
 				toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
 			}
 			nodeCount = nodeArr.GetCount();
-			nodeArr.UpdateNS(loopNodeState, nodeCount);
+			nodeArr.UpdateField(loopNodeState, 4, \nodeCount, 4);
 			i += toSkip;
 			returnVal += (toSkip + 1);
 			skip;
@@ -2067,7 +2051,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 			currentNode.tokenIndex = i;
 			ui64 nodeState = nodeCount;
 			lastStatementState = nodeCount;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			toSkip += 1;
 
 			nodeCount = nodeArr.GetCount();
@@ -2077,16 +2061,16 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 			currentNode.tokenIndex = i + toSkip;
 			currentNode.type = _cPARSER_NODETYPE_CONDITION;
 			ui64 condNodeState = nodeCount;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 
 			toSkip += ParseExpression(tArr, nodeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
 
 			nodeCount = nodeArr.GetCount();
-			nodeArr.UpdateNS(condNodeState, nodeCount);
+			nodeArr.UpdateField(condNodeState, 4, \nodeCount, 4);
 
 			toSkip += ParseBody(tArr, nodeArr, typeArr, i + toSkip);
 			nodeCount = nodeArr.GetCount();
-			nodeArr.UpdateNS(nodeState, nodeCount);
+			nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 			i += toSkip;
 			returnVal += (toSkip + 1);
 			skip;
@@ -2135,7 +2119,7 @@ ui64 ParseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, 
 	return returnVal;
 }
 
-ui64 ParseFunction(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ui64 offset) {
+ui64 ParseFunction(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset) {
 	DynArray tokens = @tArr;
 	DynArray types = @typeArr;
 	ref<Token> token = tArr.At(offset);
@@ -2161,7 +2145,7 @@ ui64 ParseFunction(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeA
 	}
 
 	ui64 nodeState = nodeCount;
-	nodeArr.AddNode(\currentNode);
+	nodeArr.Add(\currentNode);
 
 	bool hasNoParameters = IsTokenSpecifiedType(tArr, (offset + returnVal) + 1, _cTOKENTYPE_PARENTHESIS_CLOSE);
 	if !hasNoParameters {
@@ -2172,7 +2156,7 @@ ui64 ParseFunction(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeA
 		currentNode.typeIndex = -1;
 		currentNode.tokenIndex = offset + returnVal;
 		ui64 paramNodeState = nodeCount;
-		nodeArr.AddNode(\currentNode);
+		nodeArr.Add(\currentNode);
 		returnVal += 1; // Skip open paren
 
 		// Parse param list... type name, type name, etc...
@@ -2200,7 +2184,7 @@ ui64 ParseFunction(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeA
 			currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
 			currentNode.typeIndex = typeIndex;
 			currentNode.tokenIndex = i;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			returnVal += 1;
 			bool hasClosing = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_PARENTHESIS_CLOSE);
 			if hasClosing {
@@ -2217,7 +2201,7 @@ ui64 ParseFunction(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeA
 			returnVal += 1;
 		}
 		nodeCount = nodeArr.GetCount();
-		nodeArr.UpdateNS(paramNodeState, nodeCount);
+		nodeArr.UpdateField(paramNodeState, 4, \nodeCount, 4);
 	} else {
 		returnVal += 2; // Skip both open and close paren
 	}
@@ -2232,14 +2216,15 @@ ui64 ParseFunction(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeA
 	nodeCount = nodeArr.GetCount();
 	ui64 bodyNodeState = nodeCount;
 	returnVal += ParseBody(tArr, nodeArr, typeArr, offset + returnVal);
-	nodeArr.UpdateNS(bodyNodeState, -1);
+	i32 reset = -1;
+	nodeArr.UpdateField(bodyNodeState, 4, \reset, 4);
 	nodeCount = nodeArr.GetCount();
-	nodeArr.UpdateNS(nodeState, nodeCount);
+	nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 
 	return returnVal;
 }
 
-ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ui64 offset, bool isAligned) {
+ui64 ParseFieldList(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset, bool isAligned) {
 	ui64 tokenCount = tArr.GetCount();
 	ui64 returnVal = 0;
 	Node currentNode = {0, 0, 0, 0, 0};
@@ -2270,7 +2255,7 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 		currentNode.tokenIndex = i + toSkip;
 		ui64 fieldNodeState = nodeCount;
 		lastPropertyState = nodeCount;
-		nodeArr.AddNode(\currentNode);
+		nodeArr.Add(\currentNode);
 
 		Field f = {
 			typeIndex,
@@ -2293,7 +2278,7 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			if isEnd {
 				currentNode.nextSibling = -1;
 				nodeCount = nodeArr.GetCount();
-				nodeArr.AddNode(\currentNode);
+				nodeArr.Add(\currentNode);
 				toSkip += 1;
 				break;
 			}
@@ -2312,7 +2297,7 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			}
 			nodeCount = nodeArr.GetCount();
 			currentNode.nextSibling = nodeCount + 1;
-			nodeArr.AddNode(\currentNode);
+			nodeArr.Add(\currentNode);
 			toSkip += 2;
 			j += 1;
 			aliasCount += 1;
@@ -2332,7 +2317,8 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 		if shouldExit {
 			nodeArr.DeleteLast();
 			nodeCount = nodeArr.GetCount();
-			nodeArr.UpdateNS(nodeCount - 1, -1);
+			i32 reset = -1;
+			nodeArr.UpdateField(nodeCount - 1, 4, \reset, 4);
 
 			if isAligned {
 				byteSize += (alignment - (byteSize % alignment)) % alignment;
@@ -2354,7 +2340,7 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 		i += toSkip;
 		returnVal += (toSkip + 1);
 		nodeCount = nodeArr.GetCount();
-		nodeArr.UpdateNS(fieldNodeState, nodeCount);
+		nodeArr.UpdateField(fieldNodeState, 4, \nodeCount, 4);
 	}
 	if isAligned {
 		byteSize += (alignment - (byteSize % alignment)) % alignment;
@@ -2371,11 +2357,12 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 	};
 	typeArr.Add(\structType);
 
-	nodeArr.UpdateNS(lastPropertyState, -1);
+	i32 reset = -1;
+	nodeArr.UpdateField(lastPropertyState, 4, \reset, 4);
 	return returnVal;
 }
 
-ui64 ParseStruct(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ui64 offset, bool isAligned) {
+ui64 ParseStruct(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset, bool isAligned) {
 	ui64 tokenCount = tArr.GetCount();
 	ui64 nodeCount = nodeArr.GetCount();
 	// struct name {
@@ -2386,7 +2373,7 @@ ui64 ParseStruct(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 		currentNode.type = _cPARSER_NODETYPE_STRUCT_ALIGNED;
 	}
 	ui64 structNodeState = nodeCount;
-	nodeArr.AddNode(\currentNode);
+	nodeArr.Add(\currentNode);
 
 	ref<Token> structTokenPtr = tArr.At(offset + 1);
 	Token structToken = @structTokenPtr;
@@ -2422,13 +2409,13 @@ ui64 ParseStruct(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 	}
 
 	nodeCount = nodeArr.GetCount();
-	nodeArr.UpdateNS(structNodeState, nodeCount);
+	nodeArr.UpdateField(structNodeState, 4, \nodeCount, 4);
 	// Adding of the struct type is inside the field list function
 	s_struct_array.Add(\s);
 	return returnVal;
 }
 
-void ParseClass(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ui64 offset, bool isAligned) {
+void ParseClass(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset, bool isAligned) {
 	ui64 tokenCount = tArr.GetCount();
 	ui64 nodeCount = nodeArr.GetCount();
 
@@ -2437,7 +2424,7 @@ void ParseClass(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr,
 		currentNode.type = _cPARSER_NODETYPE_CLASS_ALIGNED;
 	}
 	ui64 classNodeState = nodeCount;
-	nodeArr.AddNode(\currentNode);
+	nodeArr.Add(\currentNode);
 
 	ref<Token> classTokenPtr = tArr.At(offset + 1);
 	Token classToken = @classTokenPtr;
@@ -2467,7 +2454,7 @@ void ParseClass(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr,
 	bool isEnd = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_CLOSE);
 	if isEnd {
 		nodeCount = nodeArr.GetCount();
-		nodeArr.UpdateNS(classNodeState, nodeCount);
+		nodeArr.UpdateField(classNodeState, 4, \nodeCount, 4);
 		return returnVal;
 	}
 
@@ -2475,7 +2462,8 @@ void ParseClass(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr,
 	loop i, offset + returnVal..tokenCount {
 		isEnd = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_CURLY_CLOSE);
 		if isEnd {
-			nodeArr.UpdateNS(lastFunctionState, -1);
+			i32 reset = -1;
+			nodeArr.UpdateField(lastFunctionState, 4, \reset, 4);
 			break;
 		}
 
@@ -2486,16 +2474,16 @@ void ParseClass(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr,
 	}
 
 	nodeCount = nodeArr.GetCount();
-	nodeArr.UpdateNS(classNodeState, nodeCount);
+	nodeArr.UpdateField(classNodeState, 4, \nodeCount, 4);
 	s_struct_array.Add(\c);
 	return returnVal;
 }
 
-void Parse(ref<DynArray> tArr, ref<NodeArr> nodes, ref<DynArray> typeArr) {
+void Parse(ref<DynArray> tArr, ref<DynArray> nodes, ref<DynArray> typeArr) {
 	DynArray tokens = @tArr;
 	DynArray types = @typeArr;
 	Node currentNode = {1, -1, 1, -1, 0};
-	nodes.AddNode(\currentNode);
+	nodes.Add(\currentNode);
 	ui64 tokenCount = (tokens.count);
 
 	loop i, 0..tokenCount {
@@ -2639,144 +2627,12 @@ void SetupTypeArray(ref<DynArray> typeArr) {
 	typeArr.Add(\ttype);
 }
 
-class Instr {
-	ui8 type;
-	ui8 valueType;
-	ui64 value;
-
-	void UpdateValue(ui64 val) {
-		value = val;
-	}
-}
-
-class InstrArr {
-	ui64 size;
-	ui64 count;
-	ref<Instr> instructions;
-
-	void New(ui64 _size) {
-		size = _size;
-		instructions = alloc((size * 10) + 10);
-		count = 0;
-	}
-
-	void AddInstr(ref<Instr> instr) {
-		// If count exceeded size, realloc and move
-		if (count + 1) == size {
-			ui64 s = size * 2;
-			ui64 c = count + 1;
-			ref<Instr> newRef = alloc((s * 10) + 10);
-			memcopy2(newRef, instructions, count * 10);
-			dealloc(instructions, (size * 10) + 10);
-			instructions = newRef;
-			memcopy2(newRef + (count * 10), instr, 10);
-			size = s;
-			count = c;
-		} else {
-			ui64 c = count;
-			memcopy2(instructions + (count * 10), instr, 10);
-			c += 1;
-			count = c;
-		}
-	}
-
-	ui64 GetCount() {
-		return count;
-	}
-
-	ref<Instr> At(ui64 index) {
-		return instructions + (index * 10);
-	}
-
-	ref<Instr> Pop() {
-		ref<Instr> returnValue = instructions + ((count - 1) * 10);
-		ui64 c = count - 1;
-		count = c;
-		return returnValue;
-	}
-
-	void UpdateValue(ui64 index, ui64 value) {
-		ref<Instr> instruction = instructions + (index * 10);
-		instruction.UpdateValue(value);
-	}
-}
-
-struct Variable {
-	ui64 nodeIndex;
-	ui64 tokenIndex;
-	i32 offset;
-}
-
-class VariableArr {
-	ui64 size;
-	ui64 count;
-	ref<Variable> variables;
-
-	void New(ui64 _size) {
-		size = _size;
-		variables = alloc((size * 20) + 20);
-		count = 0;
-	}
-
-	void AddVar(ref<Variable> var) {
-		// If count exceeded size, realloc and move
-		if (count + 1) == size {
-			ui64 s = size * 2;
-			ui64 c = count + 1;
-			ref<Variable> newRef = alloc((s * 20) + 20);
-			memcopy2(newRef, variables, count * 20);
-			dealloc(variables, (size * 20) + 20);
-			variables = newRef;
-			memcopy2(newRef + (count * 20), var, 20);
-			size = s;
-			count = c;
-		} else {
-			ui64 c = count;
-			memcopy2(variables + (count * 20), var, 20);
-			c += 1;
-			count = c;
-		}
-	}
-
-	ui64 GetCount() {
-		return count;
-	}
-
-	ref<Variable> At(ui64 index) {
-		return variables + (index * 20);
-	}
-
-	ui64 FindVarIndex(ref<DynArray> tArr, ui64 tokenIndex) {
-		ui64 result = -1;
-		loop i, 0..count {
-			ref<Token> comparePtr = tArr.At(tokenIndex);
-			ref<Variable> variablePtr = variables + (i * 20);
-			Variable variable = @variablePtr;
-			Token compare = @comparePtr;
-
-			ref<Token> localPtr = tArr.At(variable.tokenIndex);
-			Token base = @localPtr;
-			if (base.textLength) != (compare.textLength) {
-				result = -1;
-				skip;
-			}
-			bool equals = StrEquals(base.text, compare.text, base.textLength);
-			if equals {
-				return i;
-			} else {
-				result = -1;
-			}
-		}
-		return result;
-	}
-}
-
-ui64 AnalyseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ref<InstrArr> instrArr, ui64 offset) {
+ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ref<DynArray> instrArr, ui64 offset) {
 	Instr currentInstr = {0, 0, 0}; // type, valueType, value
 	ui64 i = offset;
 	
 	currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-	instrArr.AddInstr(\currentInstr);
+	instrArr.Add(\currentInstr);
 	
 	loop {
 		ref<Node> exprNodePtr = nodeArr.At(i);
@@ -2791,52 +2647,52 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> t
 			ui64 number = StringToUI64(token.text, token.textLength);
 			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_INTEGER;
 			currentInstr.value = number;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_PLUS {
 			currentInstr.type = _cANALYSER_INSTRTYPE_ADD;
 			currentInstr.value = 0;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_MINUS {
 			currentInstr.type = _cANALYSER_INSTRTYPE_SUB;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 			currentInstr.value = 0;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_MULTIPLY {
 			currentInstr.type = _cANALYSER_INSTRTYPE_MULT;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 			currentInstr.value = 0;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_DIVIDE {
 			currentInstr.type = _cANALYSER_INSTRTYPE_DIV;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 			currentInstr.value = 0;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_MODULUS {
 			currentInstr.type = _cANALYSER_INSTRTYPE_MOD;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 			currentInstr.value = 0;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_POWER_OF {
 			currentInstr.type = _cANALYSER_INSTRTYPE_POWER;
 			currentInstr.value = 0;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_VARIABLE {
 			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 			currentInstr.value = exprNode.tokenIndex;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_EQUALITY {
 			if (currentInstr.type) == _cANALYSER_INSTRTYPE_LOAD_VARIABLE {
 				instrArr.Pop();
 				currentInstr.type = _cANALYSER_INSTRTYPE_CMP_VARIABLE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 			} else {
 				currentInstr.type = _cANALYSER_INSTRTYPE_CMP_LOADED;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 				currentInstr.value = token.type;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 			}
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_FUNC_CALL {
 			// Iterate over arguments
@@ -2867,7 +2723,7 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> t
 					AnalyseExpression(tArr, nodeArr, typeArr, instrArr, argNode.firstChild);
 					currentInstr.type = _cANALYSER_INSTRTYPE_SET_ARG;
 					currentInstr.value = counter;
-					instrArr.AddInstr(\currentInstr);
+					instrArr.Add(\currentInstr);
 					counter += 1;
 
 					if (argNode.nextSibling) == -1 {
@@ -2879,12 +2735,12 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> t
 			}
 
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 			
 			currentInstr.type = _cANALYSER_INSTRTYPE_CALL_FUNC;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 			currentInstr.value = exprNode.tokenIndex;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else {
 			stdout.write("[Compiler#AnalyseExpression]: Unknown ");
 			exprNodePtr.PrintNode();
@@ -2905,7 +2761,7 @@ ui64 s_ifs_count = 0;
 
 ui64 s_line_number = 1;
 
-ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ref<InstrArr> instrArr, ui64 offset, ref<ui64> labelCountPtr) {
+ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ref<DynArray> instrArr, ui64 offset, ref<ui64> labelCountPtr) {
 	Instr currentInstr = {0, 0, 0}; // type, valueType, value
 	ui64 nodeCount = nodeArr.GetCount();
 	ui64 lastNodeIndex = offset;
@@ -2916,7 +2772,7 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 	ui64 startingIfs = s_ifs_count;
 
 	//currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_BASIC_BLOCK;
-	//instrArr.AddInstr(\currentInstr);
+	//instrArr.Add(\currentInstr);
 
 	loop {
 		ref<Node> nodePtr = nodeArr.At(i);
@@ -2928,24 +2784,24 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 		if (t.line) != s_line_number {
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
 			currentInstr.value = (t.line) - s_line_number;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 			s_line_number = t.line;
 		}
 		
 		currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-		instrArr.AddInstr(\currentInstr);
+		instrArr.Add(\currentInstr);
 		
 		if parsingIf {
 			if ((node.type) != _cPARSER_NODETYPE_ELSE) & ((node.type) != _cPARSER_NODETYPE_ELSE_IF) {
 				loop j, startingIfs..s_ifs_count {
-					instrArr.UpdateValue(s_ifs[j], labelCount);
+					instrArr.UpdateField(s_ifs[j], 2, \labelCount, 8);
 				}
 				s_ifs_count -= (s_ifs_count - startingIfs);
 				currentInstr.type = _cANALYSER_INSTRTYPE_END_IF;
 				currentInstr.value = labelCount;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 				labelCount += 1;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 				parsingIf = false;
 
 			} else {
@@ -2955,7 +2811,7 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 				currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LABEL;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 				currentInstr.value = labelCount + 1;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 			}
 		}
 
@@ -2966,25 +2822,25 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 				currentInstr.type = _cANALYSER_INSTRTYPE_RETURN;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
 				currentInstr.value = 0;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 			} else {
 				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, node.firstChild);
 				currentInstr.type = _cANALYSER_INSTRTYPE_RETURN;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
 				currentInstr.value = 1;
 				ui64 state = instrArr.GetCount();
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 			}
 		} else if (node.type) == _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT {
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_VAR;
 			currentInstr.value = i;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_TYPE;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TYPE;
 			currentInstr.value = node.typeIndex;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			ref<Type> varTypePtr = typeArr.At(node.typeIndex);
 			Type varType = @varTypePtr;
@@ -3000,7 +2856,7 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 			currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 			currentInstr.value = i;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if (node.type) == _cPARSER_NODETYPE_VARIABLE_ASSIGNMENT {
 			ref<Node> childPtr = nodeArr.At(node.firstChild);
 			Node child = @childPtr;
@@ -3017,13 +2873,13 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 				currentInstr.value = node.tokenIndex;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 
 				if assignmentType == _cTOKENTYPE_PLUS {
 					currentInstr.type = _cANALYSER_INSTRTYPE_ADD;
 					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 					currentInstr.value = 0;
-					instrArr.AddInstr(\currentInstr);
+					instrArr.Add(\currentInstr);
 				} else {
 					stdout.write("[Compiler]: Error: Unknown assignment type ");
 					stdout.writeln(assignmentType);
@@ -3034,13 +2890,13 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 			currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 			currentInstr.value = i;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else if ((node.type) == _cPARSER_NODETYPE_IF) | ((node.type) == _cPARSER_NODETYPE_ELSE_IF) {
 			if (node.type) == _cPARSER_NODETYPE_ELSE_IF {
 				currentInstr.type = _cANALYSER_INSTRTYPE_ELSE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 				currentInstr.value = labelCount;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 				labelCount += 1;
 			}
 			ref<Node> childPtr = nodeArr.At(node.firstChild);
@@ -3056,7 +2912,7 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 				currentInstr.type = _cANALYSER_INSTRTYPE_JMP_EQ;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_OFFSET;
 				currentInstr.value = 2;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 			} else {
 				stdout.write("[Compiler#AnalayseBody]: Error: Unknown top-level condition type ");
 				ui64 type = token.type;
@@ -3067,7 +2923,7 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 			currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LABEL;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 			currentInstr.value = labelCount + 1; // If there is an else (if), jump there, otherwise jump to end
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			if (node.type) == _cPARSER_NODETYPE_IF {
 				currentInstr.type = _cANALYSER_INSTRTYPE_IF;
@@ -3075,49 +2931,49 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 				currentInstr.type = _cANALYSER_INSTRTYPE_ELSE_IF;
 			}
 			currentInstr.value = labelCount;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 			labelCount += 1;
 
 			ui64 currentState = instrArr.GetCount();
 			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_STACK;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
 			currentInstr.value = 0;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			ui64 localStackSize = AnalyseBody(tArr, nodeArr, typeArr, instrArr, child.nextSibling, \labelCount);
-			instrArr.UpdateValue(currentState, localStackSize);
-			instrArr.UpdateValue(labelState, labelCount);
+			instrArr.UpdateField(currentState, 2, \localStackSize, 8);
+			instrArr.UpdateField(labelState, 2, \labelCount, 8);
 			parsingIf = true;
 		} else if (node.type) == _cPARSER_NODETYPE_ELSE {
 			currentInstr.type = _cANALYSER_INSTRTYPE_ELSE;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 			currentInstr.value = labelCount;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 			labelCount += 1;
 
 			ui64 currentState = instrArr.GetCount();
 			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_STACK;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
 			currentInstr.value = 0;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			ui64 localStackSize = AnalyseBody(tArr, nodeArr, typeArr, instrArr, node.firstChild, \labelCount);
-			instrArr.UpdateValue(currentState, localStackSize);
+			instrArr.UpdateField(currentState, 2, \localStackSize, 8);
 			loop j, startingIfs..s_ifs_count {
-				instrArr.UpdateValue(s_ifs[j], labelCount);
+				instrArr.UpdateField(s_ifs[j], 2, \labelCount, 8);
 			}
 			s_ifs_count -= (s_ifs_count - startingIfs);
 			currentInstr.type = _cANALYSER_INSTRTYPE_END_IF;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 			currentInstr.value = labelCount;
 			labelCount += 1;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 			parsingIf = false;
 		} else if (node.type) == _cPARSER_NODETYPE_LOOP {
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 			currentInstr.value = labelCount;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 			ui64 startLabel = labelCount;
 			labelCount += 1;
 			ui64 headerLabel = labelCount;
@@ -3126,7 +2982,7 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_STACK;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
 			currentInstr.value = 0;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			ui64 localStackSize = 0;
 			ui64 jmpState = 0;
@@ -3136,19 +2992,19 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 			ui64 blockOffset = node.firstChild;
 			if hasVariable {
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 				
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEF_VAR;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 				currentInstr.value = node.firstChild;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 				ref<Node> variableNodePtr = nodeArr.At(node.firstChild);
 				Node variableNode = @variableNodePtr;
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_WITH_TYPE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_TYPE;
 				currentInstr.value = 4; // NOTE: Hardcoded to be UI64. Will need to find some way to discover the actual type
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 				localStackSize += 8;
 
 				// NOTE: We might have to check if the loop has a step node. Assuming not for now
@@ -3156,101 +3012,101 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 				Node rangeMin = @rangeMinPtr;
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 				
 				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, rangeMin.firstChild);
 				currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 				currentInstr.value = node.firstChild;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP_HEADER;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 				currentInstr.value = headerLabel;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 				labelCount += 1;
 
 				ref<Node> rangeMaxPtr = nodeArr.At(rangeMin.nextSibling);
 				Node rangeMax = @rangeMaxPtr;
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, rangeMax.firstChild);
 				// currentInstr.type = _cANALYSER_INSTRTYPE_SET_RANGE_MAX;
 				// currentInstr.value = node.firstChild;
-				// instrArr.AddInstr(\currentInstr);
+				// instrArr.Add(\currentInstr);
 				blockOffset = rangeMax.nextSibling;
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_CMP_VARIABLE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 				currentInstr.value = variableNode.tokenIndex;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 
 				// NOTE: UNSIGNED because of the above hardcoded UI64 for the iterator
 				currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LT;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_OFFSET;
 				currentInstr.value = 2; // Jump two instructions, this one and the next instruction
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LABEL;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 				currentInstr.value = labelCount + 2;
 				jmpState = instrArr.GetCount();
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 			}
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP_BODY;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 			currentInstr.value = labelCount;
 			labelCount += 1;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 			localStackSize += AnalyseBody(tArr, nodeArr, typeArr, instrArr, blockOffset, \labelCount);
 
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP_FOOTER;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 			currentInstr.value = labelCount;
 			labelCount += 1;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			if hasVariable {
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 				
 				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 				currentInstr.value = child.tokenIndex;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_INC;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 				currentInstr.value = 1;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 				currentInstr.value = node.firstChild;
-				instrArr.AddInstr(\currentInstr);
+				instrArr.Add(\currentInstr);
 			}
 
 			currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LABEL;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 			currentInstr.value = headerLabel;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
-			instrArr.UpdateValue(jmpState, labelCount);
+			instrArr.UpdateField(jmpState, 2, \labelCount, 8);
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LOOP_BREAKDOWN;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 			currentInstr.value = labelCount;
 			labelCount += 1;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			currentInstr.type = _cANALYSER_INSTRTYPE_END_LOOP;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
 			currentInstr.value = startLabel;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
-			instrArr.UpdateValue(currentState, localStackSize);
+			instrArr.UpdateField(currentState, 2, \localStackSize, 8);
 			
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else {
 			stdout.write("[Compiler#AnalyseBody]: ERROR: Unknown node type ");
 			ui64 type = node.type;
@@ -3270,11 +3126,9 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr
 	return stackSize;
 }
 
-void Analyse(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ref<InstrArr> instrArr) {
+void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ref<DynArray> instrArr) {
 	// We expect this to be either; VarDeclAssign, VarDecl, Import, Macro, Struct, FuncDecl
 	ui64 nodeCount = nodeArr.GetCount();
-	VariableArr varArr = {0, 0, 0};
-	varArr.New(nodeCount);
 	// At a leaf-node, the next node to check is just the leaf index + 1.
 	// For (class) functions, the one with no NS is the last function. This actually counts for everything, but for classes it's important so we can put an END_CLASS after the function.
 	// If we have a ANALYSE_FUNCTION function or something, it's important that it returns the index of the last visited node, so we do a + 1 for the next node.
@@ -3290,7 +3144,7 @@ void Analyse(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, re
 		if (t.line) != s_line_number {
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
 			currentInstr.value = (t.line) - s_line_number;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 			s_line_number = t.line;
 		}
 
@@ -3299,12 +3153,12 @@ void Analyse(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, re
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_FUNC;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 			currentInstr.value = i;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_TYPE;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TYPE;
 			currentInstr.value = nextNode.typeIndex;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			ui64 stackSize = 0;
 
@@ -3312,7 +3166,7 @@ void Analyse(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, re
 			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_STACK;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
 			currentInstr.value = 0;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			ref<Node> firstChild = nodeArr.At(nextNode.firstChild);
 			Node child = @firstChild;
@@ -3326,12 +3180,12 @@ void Analyse(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, re
 					currentInstr.type = _cANALYSER_INSTRTYPE_DEF_PARAM;
 					currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 					currentInstr.value = j;
-					instrArr.AddInstr(\currentInstr);
+					instrArr.Add(\currentInstr);
 
 					currentInstr.type = _cANALYSER_INSTRTYPE_WITH_TYPE;
 					currentInstr.valueType = _cANALYSER_INSTRVALUE_TYPE;
 					currentInstr.value = argNode.typeIndex;
-					instrArr.AddInstr(\currentInstr);
+					instrArr.Add(\currentInstr);
 
 					ref<Type> varTypePtr = typeArr.At(argNode.typeIndex);
 					Type varType = @varTypePtr;
@@ -3346,20 +3200,20 @@ void Analyse(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, re
 				bodyOffset = child.nextSibling;
 			}
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 			ui64 labelCount = 0;
 			stackSize += AnalyseBody(tArr, nodeArr, typeArr, instrArr, bodyOffset, \labelCount);
 
-			instrArr.UpdateValue(currentState, stackSize);
+			instrArr.UpdateField(currentState, 2, \stackSize, 8);
 			
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_EPILOGUE_BEGIN;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 
 			// END_FUNCTION
 			currentInstr.type = _cANALYSER_INSTRTYPE_END_FUNC;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 			currentInstr.value = i;
-			instrArr.AddInstr(\currentInstr);
+			instrArr.Add(\currentInstr);
 		} else {
 			stdout.write("[Compiler#Analyse]: ERROR: Unknown node type ");
 			ui64 type = nextNode.type;
@@ -3376,7 +3230,7 @@ void Analyse(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, re
 	}
 }
 
-void PrintInstrArray(ref<InstrArr> instrArr) {
+void PrintInstrArray(ref<DynArray> instrArr) {
 	ui64 instrCount = instrArr.GetCount();
 	loop i, 0..instrCount {
 		ref<Instr> instrPtr = instrArr.At(i);
@@ -3479,7 +3333,7 @@ void PrintInstrArray(ref<InstrArr> instrArr) {
 	}
 }
 
-void PrintASTAsDot(ref<DynArray> tArr, ref<NodeArr> nodeArr) {
+void PrintASTAsDot(ref<DynArray> tArr, ref<DynArray> nodeArr) {
 	ui64 nodeCount = nodeArr.GetCount();
 	stdout.writeln("digraph \"\"");
 	stdout.writeln(" {");
@@ -4291,7 +4145,7 @@ void FinishDebugInfo() {
 	s_debug_info.UpdateBytes(\toUpdateLength, 0, 4);	
 }
 
-void AddDebugInfo(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ref<ByteArr> bytes) {
+void AddDebugInfo(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ref<ByteArr> bytes) {
 	//stdout.writeln(fd);
 	// Add debug line info
 	ui64 lineLengthState = bytes.GetCount();
@@ -4342,7 +4196,7 @@ void AddDebugInfo(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeAr
 
 ui64[20] s_section_offsets;
 
-void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> typeArr, ref<InstrArr> instrArr, i32 fd, ref<ui8> fileName) {
+void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ref<DynArray> instrArr, i32 fd, ref<ui8> fileName) {
 	ByteArr bytes = {0, 0, 0};
 	bytes.New(1024);
 
@@ -4467,9 +4321,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 	ui64 stackVariables = 0;
 	ui64 paramCount = 0;
 	ui64 offset = 0;
-	VariableArr variables = {0, 0, 0};
+	DynArray variables = {0, 0, 0, 36};
 	variables.New(128);
-	Variable currentVar = {0, 0, 0};
+	Variable currentVar = {0, 0, 0, 0, 0};
 	ui8 lastInstructionType = 0;
 	ui64 instructionCounter = 0;
 	ui64 lastJumpState = 0;
@@ -4611,11 +4465,17 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			currentVar.tokenIndex = node.GetTokenIndex();
 			ref<Token> tPtr = tArr.At(currentVar.tokenIndex);
 			Token t = @tPtr;
+			currentVar.name = t.text;
+			currentVar.nameLength = t.textLength;
 			DebugAddParameter(t.text, t.textLength);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_VAR {
 			currentVar.nodeIndex = instruction.value;
 			ref<Node> node = nodeArr.At(instruction.value);
 			currentVar.tokenIndex = node.GetTokenIndex();
+			ref<Token> tPtr = tArr.At(currentVar.tokenIndex);
+			Token t = @tPtr;
+			currentVar.name = t.text;
+			currentVar.nameLength = t.textLength;
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_ARG {
 			ui64 argNumber = instruction.value;
 			if argNumber >= 6 {
@@ -4629,7 +4489,10 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			//ref<Node> nodePtr = nodeArr.At(currentVar.nodeIndex);
 			ref<Node> nodePtr = nodeArr.At(instruction.value);
 			Node node = @nodePtr;
-			ui64 index = variables.FindVarIndex(tArr, node.tokenIndex);
+			ref<Token> varTokenPtr = tArr.At(node.tokenIndex);
+			Token varToken = @varTokenPtr;
+
+			ui64 index = variables.Find(8, varToken.text, varToken.textLength);
 			if index == -1 {
 				stdout.write("[Compiler]: Error: Unknown variable ");
 				ref<Token> t = tArr.At(node.tokenIndex);
@@ -4645,7 +4508,10 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			MoveRBP(\textBytes, variable.offset, 0, type.byteSize);
 			regsInUse[0] = false;
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_VARIABLE {
-			ui64 index = variables.FindVarIndex(tArr, instruction.value);
+			ref<Token> varTokenPtr = tArr.At(instruction.value);
+			Token varToken = @varTokenPtr;
+
+			ui64 index = variables.Find(8, varToken.text, varToken.textLength);
 			if index == -1 {
 				stdout.write("[Compiler]: Error: Unknown variable ");
 				ref<Token> t = tArr.At(instruction.value);
@@ -4667,7 +4533,10 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 				regsInUse[0] = true;
 			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_VARIABLE {
-			ui64 index = variables.FindVarIndex(tArr, instruction.value);
+			ref<Token> varTokenPtr = tArr.At(instruction.value);
+			Token varToken = @varTokenPtr;
+
+			ui64 index = variables.Find(8, varToken.text, varToken.textLength);
 			if index == -1 {
 				stdout.write("[Compiler]: Error: Unknown variable ");
 				ref<Token> t = tArr.At(instruction.value);
@@ -4786,7 +4655,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_PARAM {
 				offset += size;
 				currentVar.offset = offset * -1;
-				variables.AddVar(\currentVar);
+				variables.Add(\currentVar);
 				// mov [rbp-offset], param index
 				// paramCount += 1
 				if paramCount < 6 {
@@ -4800,7 +4669,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<NodeArr> nodeArr, ref<DynArray> type
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_VAR {
 				offset += size;
 				currentVar.offset = offset * -1;
-				variables.AddVar(\currentVar);
+				variables.Add(\currentVar);
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_FUNC {
 				DebugEndChain();
 			} else {
@@ -5155,7 +5024,7 @@ ui8 main(cstring[] argv) {
 	Tokenise(\tokens, source, sizeRead, \s_file_name);
 	ui64 tokenCount = tokens.count;
 
-	NodeArr nodes = {0, 0, 0};
+	DynArray nodes = {0, 0, 0, 22};
 	nodes.New(tokenCount);
 	DynArray types = {0, 0, 0, 18};
 	types.New(256);
@@ -5173,8 +5042,8 @@ ui8 main(cstring[] argv) {
 
 	PrintASTAsDot(\tokens, \nodes);
 
-	InstrArr instructions = {0, 0, 0};
-	instructions.New(tokenCount);
+	DynArray instructions = {0, 0, 0, 10};
+	instructions.New(tokenCount * 2);
 	Analyse(\tokens, \nodes, \types, \instructions);
 	PrintInstrArray(\instructions);
 
@@ -5190,35 +5059,5 @@ ui8 main(cstring[] argv) {
 	CompileToELF64(\tokens, \nodes, \types, \instructions, outputFd, \s_file_name);
 	SYS_CLOSE(outputFd);
 
-	return 0;
-}
-
-
-// Structure idea here
-
-
-struct Function {
-	ref<ui8> name;
-	ui64 nameLength;
-	ui64 low_pc;
-	ui64 high_pc;
-	ui64 definingNodeIndex;
-	// rest same as SymbolEntry
-}
-
-ui8 Compile2() {
-	// in compilation step
-	// after every END_FUNC, add a Function struct to the DynArray
-	// For every section I want to add, I can add it wherever I want.
-	// String Table iterates over the Section DynArray for all the names
-	// Symbol table iterates over the Function DynArray, and the Section DynArray
-	// Section Headers iterates over the Section DynArray, and does the padding and offset in the loop
-	
-	// Debugging information gets generated before the section headers, but after the rest
-	// * Making use of the Function DynArray, NodeArray, DynArrayay, and DynArrayay
-	// * Line number information before every statement.
-	// * * Investigate the compiled test.c example for what it is doing
-	// * * And incrementally add to that example file to understand how it's generating the information
-	
 	return 0;
 }
