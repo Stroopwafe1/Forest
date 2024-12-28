@@ -1853,9 +1853,9 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		outfile << "\t" << convertARegSize(size) << std::endl;
 		outfile << "\txor rdx, rdx; Clearing rdx for division" << std::endl;
 		if (curr.sign)
-			outfile << "\tidiv " << r1 << ", " << r2 << std::endl;
+			outfile << "\tidiv " << r2 << std::endl;
 		else
-			outfile << "\tdiv " << r1 << ", " << r2 << std::endl;
+			outfile << "\tdiv " << r2 << std::endl;
 	} else if (expression->mValue.mText == "%") {
 		int size = getEvenSize(leftSize, rightSize);
 		std::string r1 = getRegister("a", size);
@@ -1864,9 +1864,9 @@ ExpressionPrinted X86_64LinuxYasmCompiler::printExpression(std::ofstream& outfil
 		outfile << "\t" << convertARegSize(size) << std::endl;
 		outfile << "\txor rdx, rdx; Clearing rdx for division" << std::endl;
 		if (curr.sign)
-			outfile << "\tidiv " << r1 << ", " << r2 << std::endl;
+			outfile << "\tidiv " << r2 << std::endl;
 		else
-			outfile << "\tdiv " << r1 << ", " << r2 << std::endl;
+			outfile << "\tdiv " << r2 << std::endl;
 		outfile << "\tmov " << r1 << ", " << r3 << std::endl; // Remainder of div (mod) is stored in d-register
 	} else if (expression->mValue.mText == "<") {
 		printConditionalMove(outfile, leftSize, rightSize, "cmovl");

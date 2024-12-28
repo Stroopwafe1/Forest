@@ -1111,6 +1111,7 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 			}
 			returnVal += 2;
 		}
+		childTypeIndex = typeArr.GetCount();
 		typeArr.Add(\typ);
 	}
 	else if ttype == _cTOKENTYPE_LESS_THAN {
@@ -1132,6 +1133,7 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 		} else if isArr {
 			typ.typeType = _cPARSER_TYPETYPE_ARRAY;
 		}
+		childTypeIndex = typeCount;
 		typeArr.Add(\typ);
 		s_nested_type_depth += 1;
 		ui16 depth = ParseType(tArr, typeArr, offset + 2);
@@ -1160,14 +1162,12 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 		}
 		returnVal += (2 + depth);
 	} else {
-		if s_nested_type_depth > 0 {
-			s_nested_types[s_nested_type_depth] = childTypeIndex;
-		}
+		s_nested_types[s_nested_type_depth] = childTypeIndex;
+
 		return returnVal;
 	}
-	if s_nested_type_depth > 0 {
-		s_nested_types[s_nested_type_depth] = childTypeIndex;
-	}
+
+	s_nested_types[s_nested_type_depth] = childTypeIndex;
 
 	return returnVal;
 }
@@ -1699,13 +1699,9 @@ ui64 ParseVarAssignment(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset) 
 ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset) {
 	DynArray types = @typeArr;
 	DynArray tokens = @tArr;
-	ui64 currType = types.count;
 	ui64 toSkip = ParseType(tArr, typeArr, offset);
 	ref<Token> token = tArr.At(offset);
-	ui64 ttypeIndex = GetTypeIndexFromName(typeArr, token);
-	if ttypeIndex == 15 {
-		ttypeIndex = currType;
-	}
+	ui64 ttypeIndex = s_nested_types[0];
 	ref<Token> assignTokenPtr = tArr.At((offset + toSkip) + 1);
 	Token assignToken = @assignTokenPtr;
 
@@ -2124,12 +2120,8 @@ ui64 ParseFunction(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> type
 	DynArray types = @typeArr;
 	ref<Token> token = tArr.At(offset);
 
-	ui64 currType = types.count;
 	ui64 returnVal = ParseType(tArr, typeArr, offset);
-	ui64 typeIndex = GetTypeIndexFromName(typeArr, token);
-	if typeIndex == 15 {
-		typeIndex = currType;
-	}
+	ui64 typeIndex = s_nested_types[0];
 
 	ref<Token> functionToken = tArr.At(offset + returnVal);
 	ui64 nodeCount = nodeArr.GetCount();
@@ -2240,12 +2232,8 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			break;
 		}
 
-		ui64 currType = typeArr.GetCount();
 		ui64 toSkip = ParseType(tArr, typeArr, i);
-		ui64 typeIndex = GetTypeIndexFromName(typeArr, token);
-		if typeIndex == 15 {
-			typeIndex = currType;
-		}
+		ui64 typeIndex = s_nested_types[0];
 
 		ui64 nodeCount = nodeArr.GetCount();
 		currentNode.firstChild = nodeCount + 1;
@@ -2778,15 +2766,25 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 		ref<Node> nodePtr = nodeArr.At(i);
 		Node node = @nodePtr;
 
+		if (node.nextSibling) != -1 {
+			ref<Node> nextNodePtr = nodeArr.At(node.nextSibling);
+			Node nextNode = @nextNodePtr;
+			ref<Token> tPtr = tArr.At(nextNode.tokenIndex);
+			Token t = @tPtr;
+
+			if (t.line) != s_line_number {
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
+				currentInstr.value = (t.line) - s_line_number;
+				instrArr.Add(\currentInstr);
+				s_line_number = t.line;
+			}
+		}
+
 		ref<Token> tPtr = tArr.At(node.tokenIndex);
 		Token t = @tPtr;
-		
-		if (t.line) != s_line_number {
-			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
-			currentInstr.value = (t.line) - s_line_number;
-			instrArr.Add(\currentInstr);
-			s_line_number = t.line;
-		}
+		currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_COLUMN;
+		currentInstr.value = t.column;
+		instrArr.Add(\currentInstr);
 		
 		currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
 		instrArr.Add(\currentInstr);
@@ -3136,10 +3134,10 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 	Instr currentInstr = {0, 0, 0}; // type, valueType, value
 	ui64 i = 1;
 	loop {
-		ref<Node> nextNodePtr = nodeArr.At(i);
-		Node nextNode = @nextNodePtr;
+		ref<Node> nodePtr = nodeArr.At(i);
+		Node node = @nodePtr;
 
-		ref<Token> tPtr = tArr.At(nextNode.tokenIndex);
+		ref<Token> tPtr = tArr.At(node.tokenIndex);
 		Token t = @tPtr;
 		if (t.line) != s_line_number {
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
@@ -3148,7 +3146,7 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 			s_line_number = t.line;
 		}
 
-		if (nextNode.type) == _cPARSER_NODETYPE_FUNCTION {
+		if (node.type) == _cPARSER_NODETYPE_FUNCTION {
 			// DEF_FUNCTION
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_FUNC;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
@@ -3157,7 +3155,7 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 
 			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_TYPE;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TYPE;
-			currentInstr.value = nextNode.typeIndex;
+			currentInstr.value = node.typeIndex;
 			instrArr.Add(\currentInstr);
 
 			ui64 stackSize = 0;
@@ -3168,9 +3166,9 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 			currentInstr.value = 0;
 			instrArr.Add(\currentInstr);
 
-			ref<Node> firstChild = nodeArr.At(nextNode.firstChild);
+			ref<Node> firstChild = nodeArr.At(node.firstChild);
 			Node child = @firstChild;
-			ui64 bodyOffset = nextNode.firstChild;
+			ui64 bodyOffset = node.firstChild;
 			if (child.type) == _cPARSER_NODETYPE_PARAM_LIST {
 
 				// Analyse Param list. End is if node.NS == -1
@@ -3199,13 +3197,38 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 				// analyse body
 				bodyOffset = child.nextSibling;
 			}
+			if bodyOffset != -1 {
+				ref<Node> bodyPtr = nodeArr.At(bodyOffset);
+				Node body = @bodyPtr;
+
+				ref<Node> nextNodePtr = nodeArr.At(body.firstChild);
+				Node nextNode = @nextNodePtr;
+				ref<Token> nextTPtr = tArr.At(nextNode.tokenIndex);
+				Token nextT = @nextTPtr;
+
+				if (nextT.line) != s_line_number {
+					currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
+					currentInstr.value = (nextT.line) - s_line_number;
+					instrArr.Add(\currentInstr);
+					s_line_number = nextT.line;
+				}
+			}
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_COLUMN;
+			currentInstr.value = t.column;
+			instrArr.Add(\currentInstr);
+
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END;
 			instrArr.Add(\currentInstr);
+
 			ui64 labelCount = 0;
 			stackSize += AnalyseBody(tArr, nodeArr, typeArr, instrArr, bodyOffset, \labelCount);
 
 			instrArr.UpdateField(currentState, 2, \stackSize, 8);
-			
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
+			currentInstr.value = 1;
+			instrArr.Add(\currentInstr);
+
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_EPILOGUE_BEGIN;
 			instrArr.Add(\currentInstr);
 
@@ -3216,120 +3239,124 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 			instrArr.Add(\currentInstr);
 		} else {
 			stdout.write("[Compiler#Analyse]: ERROR: Unknown node type ");
-			ui64 type = nextNode.type;
+			ui64 type = node.type;
 			stdout.writeln(type);
 			SYS_EXIT(1);
 		}
 
-		if (nextNode.nextSibling) == -1 {
+		if (node.nextSibling) == -1 {
 			break;
-		} else if (nextNode.nextSibling) >= nodeCount {
+		} else if (node.nextSibling) >= nodeCount {
 			break;
 		}
-		i = nextNode.nextSibling;
+		i = node.nextSibling;
 	}
+}
+
+void PrintInstr(ref<Instr> instrPtr) {
+	Instr instruction = @instrPtr;
+	if (instruction.type) == _cANALYSER_INSTRTYPE_NONE {
+		stdout.write("NONE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_FUNC {
+		stdout.write("DEF_FUNC ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_FUNC {
+		stdout.write("END_FUNC ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_PARAM {
+		stdout.write("DEF_PARAM ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_TYPE {
+		stdout.write("WITH_TYPE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_STACK {
+		stdout.write("WITH_STACK ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_VAR {
+		stdout.write("DEF_VAR ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_VALUE {
+		stdout.write("SET_VALUE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_INTEGER {
+		stdout.write("LOAD_INTEGER ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_VARIABLE {
+		stdout.write("LOAD_VARIABLE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
+		stdout.write("RETURN ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_ADD {
+		stdout.write("ADD ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_SUB {
+		stdout.write("SUB ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_MULT {
+		stdout.write("MULT ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DIV {
+		stdout.write("DIV ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_MOD {
+		stdout.write("MOD ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_POWER {
+		stdout.write("POWER ");
+	}  else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP {
+		stdout.write("DEF_LOOP ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_LOADED {
+		stdout.write("CMP_LOADED ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_VARIABLE {
+		stdout.write("CMP_VARIABLE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LABEL {
+		stdout.write("JMP_LABEL ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_HEADER {
+		stdout.write("DEF_LOOP_HEADER ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_BODY {
+		stdout.write("DEF_LOOP_BODY ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_FOOTER {
+		stdout.write("DEF_LOOP_FOOTER ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_BREAKDOWN {
+		stdout.write("DEF_LOOP_BREAKDOWN ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_LOOP {
+		stdout.write("END_LOOP ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_INC {
+		stdout.write("INC ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LT {
+		stdout.write("JMP_LT ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_EQ {
+		stdout.write("JMP_EQ ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_IF {
+		stdout.write("IF ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_IF {
+		stdout.write("END_IF ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_ELSE {
+		stdout.write("ELSE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_ELSE_IF {
+		stdout.write("ELSE_IF ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_ARG {
+		stdout.write("SET_ARG ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_CALL_FUNC {
+		stdout.write("CALL_FUNC ");
+	} else if (instruction.type) >= 100 {
+		if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END {
+			stdout.write("DBG_PROLOGUE_END ");
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_EPILOGUE_BEGIN {
+			stdout.write("DBG_EPILOGUE_BEGIN ");
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE {
+			stdout.write("DBG_ADVANCE_LINE ");
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_STATEMENT {
+			stdout.write("DBG_STATEMENT ");
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_BASIC_BLOCK {
+			stdout.write("DBG_BASIC_BLOCK ");
+		} else {
+			stdout.write("<Debugging instruction> ");
+			ui64 type = instruction.type;
+			stdout.write(type);
+			stdout.write(" ");
+		}
+	} else {
+		stdout.write("[Compiler#PrintInstruction]: ERROR: Unknown instruction type ");
+		ui64 type = instruction.type;
+		stdout.writeln(type);
+		SYS_EXIT(1);
+	}
+	ui64 value = instruction.value;
+	stdout.writeln(value);
 }
 
 void PrintInstrArray(ref<DynArray> instrArr) {
 	ui64 instrCount = instrArr.GetCount();
 	loop i, 0..instrCount {
 		ref<Instr> instrPtr = instrArr.At(i);
-		Instr instruction = @instrPtr;
-		if (instruction.type) == _cANALYSER_INSTRTYPE_NONE {
-			stdout.write("NONE ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_FUNC {
-			stdout.write("DEF_FUNC ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_FUNC {
-			stdout.write("END_FUNC ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_PARAM {
-			stdout.write("DEF_PARAM ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_TYPE {
-			stdout.write("WITH_TYPE ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_STACK {
-			stdout.write("WITH_STACK ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_VAR {
-			stdout.write("DEF_VAR ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_VALUE {
-			stdout.write("SET_VALUE ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_INTEGER {
-			stdout.write("LOAD_INTEGER ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_VARIABLE {
-			stdout.write("LOAD_VARIABLE ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
-			stdout.write("RETURN ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_ADD {
-			stdout.write("ADD ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SUB {
-			stdout.write("SUB ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_MULT {
-			stdout.write("MULT ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DIV {
-			stdout.write("DIV ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_MOD {
-			stdout.write("MOD ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_POWER {
-			stdout.write("POWER ");
-		}  else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP {
-			stdout.write("DEF_LOOP ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_LOADED {
-			stdout.write("CMP_LOADED ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_VARIABLE {
-			stdout.write("CMP_VARIABLE ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LABEL {
-			stdout.write("JMP_LABEL ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_HEADER {
-			stdout.write("DEF_LOOP_HEADER ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_BODY {
-			stdout.write("DEF_LOOP_BODY ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_FOOTER {
-			stdout.write("DEF_LOOP_FOOTER ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_BREAKDOWN {
-			stdout.write("DEF_LOOP_BREAKDOWN ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_LOOP {
-			stdout.write("END_LOOP ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_INC {
-			stdout.write("INC ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LT {
-			stdout.write("JMP_LT ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_EQ {
-			stdout.write("JMP_EQ ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_IF {
-			stdout.write("IF ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_IF {
-			stdout.write("END_IF ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_ELSE {
-			stdout.write("ELSE ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_ELSE_IF {
-			stdout.write("ELSE_IF ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_ARG {
-			stdout.write("SET_ARG ");
-		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CALL_FUNC {
-			stdout.write("CALL_FUNC ");
-		} else if (instruction.type) >= 100 {
-			if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END {
-				stdout.write("DBG_PROLOGUE_END ");
-			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_EPILOGUE_BEGIN {
-				stdout.write("DBG_EPILOGUE_BEGIN ");
-			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE {
-				stdout.write("DBG_ADVANCE_LINE ");
-			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_STATEMENT {
-				stdout.write("DBG_STATEMENT ");
-			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_BASIC_BLOCK {
-				stdout.write("DBG_BASIC_BLOCK ");
-			} else {
-				stdout.write("<Debugging instruction> ");
-				ui64 type = instruction.type;
-				stdout.write(type);
-				stdout.write(" ");
-			}
-		} else {
-			stdout.write("[Compiler#PrintInstruction]: ERROR: Unknown instruction type ");
-			ui64 type = instruction.type;
-			stdout.writeln(type);
-			SYS_EXIT(1);
-		}
-		ui64 value = instruction.value;
-		stdout.writeln(value);
+		PrintInstr(instrPtr);
 	}
 }
 
@@ -3915,6 +3942,7 @@ ref<ByteArr> s_debug_abbrev = 0;
 ui64 s_debug_index = 1;
 ref<ByteArr> s_rela_debug_info = 0;
 ui64 s_symbol_text = 0;
+ref<ByteArr> s_debug_aranges = 0;
 
 void AddSymbolTableEntry(ref<ByteArr> bytes, ui32 name, ui8 info, ui16 sectionHeaderIndex, ui64 value, ui64 size) {
 	Elf64SymbolTableEntry entry = {
@@ -3928,10 +3956,10 @@ void AddSymbolTableEntry(ref<ByteArr> bytes, ui32 name, ui8 info, ui16 sectionHe
 	bytes.AddBytes(\entry, 0x18);
 }
 
-ui16 GetLineNumberOpcode(ui8 lineIncrement, ui8 opcodeAdvance) {
-	ui8 lineBase = 0;
-	ui8 lineRange = 10;
-	ui8 opcodeBase = 13;
+ui16 GetLineNumberOpcode(i8 lineIncrement, i8 opcodeAdvance) {
+	i8 lineBase = -5;
+	i8 lineRange = 14;
+	i8 opcodeBase = 13;
 	return ((lineIncrement - lineBase) + (lineRange * opcodeAdvance)) + opcodeBase;
 }
 
@@ -3946,6 +3974,7 @@ void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 			lastSlash = i;
 		}
 	}
+	lastSlash += 1;
 	s_dir_path[lastSlash] = 0;
 	stdout.writeln("Directory of file");
 	SYS_WRITE(1, \s_dir_path, lastSlash);
@@ -3996,8 +4025,9 @@ void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 
 	s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
 	s_debug_abbrev.AddULEB128(0x08); // DW_FORM_string
-	ui64 fileNameLength = GetLengthOfCstring(fileName);
-	s_debug_info.AddBytes(fileName, fileNameLength + 1);
+	ui64 fileNameLength = GetLengthOfCstring(\s_file_name);
+	s_debug_info.AddBytes((\s_file_name) + lastSlash, (fileNameLength - lastSlash) + 1); // File name
+	//s_debug_info.AddULEB128(0);
 
 	s_debug_abbrev.AddULEB128(0x25); // DW_AT_producer
 	s_debug_abbrev.AddULEB128(0x08); // string
@@ -4006,7 +4036,8 @@ void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 
 	s_debug_abbrev.AddULEB128(0x1b); // DW_AT_comp_dir
 	s_debug_abbrev.AddULEB128(0x08); // string
-	s_debug_info.AddBytes(\s_dir_path, lastSlash + 1);
+	s_debug_info.AddBytes(\s_dir_path, lastSlash);
+	s_debug_info.AddByte(0);
 
 	s_debug_abbrev.AddULEB128(0x10); // DW_AT_stmt_list
 	s_debug_abbrev.AddULEB128(0x17); // DW_FORM_sec_offset
@@ -4077,6 +4108,41 @@ void DebugAddTypes(ref<DynArray> typeArr) {
 	// TODO: All types with child types cannot be gotten yet because I forgot to add them in parsing
 }
 
+ui8 DebugLineAddCode(ui64 opDiff, ui64 lineDiff, ui8 debugByte, ref<ByteArr> lineInfoBytes) {
+	ui16 specialOpcode = GetLineNumberOpcode(lineDiff, opDiff);
+	stdout.write("Increasing line number by: ");
+	stdout.write(lineDiff);
+	stdout.write(" and ops by: ");
+	stdout.write(opDiff);
+	stdout.write(" Opcode: ");
+	stdout.writeln(specialOpcode);
+	bool shouldExit = false;
+	if opDiff > 23 {
+		lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_PC - 100);
+		lineInfoBytes.AddULEB128(opDiff);
+		shouldExit = true;
+	}
+	if lineDiff > 10 {
+		lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE - 100);
+		lineInfoBytes.AddSLEB128(lineDiff);
+		shouldExit = true;
+	}
+	if specialOpcode > 255 {
+		stdout.write("[Compiler#CompileToELF64]: Error: Debug Line Info opcode > 255. Is ");
+		stdout.writeln(specialOpcode);
+		SYS_EXIT(1);
+	}
+	if shouldExit {
+		return 0;
+	}
+	if (opDiff <= 23) & (lineDiff <= 10) {
+		lineInfoBytes.AddByte(specialOpcode);
+	} else {
+		lineInfoBytes.AddByte(debugByte);
+	}
+	return 1;
+}
+
 ui64 s_debug_function_state = 0;
 
 void DebugAddFunction(ref<ui8> name, ui64 nameLength, ui64 byteOffset) {
@@ -4138,6 +4204,45 @@ void DebugEndChain() {
 	s_debug_abbrev.AddByte(0);
 }
 
+void DebugAddAranges(ref<ByteArr> relaBytes, ui64 debugInfoSymbol) {
+	s_debug_aranges.AddUI32(0); // Length;
+	s_debug_aranges.AddUI16(2); // Version (always 2)
+
+	ui64 byteCount = s_debug_aranges.GetCount();
+	Elf64RelocationAddendEntry relaEntry = {
+		byteCount,
+		GetRelocationInfo(debugInfoSymbol, 0xa),
+		0
+	};
+	s_debug_aranges.AddUI32(0); // debug_info_offset (needs relocation to debug info)
+	relaBytes.AddBytes(\relaEntry, 0x18);
+
+	s_debug_aranges.AddByte(8); // Address size
+	s_debug_aranges.AddByte(0); // segment_selector_size
+
+	byteCount = s_debug_aranges.GetCount();
+	ui8 padding = (16 - (byteCount % 16)) % 16;
+	s_debug_aranges.AddSame(0, padding);
+
+	byteCount = s_debug_aranges.GetCount();
+	relaEntry = {
+		byteCount,
+		GetRelocationInfo(s_symbol_text, 0x1),
+		0
+	};
+
+	s_debug_aranges.AddUI64(0x40); // Address of text section (Needs relocation)
+	s_debug_aranges.AddUI64(s_executable_code_size); // Length of text section
+	relaBytes.AddBytes(\relaEntry, 0x18);
+
+	s_debug_aranges.AddUI64(0); // Null address
+	s_debug_aranges.AddUI64(0); // Null length
+
+	byteCount = s_debug_aranges.GetCount();
+	ui32 actualLength = byteCount - 4;
+	s_debug_aranges.UpdateBytes(\actualLength, 0, 4);
+}
+
 void FinishDebugInfo() {
 	s_debug_abbrev.AddSame(0, 8);
 	ui32 endInfoState = s_debug_info.GetCount();
@@ -4158,8 +4263,8 @@ void AddDebugInfo(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeA
 	bytes.AddByte(1); // Minimum instruction length
 	bytes.AddByte(1); // Maximum operations per instruction
 	bytes.AddByte(1); // Default is statement
-	bytes.AddByte(0x0); // Line base is 0 for some reason
-	bytes.AddByte(0xa); // Line range is 10
+	bytes.AddByte(-5); // line base
+	bytes.AddByte(14); // Line range
 	bytes.AddByte(0x0d); // Opcode base (just a default value for DWARF-3 and higher)
 	bytes.AddByte(0); // Standard opcode lengths. I still don't know what the fuck this is but the following 12 values are required (stolen from a gcc compiled object file
 	bytes.AddByte(1);
@@ -4179,12 +4284,30 @@ void AddDebugInfo(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeA
 	bytes.AddULEB128(8); // DW_FORM_STRING (part of directory_entry_format)
 	bytes.AddULEB128(1); // Directories count
 	bytes.AddBytes(\s_dir_path, s_dir_path_length + 1); // Directory 
-	bytes.AddByte(1); // File name entry count
+	bytes.AddByte(2); // File name entry count
 	bytes.AddULEB128(1); // DW_LNCT_PATH (part of file_name_entry_format)
 	bytes.AddULEB128(8); // DW_FORM_STRING (part of file_name_entry_format)
-	bytes.AddULEB128(1); // File name count
+
+	bytes.AddULEB128(2); // DW_LCNT_directory_index
+	bytes.AddULEB128(0x0f); // DW_FORM_udata
+
+	bytes.AddULEB128(2); // File name count
+
+	ui64 lastSlash = 0;
 	ui64 fileNameLength = GetLengthOfCstring(\s_file_name);
-	bytes.AddBytes(\s_file_name, fileNameLength + 1); // File name
+	loop i, 0..fileNameLength {
+		if (s_file_name[i]) == '/' {
+			lastSlash = i;
+		}
+	}
+	lastSlash += 1;
+
+	bytes.AddBytes((\s_file_name) + lastSlash, (fileNameLength - lastSlash) + 1); // File name
+	bytes.AddULEB128(0);
+	bytes.AddBytes((\s_file_name) + lastSlash, (fileNameLength - lastSlash) + 1); // File name
+	bytes.AddULEB128(0);
+
+	//bytes.AddSame(0, 12);
 
 	ui64 byteCount = bytes.GetCount();
 	s_debug_line_size = byteCount - s_offset_debug_line;
@@ -4206,8 +4329,12 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	ByteArr infoBytes = {0, 0, 0};
 	infoBytes.New(1024);
 
+	ByteArr arangesBytes = {0, 0, 0};
+	arangesBytes.New(1024);
+
 	s_debug_info = \infoBytes;
 	s_debug_abbrev = \abbrevBytes;
+	s_debug_aranges = \arangesBytes;
 
 	ByteArr lineInfoBytes = {0, 0, 0};
 	lineInfoBytes.New(1024);
@@ -4227,6 +4354,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	relaDebugInfoBytes.New(1024);
 	ByteArr relaDebugLineBytes = {0, 0, 0};
 	relaDebugLineBytes.New(1024);
+
+	ByteArr relaDebugArangesBytes = {0, 0, 0};
+	relaDebugArangesBytes.New(1024);
 
 	s_rela_debug_info = \relaDebugInfoBytes;
 	
@@ -4338,10 +4468,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	ui64 lineRelaState = lineInfoBytes.GetCount();
 	lineInfoBytes.AddUI64(0);
 	lineInfoBytes.AddByte(0x4); // DW_LNS_set_file
-	lineInfoBytes.AddByte(0);
-	
-	lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_PC - 100);
-	lineInfoBytes.AddULEB128(46);
+	lineInfoBytes.AddByte(1);
+
 	dbgLastOpcodeByte = 46;
 	ui64 lastFunctionOffset = 0;
 	loop i, 0..instrCount {
@@ -4728,53 +4856,56 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			regsInUse[0] = true;
 			regsInUse[2] = true;
 			regsInUse[3] = false;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE {
+			line += (instruction.value);
 		} else if (instruction.type) >= 100 {
+			PrintInstr(instrPtr);
+
 			// Debugging instructions
 			// if !debug { skip; }
 			ui8 debugByte = (instruction.type) - 100;
-			//if (debugByte == 0) | (debugByte == 13) {
-				ui64 newOpByte = textBytes.GetCount();
-				ui64 opDiff = newOpByte - dbgLastOpcodeByte;
-				ui64 lineDiff = line - dbgLastLine;
-				dbgLastLine = line;
-				dbgLastOpcodeByte = newOpByte;
-				/*if (opDiff == 0) & (lineDiff == 0) {
-					skip;
-				}*/
-				ui16 specialOpcode = GetLineNumberOpcode(lineDiff, opDiff);
-				stdout.write("Increasing line number by: ");
-				stdout.write(lineDiff);
-				stdout.write(" and ops by: ");
-			stdout.write(opDiff);
-			stdout.write(" Opcode: ");
-			stdout.writeln(specialOpcode);
-			if opDiff > 23 {
-				lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_PC - 100);
-				lineInfoBytes.AddULEB128(opDiff);
-				skip;
-			}
-			if lineDiff > 10 {
-				lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE - 100);
-				lineInfoBytes.AddSLEB128(lineDiff);
-				skip;
-			}
-				if specialOpcode > 255 {
-					stdout.write("[Compiler#CompileToELF64]: Error: Debug Line Info opcode > 255. Is ");
-					stdout.writeln(specialOpcode);
-					SYS_EXIT(1);
-				}
-			if (opDiff <= 23) & (lineDiff <= 10) {
-				lineInfoBytes.AddByte(specialOpcode);
-			}
-			/*} else*/ if (debugByte == 3) {
-				line += (instruction.value);
+			ui64 newOpByte = textBytes.GetCount();
+			ui64 opDiff = newOpByte - dbgLastOpcodeByte;
+			ui64 lineDiff = line - dbgLastLine;
+
+			bool shouldAddLineInfo = false;
+			bool shouldSkip = false;
+
+			if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END {
+				shouldAddLineInfo = true;
+				lineInfoBytes.AddByte(0x0a); // DW_LNS_set_prologue_end
+			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_EPILOGUE_BEGIN {
+				shouldAddLineInfo = true;
+				lineInfoBytes.AddByte(0x0b); // DW_LNS_set_epilogue_begin
+			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_COLUMN {
+				//lineInfoBytes.AddByte(0x05); // DW_LNS_set_column
+				//lineInfoBytes.AddByte(instruction.value);
+				shouldSkip = true;
+			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_STATEMENT {
+				shouldAddLineInfo = true;
 			} else {
-				lineInfoBytes.AddByte(debugByte);
+				stdout.write("[Compiler#CompileToELF64]: Error: Unhandled debugging instruction ");
+				PrintInstr(instrPtr);
+				SYS_EXIT(1);
 			}
+			if shouldSkip {
+				skip;
+			}
+
+			if shouldAddLineInfo {
+				if (opDiff == 0) & (lineDiff == 0) {
+					skip;
+				}
+				DebugLineAddCode(opDiff, lineDiff, debugByte, \lineInfoBytes);
+			}
+
+			dbgLastLine = line;
+			dbgLastOpcodeByte = newOpByte;
+			//lineInfoBytes.AddByte(0x1); // DW_LNS_copy
+
 		} else {
 			stdout.write("[Compiler#CompileToELF64]: Error: Unexpected instruction ");
-			ui64 instructionType = instruction.type;
-			stdout.writeln(instructionType);
+			PrintInstr(instrPtr);
 			SYS_EXIT(1);
 		}
 		lastInstructionType = instruction.type;
@@ -4786,6 +4917,15 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				textBytes.UpdateByte(lastJumpState, (relativeOffset - 1));
 			}
 		}
+	}
+
+	ui64 newOpByte = textBytes.GetCount();
+	ui64 opDiff = newOpByte - dbgLastOpcodeByte;
+
+	if opDiff > 0 {
+		lineInfoBytes.AddByte(0x2); // DW_LNS_advance_pc
+		lineInfoBytes.AddULEB128(opDiff);
+		//lineInfoBytes.AddByte(0x1); // DW_LNS_copy
 	}
 
 	lineInfoBytes.AddByte(0);
@@ -4860,11 +5000,14 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	section = { name, nameLength + 1, s_debug_abbrev, nameOffset, _cSHT_PROGBITS, 0, 0, 0, 1, 0 };
 	ui64 debugAbbrevIndex = sections.Add(\section);
 
+	ui32 lineInfoLength = lineInfoBytes.GetCount() - 4;
+	lineInfoBytes.UpdateBytes(\lineInfoLength, 0, 4);
 	name = ".debug_line";
 	nameLength = GetLengthOfCstring(name);
 	nameOffset = shstrBytes.AddBytes(name, nameLength + 1);
 	section = { name, nameLength + 1, \lineInfoBytes, nameOffset, _cSHT_PROGBITS, 0, 0, 0, 1, 0 };
 	ui64 debugLineIndex = sections.Add(\section);
+
 
 	// .debug_info
 	AddSymbolTableEntry(\symBytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), debugInfoIndex, 0, 0);
@@ -4880,7 +5023,19 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	AddSymbolTableEntry(\symBytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), debugLineIndex, 0, 0);
 	localSymbolCount += 1;
 	ui64 symbolDebugLine = localSymbolCount;
-	
+
+	// .debug_aranges
+	DebugAddAranges(\relaDebugArangesBytes, symbolDebugInfo);
+	name = ".debug_aranges";
+	nameLength = GetLengthOfCstring(name);
+	nameOffset = shstrBytes.AddBytes(name, nameLength + 1);
+	section = { name, nameLength + 1, \arangesBytes, nameOffset, _cSHT_PROGBITS, 0, 0, 0, 1, 0 };
+	ui64 debugArangesIndex = sections.Add(\section);
+
+	AddSymbolTableEntry(\symBytes, 0, GetSymbolInfo(_cSTB_LOCAL, _cSTT_SECTION), debugArangesIndex, 0, 0);
+	localSymbolCount += 1;
+	ui64 symbolDebugAranges = localSymbolCount;
+
 	// _start
 	AddSymbolTableEntry(\symBytes, s_string_table_offsets[1], GetSymbolInfo(_cSTB_GLOBAL, _cSTT_NOTYPE), textIndex, 0, 0);
 
@@ -4889,7 +5044,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 		ui64 byteOffset = s_func_byte_offsets[i];
 		AddSymbolTableEntry(\symBytes, s_string_table_offsets[i + 2], GetSymbolInfo(_cSTB_GLOBAL, _cSTT_FUNC), textIndex, byteOffset, 0);
 	}
-	
+
 	Elf64RelocationAddendEntry relaEntry = {
 		8, // offset to Abbreviation table in CU header
 		GetRelocationInfo(symbolDebugAbbrev, 0xa),
@@ -4903,6 +5058,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 
 	relaEntry.offset = lineRelaState;
 	relaEntry.info = GetRelocationInfo(s_symbol_text, 0x1);
+	relaEntry.addend = 46;
 	relaDebugLineBytes.AddBytes(\relaEntry, 0x18);
 	
 	name = ".symtab";
@@ -4923,6 +5079,12 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	section = { name, nameLength + 1, \relaDebugLineBytes, nameOffset, _cSHT_RELA, 0, symbolTableIndex, debugLineIndex, 8, 0x18 };
 	ui64 relaDebugLineIndex = sections.Add(\section);
 
+	name = ".rela.debug_aranges";
+	nameLength = GetLengthOfCstring(name);
+	nameOffset = shstrBytes.AddBytes(name, nameLength + 1);
+	section = { name, nameLength + 1, \relaDebugArangesBytes, nameOffset, _cSHT_RELA, 0, symbolTableIndex, debugArangesIndex, 8, 0x18 };
+	ui64 relaDebugArangesIndex = sections.Add(\section);
+
 	FinishDebugInfo();
 	
 	ui64 sectionCount = sections.GetCount();
@@ -4933,20 +5095,15 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 		ref<Section> secPtr = sections.At(i);
 		Section sec = @secPtr;
 		SYS_WRITE(1, sec.name, sec.nameLength);
+		stdout.write("\n");
 		ref<ByteArr> secBytesPtr = sec.bytes;
 		ref<ui8> firstByte = secBytesPtr.At(0);
 		ui64 secBytesCount = secBytesPtr.GetCount();
 		bytes.AddBytes(firstByte, secBytesCount);
-
 		byteCount = bytes.GetCount();
 		ui8 padding = (16 - (byteCount % 16)) % 16;
 		bytes.AddSame(0, padding);
 	}
-
-	ui64 lineInfoCount = lineInfoBytes.GetCount();
-	ui32 lineLength = lineInfoCount - 4;
-	ui64 debugLineOffset = s_section_offsets[debugLineIndex];
-	bytes.UpdateBytes(\lineLength, debugLineOffset, 4);
 
 	ui64 startOfSectionHeaders = bytes.GetCount();
 	Elf64SectionHeader section0 = {
