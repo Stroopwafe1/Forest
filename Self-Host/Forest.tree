@@ -3978,7 +3978,7 @@ void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 	s_dir_path[lastSlash] = 0;
 	stdout.writeln("Directory of file");
 	SYS_WRITE(1, \s_dir_path, lastSlash);
-	stdout.writeln("");
+	stdout.write("\n");
 	s_dir_path_length = lastSlash;
 
 	DwarfCompilationUnitHeader cuh = {
@@ -4003,7 +4003,7 @@ void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 	
 	Elf64RelocationAddendEntry rela = {
 		s_debug_info.GetCount(),
-		GetRelocationInfo(s_symbol_text, 0xa),
+		GetRelocationInfo(s_symbol_text, 0x1),
 		0
 	};
 	s_rela_debug_info.AddBytes(\rela, 0x18);
@@ -4021,7 +4021,8 @@ void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 	s_debug_abbrev.AddULEB128(0x06); // DW_FORM_data4
 	//added = s_debug_info.AddULEB128(0x8000); // DW_LANG_lo_user (custom language)
 	//s_debug_info.AddSame(0, 4 - added);
-	s_debug_info.AddUI32(0x8000);
+	//s_debug_info.AddUI32(0x8000);
+	s_debug_info.AddUI32(0x8001);
 
 	s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
 	s_debug_abbrev.AddULEB128(0x08); // DW_FORM_string
@@ -4048,11 +4049,6 @@ void DebugAddHeader(i32 fd, ref<ui8> fileName) {
 	DebugEndChain();
 }
 
-void DebugAddString(ref<ui8> str, ui64 strLen) {
-	s_debug_abbrev.AddULEB128(0x08); // string
-	s_debug_info.AddBytes(str, strLen + 1);
-}
-
 ui8 DebugGetEncoding(ui8 typeType) {
 	if (typeType >= _cPARSER_TYPETYPE_UI8) & (typeType <= _cPARSER_TYPETYPE_UI64) {
 		return 0x07; // DW_ATE_unsigned
@@ -4068,16 +4064,25 @@ ui8 DebugGetEncoding(ui8 typeType) {
 	return 0;
 }
 
-void DebugAddEncoding(ui8 encoding) {
-	s_debug_abbrev.AddULEB128(0x3e); // DW_AT_encoding
-	s_debug_abbrev.AddULEB128(0x0b); // DW_FORM_data1
-	s_debug_info.AddByte(encoding);
-}
-
 ui64[128] s_debug_types_offsets;
 
 void DebugAddTypes(ref<DynArray> typeArr) {
 	ui64 typeCount = typeArr.GetCount();
+
+	s_debug_abbrev.AddULEB128(s_debug_index);
+	s_debug_info.AddULEB128(s_debug_index);
+	
+	s_debug_abbrev.AddULEB128(0x24); // DW_TAG_base_type
+	s_debug_abbrev.AddByte(0); // No children
+	s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+	s_debug_abbrev.AddULEB128(0x08); // string
+	
+	s_debug_abbrev.AddULEB128(0x3e); // DW_AT_encoding
+	s_debug_abbrev.AddULEB128(0x0b); // DW_FORM_data1
+	
+	s_debug_abbrev.AddULEB128(0x0b); // DW_AT_byte_size
+	s_debug_abbrev.AddULEB128(0x0b); // DW_FORM_data1
+	
 	loop i, 1..typeCount {
 		ref<Type> typePtr = typeArr.At(i);
 		Type type = @typePtr;
@@ -4085,26 +4090,25 @@ void DebugAddTypes(ref<DynArray> typeArr) {
 			break;
 		}
 		ui64 currCount = s_debug_info.GetCount();
-		s_debug_types_offsets[i] = currCount;
+		s_debug_types_offsets[i] = currCount - 1; // GDB requires this to point to the abbrev number and not the name
 
-		s_debug_abbrev.AddULEB128(s_debug_index);
 		s_debug_info.AddULEB128(s_debug_index);
-		s_debug_index += 1;
 
-		s_debug_abbrev.AddULEB128(0x24); // DW_BASE_TYPE
-		s_debug_abbrev.AddByte(0); // No children
-		s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+		// Name
 		ref<ui8> typeName = GetNameFromTypeIndex(i);
 		ui64 len = GetLengthOfCstring(typeName);
-		DebugAddString(typeName, len);
+		s_debug_info.AddBytes(typeName, len + 1);
+
+		// Encoding
 		ui8 encoding = DebugGetEncoding(type.typeType);
-		DebugAddEncoding(encoding);
-		s_debug_abbrev.AddULEB128(0x0b); // DW_AT_byte_size
-		s_debug_abbrev.AddULEB128(0x0b); // DW_FORM_data1
+		s_debug_info.AddByte(encoding);
+
+		// Byte size
 		s_debug_info.AddByte(type.byteSize);
 		
-		DebugEndChain();
 	}
+	s_debug_index += 1;
+	DebugEndChain();
 	// TODO: All types with child types cannot be gotten yet because I forgot to add them in parsing
 }
 
@@ -4157,6 +4161,9 @@ void DebugAddFunction(ref<ui8> name, ui64 nameLength, ui64 byteOffset) {
 	s_debug_info.AddBytes(name, nameLength);
 	s_debug_info.AddByte(0); // Null-terminated
 
+	s_debug_abbrev.AddULEB128(0x3f); // DW_AT_external
+	s_debug_abbrev.AddULEB128(0x19); // DW_FORM_flag_present (means no byte needed in debug_info)
+
 	s_debug_abbrev.AddULEB128(0x11); // DW_AT_low_pc
 	s_debug_abbrev.AddULEB128(0x01); // DW_FORM_addr
 
@@ -4177,6 +4184,7 @@ void DebugAddFunction(ref<ui8> name, ui64 nameLength, ui64 byteOffset) {
 
 void DebugEndFunction(ui64 functionSize) {
 	s_debug_info.UpdateBytes(\functionSize, s_debug_function_state, 8);
+	s_debug_info.AddByte(0); // Close this nested depth
 }
 
 void DebugAddWithType(ui64 typeIndex) {
@@ -4245,6 +4253,7 @@ void DebugAddAranges(ref<ByteArr> relaBytes, ui64 debugInfoSymbol) {
 
 void FinishDebugInfo() {
 	s_debug_abbrev.AddSame(0, 8);
+	s_debug_info.AddByte(0);
 	ui32 endInfoState = s_debug_info.GetCount();
 	ui32 toUpdateLength = endInfoState - 4;
 	s_debug_info.UpdateBytes(\toUpdateLength, 0, 4);	
@@ -4306,8 +4315,6 @@ void AddDebugInfo(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeA
 	bytes.AddULEB128(0);
 	bytes.AddBytes((\s_file_name) + lastSlash, (fileNameLength - lastSlash) + 1); // File name
 	bytes.AddULEB128(0);
-
-	//bytes.AddSame(0, 12);
 
 	ui64 byteCount = bytes.GetCount();
 	s_debug_line_size = byteCount - s_offset_debug_line;
@@ -4467,8 +4474,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	lineInfoBytes.AddByte(0x2); // DW_LNE_set_address
 	ui64 lineRelaState = lineInfoBytes.GetCount();
 	lineInfoBytes.AddUI64(0);
-	lineInfoBytes.AddByte(0x4); // DW_LNS_set_file
-	lineInfoBytes.AddByte(1);
+	//lineInfoBytes.AddByte(0x4); // DW_LNS_set_file
+	//lineInfoBytes.AddByte(0);
 
 	dbgLastOpcodeByte = 46;
 	ui64 lastFunctionOffset = 0;
@@ -4878,8 +4885,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				shouldAddLineInfo = true;
 				lineInfoBytes.AddByte(0x0b); // DW_LNS_set_epilogue_begin
 			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_COLUMN {
-				//lineInfoBytes.AddByte(0x05); // DW_LNS_set_column
-				//lineInfoBytes.AddByte(instruction.value);
+				lineInfoBytes.AddByte(0x05); // DW_LNS_set_column
+				lineInfoBytes.AddByte(instruction.value);
+				lineInfoBytes.AddByte(0x1); // DW_LNS_copy
 				shouldSkip = true;
 			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_STATEMENT {
 				shouldAddLineInfo = true;
@@ -4901,7 +4909,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 
 			dbgLastLine = line;
 			dbgLastOpcodeByte = newOpByte;
-			//lineInfoBytes.AddByte(0x1); // DW_LNS_copy
+			lineInfoBytes.AddByte(0x1); // DW_LNS_copy
 
 		} else {
 			stdout.write("[Compiler#CompileToELF64]: Error: Unexpected instruction ");
