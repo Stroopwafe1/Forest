@@ -355,6 +355,55 @@ ui64 StringToUI64(ref<ui8> text, ui64 textLength) {
 	return returnValue;
 }
 
+void PrintNibbleHex(ui8 nibble) {
+	if nibble == 0 {
+		stdout.write("0");
+	} else if nibble == 1 {
+		stdout.write("1");
+	} else if nibble == 2 {
+		stdout.write("2");
+	} else if nibble == 3 {
+		stdout.write("3");
+	} else if nibble == 4 {
+		stdout.write("4");
+	} else if nibble == 5 {
+		stdout.write("5");
+	} else if nibble == 6 {
+		stdout.write("6");
+	} else if nibble == 7 {
+		stdout.write("7");
+	} else if nibble == 8 {
+		stdout.write("8");
+	} else if nibble == 9 {
+		stdout.write("9");
+	} else if nibble == 10 {
+		stdout.write("a");
+	} else if nibble == 11 {
+		stdout.write("b");
+	} else if nibble == 12 {
+		stdout.write("c");
+	} else if nibble == 13 {
+		stdout.write("d");
+	} else if nibble == 14 {
+		stdout.write("e");
+	} else if nibble == 15 {
+		stdout.write("f");
+	} else {
+		stdout.write("[PrintNibbleHex]: Value too high for a nibble (< 16) ");
+		ui16 higherNibble = nibble;
+		stdout.writeln(higherNibble);
+		SYS_EXIT(1);
+	}
+}
+
+void PrintHex(ui8 byte) {
+	stdout.write("0x");
+	ui8 lowest = byte & 0xF;
+	ui8 highest = byte >> 4;
+	PrintNibbleHex(highest);
+	PrintNibbleHex(lowest);
+}
+
 
 
 void PrintToken(ref<Token> token) {
@@ -403,7 +452,7 @@ class DynArray {
 
 	ref<ui8> At(ui64 index) {
 		if index > count {
-			stdout.writeln("[Error]: Dynamic Array index out of bounds");
+			stdout.writeln("[DynArray]: Error: Array index out of bounds");
 			SYS_EXIT(1);
 		}
 		return data + (index * entrySize);
@@ -414,12 +463,27 @@ class DynArray {
 	}
 
 	void Update(ui64 startOffset, ref<ui8> src) {
-		memcopy2(data + startOffset, src, entrySize);
+		memcopy2(data + (startOffset * entrySize), src, entrySize);
 	}
 
 	void UpdateField(ui64 index, ui64 fieldOffset, ref<ui8> src, ui64 length) {
 		ref<ui8> offset = (data + (entrySize * index)) + fieldOffset;
 		memcopy2(offset, src, length);
+	}
+
+	ui64 FindString(ui64 fieldOffset, ref<ui8> needle, ui64 needleSize) {
+		ui64 foundIndex = -1;
+		loop i, 0..count {
+			ref<ui64> srcPtr = (data + (entrySize * i)) + fieldOffset;
+			ui64 srcAddress = @srcPtr;
+			ref<ui8> src = srcAddress;
+			bool equals = StrEquals(src, needle, needleSize);
+			if equals {
+				foundIndex = i;
+				break;
+			}
+		}
+		return foundIndex;
 	}
 
 	ui64 Find(ui64 fieldOffset, ref<ui8> needle, ui64 needleSize) {
@@ -452,6 +516,19 @@ class DynArray {
 		count = c;
 	}
 
+	void DumpContents() {
+		loop i, 0..count {
+			loop j, 0..entrySize {
+				ref<ui8> bytePtr = (data + (entrySize * i)) + j;
+				ui8 byte = @bytePtr;
+				PrintHex(byte);
+				stdout.write(" ");
+			}
+			stdout.write("\n");
+		}
+		SYS_WRITE(1, data, count * entrySize);
+		stdout.write("\n");
+	}
 }
 
 void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8> file) {
@@ -1012,10 +1089,6 @@ ref<ui8> GetNameFromTypeIndex(ui64 typeType) {
 }
 
 bool IsTokenSpecifiedType(ref<DynArray> tArr, ui64 offset, ui16 desiredType) {
-	DynArray tokens = @tArr;
-	if offset >= (tokens.count) {
-		return false;
-	}
 	ref<Token> t = tArr.At(offset);
 	Token token = @t;
 	return (token.type) == desiredType;
@@ -1027,9 +1100,7 @@ ui64 s_nested_type_depth = 0;
 ui64 s_generic_brackets_length = 0;
 // Returns how much to increment i by
 ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
-	DynArray tokens = @tArr;
-	DynArray typesArr = @typeArr;
-	ui64 tokenCount = tokens.count;
+	ui64 tokenCount = tArr.GetCount();
 	// id [<? ]>?
 	ref<Token> t = tArr.At(offset);
 	Token token = @t;
@@ -1041,6 +1112,7 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 		SYS_EXIT(1);
 		return 0;
 	}
+	
 	ui16 returnVal = 1;
 	ui64 childTypeIndex = GetTypeIndexFromName(typeArr, t);
 	t = tArr.At(offset + 1);
@@ -1053,10 +1125,15 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 		bool isArr = StrEquals(token.text, "array", 5);
 		if isRef | isArr {
 		} else {
-			ui64 structIndex = s_struct_array.Find(0, token.text, token.textLength);
+			ui64 structCount = s_struct_array.GetCount();
+			stdout.writeln(structCount);
+			ref<Struct> structPtr = s_struct_array.At(0);
+			Struct s = @structPtr;
+			
+			ui64 structIndex = s_struct_array.FindString(0, token.text, token.textLength);
 			if structIndex == -1 {
 				stdout.write("[Parser]: Could not find struct or class with the name ");
-				PrintToken(t);
+				PrintToken(\token);
 				SYS_EXIT(1);
 				return 0;
 			}
@@ -1077,9 +1154,10 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 		ref<Type> childTypePtr = typeArr.At(childTypeIndex);
 		Type childType = @childTypePtr;
 		bool isNextLiteral = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_INTEGER);
+		ui64 typeCount = typeArr.GetCount();
 		Type typ = {
 			childTypeIndex,
-			-1,
+			typeCount + 1,
 			-1,
 			childType.byteSize,
 			childType.align,
@@ -1121,7 +1199,7 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 		ui64 typeCount = typeArr.GetCount();
 		Type typ = {
 			typeCount + 1,
-			-1,
+			typeCount + 1,
 			-1,
 			8,
 			8,
@@ -1139,27 +1217,41 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 		ui16 depth = ParseType(tArr, typeArr, offset + 2);
 		ui64 referencingIndex = s_nested_types[s_nested_type_depth];
 		s_nested_type_depth -= 1;
-		if referencingIndex < 15 {
-			typ.firstChild = referencingIndex;
-			typeArr.Update(typeCount, \typ);
-		}
-		bool hasClosing = IsTokenSpecifiedType(tArr, (offset + 2) + depth, _cTOKENTYPE_GREATER_THAN);
-		if hasClosing {
+		
+		typ.firstChild = referencingIndex;
+		typeArr.Update(typeCount, \typ);
+
+		ref<Token> closingTokenPtr = tArr.At((offset + 2) + depth);
+		Token closingToken = @closingTokenPtr;
+		
+		bool threeClosing = StrEquals(closingToken.text, ">>>", 3);
+		bool twoClosing = StrEquals(closingToken.text, ">>", 2);
+		bool oneClosing = StrEquals(closingToken.text, ">", 1);
+		if threeClosing {
+			s_generic_brackets_length -= 3;
+		} else if twoClosing {
+			s_generic_brackets_length -= 2;
+		} else if oneClosing {
 			s_generic_brackets_length -= 1;
-		} else {
-			hasClosing = IsTokenSpecifiedType(tArr, (offset + 2) + depth, _cTOKENTYPE_SHIFT_RIGHT);
-			if hasClosing {
-				s_generic_brackets_length -= 2;
-			}
 		}
-		if s_generic_brackets_length != 0 {
-			stdout.write("[Parser]: Unbalanced angle brackets, expected a '>' to close the ");
+
+		// Just have your IDE/Text editor check it
+		/*
+		if s_generic_brackets_length > 0 {
+			stdout.write("[Parser]: Unbalanced angle brackets, expected ");
+			stdout.write(s_generic_brackets_length);
+			stdout.write(" '>' to close the ");
 			PrintToken(\token);
 			stdout.write(" but got ");
 			ref<Token> unexpected = tArr.At((offset + 2) + depth);
 			PrintToken(unexpected);
 			SYS_EXIT(1);
-		}
+		} else if s_generic_brackets_length < 0 {
+			stdout.write("[Parser]: Unbalanced angle brackets, Too many '>' to close the ");
+			PrintToken(\token);
+			SYS_EXIT(1);
+	}
+		*/
 		returnVal += (2 + depth);
 	} else {
 		s_nested_types[s_nested_type_depth] = childTypeIndex;
@@ -2299,6 +2391,8 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			}
 			ui8 padding = ((type.align) - (byteSize % (type.align))) % (type.align);
 			byteSize += padding;
+		} else {
+			byteSize += (type.byteSize);
 		}
 		s_field_array.Add(\f);
 
@@ -2312,9 +2406,10 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				byteSize += (alignment - (byteSize % alignment)) % alignment;
 			}
 
+			ui64 typeCount = typeArr.GetCount();
 			Type structType = {
 				-1,
-				-1,
+				typeCount + 1,
 				s_struct_array.GetCount(),
 				byteSize,
 				alignment,
@@ -2334,9 +2429,10 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 		byteSize += (alignment - (byteSize % alignment)) % alignment;
 	}
 
+	ui64 typeCount = typeArr.GetCount();
 	Type structType = {
 		-1,
-		-1,
+		typeCount + 1,
 		s_struct_array.GetCount(),
 		byteSize,
 		alignment,
@@ -3144,6 +3240,9 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 			currentInstr.value = (t.line) - s_line_number;
 			instrArr.Add(\currentInstr);
 			s_line_number = t.line;
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+			instrArr.Add(\currentInstr);
 		}
 
 		if (node.type) == _cPARSER_NODETYPE_FUNCTION {
@@ -3237,6 +3336,32 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
 			currentInstr.value = i;
 			instrArr.Add(\currentInstr);
+		} else if (node.type) == _cPARSER_NODETYPE_STRUCT {
+			// Ignore because struct has no intermediate representation
+			ref<Node> iterPtr = nodeArr.At(node.firstChild);
+			loop {
+				Node iterNode = @iterPtr;
+				if (iterNode.nextSibling) != -1 {
+					iterPtr = nodeArr.At(iterNode.nextSibling);
+					skip;
+				} else if (iterNode.firstChild) != -1 {
+					iterPtr = nodeArr.At(iterNode.firstChild);
+					skip;
+				}
+				break;
+			}
+			ref<Token> finalNodeTokenPtr = tArr.At(iterPtr.GetTokenIndex() + 2); // skip 'name;'
+			Token finalNodeToken = @finalNodeTokenPtr;
+			if (finalNodeToken.line) != s_line_number {
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
+				currentInstr.value = (finalNodeToken.line) - s_line_number;
+				instrArr.Add(\currentInstr);
+				s_line_number = finalNodeToken.line;
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+				instrArr.Add(\currentInstr);
+				
+			}
 		} else {
 			stdout.write("[Compiler#Analyse]: ERROR: Unknown node type ");
 			ui64 type = node.type;
@@ -3602,6 +3727,12 @@ class ByteArr {
 
 	ref<ui8> At(ui64 index) {
 		return bytes + index;
+	}
+
+	void DeleteLast(ui64 amount) {
+		ui64 c = count;
+		c -= amount;
+		count = c;
 	}
 }
 
@@ -4065,8 +4196,180 @@ ui8 DebugGetEncoding(ui8 typeType) {
 }
 
 ui64[128] s_debug_types_offsets;
+ui64 s_debug_types_offsets_count = 0;
 
-void DebugAddTypes(ref<DynArray> typeArr) {
+void DebugAddTokenMember(ref<Token> tPtr, ui64 typeRef) {
+	Token t = @tPtr;
+
+	s_debug_info.AddULEB128(s_debug_index);
+	s_debug_abbrev.AddULEB128(s_debug_index);
+	s_debug_index += 1;
+	
+	s_debug_abbrev.AddULEB128(0x0d); // DW_TAG_member
+	s_debug_abbrev.AddByte(0); // No children
+	
+	s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+	s_debug_abbrev.AddULEB128(0x08); // string
+	s_debug_info.AddBytes(t.text, t.textLength); // name
+	s_debug_info.AddByte(0); // null-terminated
+
+	s_debug_abbrev.AddULEB128(0x49); // DW_AT_type
+	s_debug_abbrev.AddULEB128(0x14); // DW_FORM_ref8
+	s_debug_info.AddUI64(typeRef);
+}
+
+void DebugAddField(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 fieldIndex) {
+	ref<Field> fieldPtr = s_field_array.At(fieldIndex);
+	Field field = @fieldPtr;
+
+	ui64 fieldTypeRef = DebugAddChildType(tArr, typeArr, field.typeIndex);
+	
+	if (field.aliasCount) > 1 {
+		s_debug_info.AddULEB128(s_debug_index);
+		s_debug_abbrev.AddULEB128(s_debug_index);
+		s_debug_index += 1;
+		// DW_TAG_union_type, children yes
+		// loop aliases
+		// add abbreviation index for each and add as member
+		// close with 0 byte
+		
+		s_debug_abbrev.AddULEB128(0x17); // DW_TAG_union_type
+		s_debug_abbrev.AddByte(1); // Yes children
+
+		DebugEndChain();
+
+		loop j, 0..field.aliasCount {
+			ui64 tokenIndex = (field.startTokenIndex) + (j * 2);
+			ref<Token> tPtr = tArr.At(tokenIndex);
+			DebugAddTokenMember(tPtr, fieldTypeRef);
+			DebugEndChain();
+		}
+		DebugEndChain();
+		s_debug_info.AddByte(0); // Close list of siblings
+	} else {
+		ref<Token> tPtr = tArr.At(field.startTokenIndex);
+		Token t = @tPtr;
+		DebugAddTokenMember(tPtr, fieldTypeRef);
+		s_debug_abbrev.AddULEB128(0x38); // DW_AT_data_member_location
+		s_debug_abbrev.AddULEB128(0x0f); // DW_FORM_udata
+		s_debug_info.AddULEB128(field.offset);
+		DebugEndChain();
+	}
+}
+
+ui64 DebugAddChildType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 typeIndex) {
+	if typeIndex <= s_debug_types_offsets_count {
+		return s_debug_types_offsets[typeIndex];
+	}
+	ref<Type> typePtr = typeArr.At(typeIndex);
+	Type type = @typePtr;
+
+	ui64 refType = 0;
+	ui64 typeCount = typeArr.GetCount();
+	if ((type.firstChild) != -1) & ((type.firstChild) < typeCount) {
+		refType = DebugAddChildType(tArr, typeArr, type.firstChild);
+	}
+
+	s_debug_info.AddULEB128(s_debug_index);
+	s_debug_abbrev.AddULEB128(s_debug_index);
+	s_debug_index += 1;
+	ui16 typeType = type.typeType;
+	
+	if typeType == _cPARSER_TYPETYPE_REF {
+		if refType == 0 {
+			stdout.write("[Compiler#DebugAddChildType]: Error: Ref Type of Ref was 0\n");
+			SYS_EXIT(1);
+		}
+
+		ui64 state = s_debug_info.GetCount() - 1;
+		s_debug_abbrev.AddULEB128(0x0f); // DW_TAG_pointer_type
+		//s_debug_abbrev.AddULEB128(0x10); // DW_TAG_reference_type
+		s_debug_abbrev.AddByte(0); // No children
+		
+		s_debug_abbrev.AddULEB128(0x49); // DW_AT_type
+		s_debug_abbrev.AddULEB128(0x14); // DW_FORM_ref8
+		s_debug_info.AddUI64(refType);
+
+		refType = state;
+		DebugEndChain();
+	} else if typeType == _cPARSER_TYPETYPE_ARRAY {
+		if refType == 0 {
+			stdout.write("[Compiler#DebugAddChildType]: Error: Ref Type of Array was 0\n");
+			SYS_EXIT(1);
+		}
+		ui64 arrType = s_debug_info.GetCount() - 1;
+		s_debug_abbrev.AddULEB128(0x01); // DW_TAG_array_type
+		s_debug_abbrev.AddByte(0); // No children
+		
+		s_debug_abbrev.AddULEB128(0x49); // DW_AT_type
+		s_debug_abbrev.AddULEB128(0x14); // DW_FORM_ref8
+		s_debug_info.AddUI64(refType);
+
+		s_debug_abbrev.AddULEB128(0x0b); // DW_AT_byte_size
+		s_debug_abbrev.AddULEB128(0x0f); // DW_FORM_udata
+		s_debug_info.AddULEB128(type.byteSize);
+
+		refType = arrType;
+		DebugEndChain();
+	} else if typeType == _cPARSER_TYPETYPE_STRUCT {
+		refType = s_debug_info.GetCount() - 1;
+		s_debug_abbrev.AddULEB128(0x13); // DW_TAG_structure_type
+		s_debug_abbrev.AddByte(1); // Yes children
+
+		ref<Struct> structPtr = s_struct_array.At(type.extraIndex);
+		Struct s = @structPtr;
+
+		s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+		s_debug_abbrev.AddULEB128(0x08); // string
+		s_debug_info.AddBytes(s.name, s.nameLength); // name
+		s_debug_info.AddByte(0); // Null-terminated
+
+		s_debug_abbrev.AddULEB128(0x0b); // DW_AT_byte_size
+		s_debug_abbrev.AddULEB128(0x0f); // DW_FORM_udata
+		ui64 byteSize = type.byteSize;
+		s_debug_info.AddULEB128(type.byteSize);
+
+		DebugEndChain();
+
+		loop i, 0..s.fieldCount {
+			ui64 fieldIndex = (s.firstFieldIndex) + i;
+			DebugAddField(tArr, typeArr, fieldIndex);
+		}
+
+		s_debug_info.AddByte(0); // Close off children list
+	} else if typeType == _cPARSER_TYPETYPE_CLASS {
+		s_debug_abbrev.AddULEB128(0x02); // DW_TAG_class_type
+		s_debug_abbrev.AddByte(1); // Yes children
+
+		ref<Struct> classPtr = s_struct_array.At(type.extraIndex);
+		Struct c = @classPtr;
+
+		s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+		s_debug_abbrev.AddULEB128(0x08); // string
+		s_debug_info.AddBytes(c.name, c.nameLength); // name
+		s_debug_info.AddByte(0); // Null-terminated
+
+		s_debug_abbrev.AddULEB128(0x0b); // DW_AT_byte_size
+		s_debug_abbrev.AddULEB128(0x0f); // DW_FORM_udata
+		s_debug_info.AddULEB128(type.byteSize);
+		
+		DebugEndChain();
+
+		loop i, 0..c.fieldCount {
+			ui64 fieldIndex = (c.firstFieldIndex) + i;
+			DebugAddField(tArr, typeArr, fieldIndex);
+			DebugEndChain();
+		}
+	} else {
+		stdout.write("[Compiler#DebugAddChildType]: Error: Unexpected typetype in type parser ");
+		stdout.writeln(typeType);
+		SYS_EXIT(1);
+	}
+	
+	return refType;
+}
+
+void DebugAddTypes(ref<DynArray> tArr, ref<DynArray> typeArr) {
 	ui64 typeCount = typeArr.GetCount();
 
 	s_debug_abbrev.AddULEB128(s_debug_index);
@@ -4082,16 +4385,18 @@ void DebugAddTypes(ref<DynArray> typeArr) {
 	
 	s_debug_abbrev.AddULEB128(0x0b); // DW_AT_byte_size
 	s_debug_abbrev.AddULEB128(0x0b); // DW_FORM_data1
-	
-	loop i, 1..typeCount {
+
+	// Base types
+	loop i, 1.._cPARSER_TYPETYPE_REF {
 		ref<Type> typePtr = typeArr.At(i);
 		Type type = @typePtr;
-		if i >= _cPARSER_TYPETYPE_REF {
-			break;
-		}
 		ui64 currCount = s_debug_info.GetCount();
-		s_debug_types_offsets[i] = currCount - 1; // GDB requires this to point to the abbrev number and not the name
-
+		if i == 1 {
+			currCount -= 1; // HACK: For some reason this is one off for the first type
+		}
+		s_debug_types_offsets[i] = currCount; // GDB requires this to point to the abbrev number and not the name
+		s_debug_types_offsets_count += 1;
+		
 		s_debug_info.AddULEB128(s_debug_index);
 
 		// Name
@@ -4105,11 +4410,30 @@ void DebugAddTypes(ref<DynArray> typeArr) {
 
 		// Byte size
 		s_debug_info.AddByte(type.byteSize);
-		
 	}
 	s_debug_index += 1;
 	DebugEndChain();
-	// TODO: All types with child types cannot be gotten yet because I forgot to add them in parsing
+
+	ui64 j = _cPARSER_TYPETYPE_REF;
+	
+	loop {
+		if j >= typeCount {
+			break;
+		}
+		ref<Type> typePtr = typeArr.At(j);
+		Type type = @typePtr;
+
+		ui64 refType = DebugAddChildType(tArr, typeArr, j);
+		s_debug_types_offsets[j] = refType;
+		s_debug_types_offsets_count = j;
+
+		if (type.nextSibling) == -1 {
+			break;
+		} else if (type.nextSibling) >= typeCount {
+			break;
+		}
+		j = type.nextSibling;
+	}
 }
 
 ui8 DebugLineAddCode(ui64 opDiff, ui64 lineDiff, ui8 debugByte, ref<ByteArr> lineInfoBytes) {
@@ -4132,7 +4456,7 @@ ui8 DebugLineAddCode(ui64 opDiff, ui64 lineDiff, ui8 debugByte, ref<ByteArr> lin
 		shouldExit = true;
 	}
 	if specialOpcode > 255 {
-		stdout.write("[Compiler#CompileToELF64]: Error: Debug Line Info opcode > 255. Is ");
+		stdout.write("[Compiler#DebugLineAddCode]: Error: Debug Line Info opcode > 255. Is ");
 		stdout.writeln(specialOpcode);
 		SYS_EXIT(1);
 	}
@@ -4180,6 +4504,11 @@ void DebugAddFunction(ref<ui8> name, ui64 nameLength, ui64 byteOffset) {
 	s_debug_abbrev.AddULEB128(0x07); // DW_FORM_data8
 	s_debug_function_state = s_debug_info.GetCount();
 	s_debug_info.AddUI64(0);
+
+	s_debug_abbrev.AddULEB128(0x40); // DW_AT_frame_base
+	s_debug_abbrev.AddULEB128(0x18); // DW_FORM_exprloc
+	s_debug_info.AddByte(1); // 1 entry
+	s_debug_info.AddByte(0x56); // DW_OP_reg6 (rbp)
 }
 
 void DebugEndFunction(ui64 functionSize) {
@@ -4194,7 +4523,7 @@ void DebugAddWithType(ui64 typeIndex) {
 	s_debug_info.AddUI64(offset);
 }
 
-void DebugAddParameter(ref<ui8> name, ui64 nameLength) {
+void DebugAddParameter(ref<ui8> name, ui64 nameLength, i8 offset) {
 	s_debug_abbrev.AddULEB128(s_debug_index);
 	s_debug_info.AddULEB128(s_debug_index);
 	s_debug_index += 1;
@@ -4205,6 +4534,15 @@ void DebugAddParameter(ref<ui8> name, ui64 nameLength) {
 	s_debug_abbrev.AddULEB128(0x08); // string
 	s_debug_info.AddBytes(name, nameLength);
 	s_debug_info.AddByte(0); // Null-terminated
+
+	s_debug_abbrev.AddULEB128(0x02); // DW_AT_location
+	s_debug_abbrev.AddULEB128(0x18); // DW_FORM_exprloc
+	ui64 byteState = s_debug_info.GetCount();
+	s_debug_info.AddByte(2); // 2 byte block
+	s_debug_info.AddByte(0x91); // DW_OP_fbreg (frame base reg + offset)
+	ui8 added = s_debug_info.AddSLEB128(offset); // Offset
+	added += 1;
+	s_debug_info.UpdateBytes(\added, byteState, 1);
 }
 
 void DebugEndChain() {
@@ -4405,7 +4743,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	s_symbol_text = localSymbolCount;
 
 	DebugAddHeader(fd, fileName);
-	DebugAddTypes(typeArr);
+	DebugAddTypes(tArr, typeArr);
 	AddDebugInfo(tArr, nodeArr, typeArr, \lineInfoBytes);
 	
 
@@ -4602,7 +4940,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			Token t = @tPtr;
 			currentVar.name = t.text;
 			currentVar.nameLength = t.textLength;
-			DebugAddParameter(t.text, t.textLength);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_VAR {
 			currentVar.nodeIndex = instruction.value;
 			ref<Node> node = nodeArr.At(instruction.value);
@@ -4785,7 +5122,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ref<Type> typePtr = typeArr.At(instruction.value);
 			Type type = @typePtr;
 			ui16 size = type.byteSize;
-			DebugAddWithType(instruction.value);
 
 			if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_PARAM {
 				offset += size;
@@ -4800,12 +5136,16 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					SYS_EXIT(1);
 				}
 				paramCount += 1;
+				DebugAddParameter(currentVar.name, currentVar.nameLength, currentVar.offset);
+				DebugAddWithType(instruction.value);
 				DebugEndChain();
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_VAR {
 				offset += size;
 				currentVar.offset = offset * -1;
 				variables.Add(\currentVar);
+				DebugAddWithType(instruction.value);
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_FUNC {
+				DebugAddWithType(instruction.value);
 				DebugEndChain();
 			} else {
 				stdout.write("[Compiler]: Error: Unknown WITH_TYPE ");
