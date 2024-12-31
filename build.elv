@@ -9,7 +9,7 @@ fn compile-compiler {
 }
 
 fn compile-programme {
-	./Self-Host/build/Forest ./Testing/debugging-test.tree;
+	./Self-Host/build/Forest ./Testing/self-host-test.tree;
 }
 
 if (<= (count $args) 1) {

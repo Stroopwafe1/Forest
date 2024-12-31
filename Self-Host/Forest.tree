@@ -4892,7 +4892,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					textBytes.AddByte(0xE8);
 					ui64 currentByteCount = textBytes.GetCount();
 					ui64 byteOffset = s_func_byte_offsets[j];
-					bytes.AddUI32(byteOffset - (currentByteCount + 4));
+					textBytes.AddUI32(byteOffset - (currentByteCount + 4));
 					break;
 				}
 			}
@@ -4964,9 +4964,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ref<Token> varTokenPtr = tArr.At(node.tokenIndex);
 			Token varToken = @varTokenPtr;
 
-			ui64 index = variables.Find(8, varToken.text, varToken.textLength);
+			ui64 index = variables.FindString(16, varToken.text, varToken.textLength);
 			if index == -1 {
-				stdout.write("[Compiler]: Error: Unknown variable ");
+				stdout.write("[Compiler#CompileToElf64.set_value]: Error: Unknown variable ");
 				ref<Token> t = tArr.At(node.tokenIndex);
 				PrintToken(t);
 				SYS_EXIT(1);
@@ -4983,9 +4983,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ref<Token> varTokenPtr = tArr.At(instruction.value);
 			Token varToken = @varTokenPtr;
 
-			ui64 index = variables.Find(8, varToken.text, varToken.textLength);
+			ui64 index = variables.FindString(16, varToken.text, varToken.textLength);
 			if index == -1 {
-				stdout.write("[Compiler]: Error: Unknown variable ");
+				stdout.write("[Compiler#CompileToElf64.load_variable]: Error: Unknown variable ");
 				ref<Token> t = tArr.At(instruction.value);
 				PrintToken(t);
 				SYS_EXIT(1);
@@ -5008,9 +5008,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ref<Token> varTokenPtr = tArr.At(instruction.value);
 			Token varToken = @varTokenPtr;
 
-			ui64 index = variables.Find(8, varToken.text, varToken.textLength);
+			ui64 index = variables.FindString(16, varToken.text, varToken.textLength);
 			if index == -1 {
-				stdout.write("[Compiler]: Error: Unknown variable ");
+				stdout.write("[Compiler#CompileToElf64.cmp_variable]: Error: Unknown variable ");
 				ref<Token> t = tArr.At(instruction.value);
 				PrintToken(t);
 				SYS_EXIT(1);
