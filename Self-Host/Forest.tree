@@ -3958,11 +3958,15 @@ ui8 GetREX(bool wide, bool reg, bool rm, bool index) {
 	return rex;
 }
 
-void MoveRAX(ref<ByteArr> bytes, ui8 reg) {
+void MoveRAX(ref<ByteArr> bytes, ui8 reg, bool to) {
 	ui8 rex = GetREX(true, reg > 7, false, false);
 	bytes.AddByte(rex);
 	ui8 modRM = 0xC0 + ((reg % 8) * 8);
-	bytes.AddByte(0x89);
+	if to {
+		bytes.AddByte(0x89);
+	} else {
+		bytes.AddByte(0x8B);
+	}
 	bytes.AddByte(modRM);
 }
 
@@ -4841,6 +4845,10 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				textBytes.UpdateBytes(\callAddress, 30, 4);
 			}
 
+
+			// Reset stack offsets
+			offset = 0;
+			
 			// Add prologue
 			ui8[4] prologue = {
 				0x55, // push rbp
@@ -4955,7 +4963,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				SYS_EXIT(1);
 			}
 			ui8 reg = callRegs[argNumber];
-			MoveRAX(\textBytes, reg);
+			MoveRAX(\textBytes, reg, false);
 			regsInUse[reg] = true;
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_VALUE {
 			//ref<Node> nodePtr = nodeArr.At(currentVar.nodeIndex);
