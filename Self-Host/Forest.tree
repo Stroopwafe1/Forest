@@ -3509,7 +3509,7 @@ void PrintASTAsDot(ref<DynArray> tArr, ref<DynArray> nodeArr) {
 			stdout.write(" -> n");
 			i32 firstChild = node.firstChild;
 			stdout.write(firstChild);
-			stdout.writ(" [label = \"FC\" color = darkgreen];\n");
+			stdout.write(" [label = \"FC\" color = darkgreen];\n");
 		}
 		if ((node.nextSibling) != -1) & ((node.nextSibling) != nodeCount) {
 			stdout.write("n");
