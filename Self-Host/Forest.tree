@@ -99,7 +99,9 @@ ui8 _cPARSER_NODETYPE_FIELD_LIST = 35;
 ui8 _cPARSER_NODETYPE_FIELD = 36;
 ui8 _cPARSER_NODETYPE_EXPRESSION_VARIABLE = 37;
 ui8 _cPARSER_NODETYPE_EXPRESSION_FUNC_CALL = 38;
-ui8 _cPARSER_NODETYPE_END_FUNC = 39;
+ui8 _cPARSER_NODETYPE_EXPRESSION_PROPERTY = 39;
+ui8 _cPARSER_NODETYPE_EXPRESSION_INDEX = 40;
+ui8 _cPARSER_NODETYPE_END_FUNC = 41;
 
 ui8 _cPARSER_TYPETYPE_VOID = 0;
 ui8 _cPARSER_TYPETYPE_UI8 = 1;
@@ -1270,8 +1272,67 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 }
 
 ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, ui64 max) {
+	ui64 returnValue = 0;
+	Node currentNode = { 0, 0, 0, 0, 0 };
+	currentNode.type = _cPARSER_NODETYPE_EXPRESSION;
+	currentNode.firstChild = nodeArr.GetCount() + 1;
+	currentNode.typeIndex = -1;
+	currentNode.tokenIndex = offset;
+	nodeArr.Add(\currentNode);
 
-	return 0;
+	currentNode.type = _cPARSER_NODETYPE_EXPRESSION_PROPERTY;
+	currentType.nextSibling = -1;
+	currentNode.firstChild = nodeArr.GetCount() + 1;
+	nodeArr.Add(\currentNode);
+
+	currentNode.type = _cPARSER_NODETYPE_EXPRESSION_VARIABLE;
+	currentNode.firstChild = -1;
+	ui64 nodeState = nodeArr.GetCount();
+	nodeArr.Add(\currentNode);
+
+	returnValue += 1;
+
+	loop i, offset + 1..max {
+		i32 count = nodeArr.GetCount();
+		nodeArr.UpdateField(nodeState, 4, \count, 4);
+
+		// if token == . => make property and variable node
+		// if token == [ => make index node and recurse ParseExpression
+		bool isDot = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_DOT);
+		bool isArr = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_SQUARE_OPEN);
+		if isDot {
+			currentNode.type = _cPARSER_NODETYPE_EXPRESSION_PROPERTY;
+			currentType.nextSibling = -1;
+			currentNode.firstChild = nodeArr.GetCount() + 1;
+			nodeArr.Add(\currentNode);
+
+			currentNode.type = _cPARSER_NODETYPE_EXPRESSION_VARIABLE;
+			currentNode.firstChild = -1;
+			nodeState = nodeArr.GetCount();
+			nodeArr.Add(\currentNode);
+
+			returnValue += 2; // Skip .prop
+		} else if isArr {
+			currentNode.type = _cPARSER_NODETYPE_EXPRESSION_INDEX;
+			currentNode.nextSibling = -1;
+			currentNode.firstChild = nodeArr.GetCount() + 1;
+			nodeState = nodeArr.GetCount();
+			nodeArr.Add(\currentNode);
+
+			returnValue += 1; // Skip opening [
+			returnValue += ParseExpression(tArr, nodeArr, i + 1, max, _cTOKENTYPE_SQUARE_CLOSE);
+			returnValue += 1; // Skip closing ]
+		} else {
+			stdout.write("[Parser#ParseExpressionProperty]: Unknown token ");
+			ref<Token> token = tArr.At(i);
+			PrintToken(token);
+			SYS_EXIT(1);
+		}
+
+		// update nodeState and make sure to always give the variable node no sibling (this gets corrected in the next iteration of the loop)
+	}
+	
+	return returnValue;
 }
 
 bool IsOperator(ref<Token> tokenPtr) {
@@ -1294,9 +1355,6 @@ ui64[128] s_expression_stack;
 ui64 s_expression_stack_count = 0;
 ui8[150] s_precedences;
 
-// TODO(#3): Just really expand on this; Try to actually make a kind of tree, give different expression types, EXPR_VARIABLE, EXPR_PROPERTY, EXPR_FUNC_CALL, EXPR_INIT_LIST, EXPR_CLASS_FUNC_CALL
-// It would be nice if I could build a tree without the spamming of parentheses, but it's the most important that these above get grouped together first.
-// Because I want to have EXPR_FUNC_CALL EXPRESSION(+) EXPRESSION, instead of EXPRESSION(ident) EXPRESSION(open_paren) EXPRESSION(arg) EXPRESSION(close_paren) EXPRESSION(+) EXPRESSION
 ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, ui64 max, ui16 endType) {
 	ui64 returnValue = 0;
 	Node currentNode = { 0, 0, 0, 0, 0 };
@@ -1333,10 +1391,10 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, ui6
 				bool isNextParen = (nextToken.type) == _cTOKENTYPE_PARENTHESIS_OPEN;
 				bool isNextArr = (nextToken.type) == _cTOKENTYPE_SQUARE_OPEN;
 				// if it's none of these, break;
-				bool oneOfThese = ((isNextDot | isNextIdentifier) | (isNextNamespace | isNextParen));
+				bool oneOfThese = ((isNextDot | isNextIdentifier) | (isNextNamespace | isNextParen)) | isNextArr;
 				if !oneOfThese {
 					if isProperty {
-						ui64 toSkip = ParseExpressionProperty(tArr, nodeArr, i, j); // TODO(#4): Make this function
+						ui64 toSkip = ParseExpressionProperty(tArr, nodeArr, i, j);
 						i += toSkip;
 						returnValue += toSkip;
 						shouldSkip = true;
