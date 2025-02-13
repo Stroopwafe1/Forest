@@ -1,4 +1,4 @@
-#!/usr/bin/elvish
+#!/usr/bin/env elvish
 
 use path;
 
