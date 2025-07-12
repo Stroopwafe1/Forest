@@ -7,5 +7,6 @@ ui8 globalVar = 6;
 ui8 main(array<ref<ui8> > argv) {
 	ui16 value = 2 + 3 * 4 * 5 - globalVar;
 	ui8 test = returnSub2(value);
+	array<char> testStr = "Hello, World";
 	return test;
 }

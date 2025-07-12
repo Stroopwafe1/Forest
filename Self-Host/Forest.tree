@@ -2888,6 +2888,11 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_INTEGER;
 			currentInstr.value = number;
 			instrArr.Add(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_STRING {
+			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_STRING;
+			currentInstr.value = exprNode.tokenIndex;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_NODE;
+			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_PLUS {
 			currentInstr.type = _cANALYSER_INSTRTYPE_ADD;
 			currentInstr.value = 0;
@@ -3554,6 +3559,8 @@ void PrintInstr(ref<Instr> instrPtr) {
 		stdout.write("LOAD_INTEGER ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_VARIABLE {
 		stdout.write("LOAD_VARIABLE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_STRING {
+		stdout.write("LOAD_STRING ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
 		stdout.write("RETURN ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_ADD {
@@ -4178,6 +4185,32 @@ void MoveFromSection(ref<ByteArr> bytes, ui8 reg, ui8 srcSectionType, ui64 adden
 	// SIB
 	bytes.AddByte(0x25);
 
+	// Add rela entry
+	CompRelaEntry rela = {
+		bytes.GetCount(),
+		addend,
+		_cCOMPILATION_SECTION_TEXT,
+		srcSectionType
+	};
+
+	s_comp_rela.Add(\rela);
+
+	bytes.AddUI32(0);
+}
+
+void LoadFromSection(ref<ByteArr> bytes, ui8 reg, ui8 srcSectionType, ui64 addend, ui8 size, ui8 desiredSize) {
+	ui8 rex = GetREX(true, reg > 7, false, false);
+	ui8 modRM = 0x04 + ((reg % 8) * 8);
+
+	if (size == 8) | (desiredSize == 8) {
+		bytes.AddByte(rex);
+	}
+	bytes.AddByte(0x8D); // lea
+	bytes.AddByte(modRM);
+	
+	// SIB
+	bytes.AddByte(0x25);
+	
 	// Add rela entry
 	CompRelaEntry rela = {
 		bytes.GetCount(),
@@ -5484,6 +5517,16 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
 			// Restore however many stack allocations this block has had
 			// Add 0xC3
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_STRING {
+			ui64 tokenIndex = instruction.value;
+			ref<Token> tokenRef = tArr.At(tokenIndex);
+			Token token = @tokenRef;
+			ui64 stringOffset = dataBytes.GetCount();
+			dataBytes.AddBytes(token.text, token.textLength);
+
+			// RAX = 0
+			LoadFromSection(\textBytes, 0, _cCOMPILATION_SECTION_DATA, stringOffset, 8, 8);
+			regsInUse[0] = true;
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_VALUE {
 			if (currentVar.location) == _cVARIABLE_LOCATION_STACK {
 				stdout.write("[Compiler#CompileToElf64.with_value]: Error: Wrong instruction type WITH_VALUE for a stack variable\n");
