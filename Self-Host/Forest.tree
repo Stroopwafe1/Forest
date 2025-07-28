@@ -1336,7 +1336,8 @@ ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 off
 			nodeState = nodeArr.GetCount();
 			nodeArr.Add(\currentNode);
 
-			returnValue += 2; // Skip .prop
+			returnValue += 1; // Skip .prop
+			i += 1;
 		} else if isArr {
 			currentNode.type = _cPARSER_NODETYPE_EXPRESSION_INDEX;
 			currentNode.nextSibling = -1;
@@ -1344,9 +1345,11 @@ ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 off
 			nodeState = nodeArr.GetCount();
 			nodeArr.Add(\currentNode);
 
+			ui64 cache = returnValue;
 			returnValue += 1; // Skip opening [
 			returnValue += ParseExpression(tArr, nodeArr, i + 1, max, _cTOKENTYPE_SQUARE_CLOSE);
 			returnValue += 1; // Skip closing ]
+			i += (returnValue - cache);
 		} else {
 			stdout.write("[Parser#ParseExpressionProperty]: Unknown token ");
 			ref<Token> token = tArr.At(i);
@@ -1394,6 +1397,7 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, ui6
 			break;
 		}
 		bool isIdentifier = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_KEYWORD_IDENTIFIER);
+		bool isListInit = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_CURLY_OPEN);
 		if isIdentifier {
 			bool isProperty = false;
 			// FUNC_CALL is always identifier + paren_open
@@ -1471,6 +1475,9 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, ui6
 			if shouldSkip {
 				skip;
 			}
+		} else if isListInit {
+			// TODO: Implement this
+			// But like, also model it before implementation
 		}
 		currentNode.type = _cPARSER_NODETYPE_EXPRESSION;
 		currentNode.firstChild = -1;
@@ -6035,7 +6042,8 @@ ui8 main(cstring[] argv) {
 	i32 fd = SYS_OPEN(argv[1], 0, 0);
 	ui32 lengthOfFile = GetLengthOfCstring(argv[1]);
 	if fd < 0 {
-		stdout.writeln("Could not open file");
+		stdout.writeln("Could not open file: ");
+		SYS_WRITE(1, argv[1], lengthOfFile);
 		return -1;
 	}
 	ui64 fileSize = SYS_LSEEK(fd, 0, 2);
