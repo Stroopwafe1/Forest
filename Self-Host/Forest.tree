@@ -101,7 +101,10 @@ ui8 _cPARSER_NODETYPE_EXPRESSION_VARIABLE = 37;
 ui8 _cPARSER_NODETYPE_EXPRESSION_FUNC_CALL = 38;
 ui8 _cPARSER_NODETYPE_EXPRESSION_PROPERTY = 39;
 ui8 _cPARSER_NODETYPE_EXPRESSION_INDEX = 40;
-ui8 _cPARSER_NODETYPE_END_FUNC = 41;
+ui8 _cPARSER_NODETYPE_EXPRESSION_LIST_INIT = 41;
+ui8 _cPARSER_NODETYPE_EXPRESSION_LIST_INIT_ITEM = 42;
+ui8 _cPARSER_NODETYPE_EXPRESSION_PROPERTY_CHAIN = 43;
+ui8 _cPARSER_NODETYPE_END_FUNC = 44;
 
 ui8 _cPARSER_TYPETYPE_VOID = 0;
 ui8 _cPARSER_TYPETYPE_UI8 = 1;
@@ -148,6 +151,7 @@ ui8 _cANALYSER_INSTRTYPE_JMP_GTE = 21;
 ui8 _cANALYSER_INSTRTYPE_JMP_NEQ = 22;
 ui8 _cANALYSER_INSTRTYPE_JMP_ZERO = 23;
 ui8 _cANALYSER_INSTRTYPE_JMP_NONZERO = 24;
+ui8 _cANALYSER_INSTRTYPE_SET_ITEM = 25;
 // Empty, used to be signed/unsigned versions, but that only matters at compilation step
 // These instruction types are sign agnostic, and for the generation of the x86 code, we look at what the sign should be
 ui8 _cANALYSER_INSTRTYPE_END_IF = 26;
@@ -181,6 +185,8 @@ ui8 _cANALYSER_INSTRTYPE_CALL_FUNC = 52;
 ui8 _cANALYSER_INSTRTYPE_DEF_GLOBAL_VAR = 53;
 ui8 _cANALYSER_INSTRTYPE_DEF_ASSIGN_GLOBAL_VAR = 54;
 ui8 _cANALYSER_INSTRTYPE_WITH_VALUE = 55;
+ui8 _cANALYSER_INSTRTYPE_LOAD_PROPERTY = 56;
+ui8 _cANALYSER_INSTRTYPE_SET_INDEX = 57;
 
 ui8 _cANALYSER_INSTRTYPE_DEBUG_SPECIAL = 100;
 ui8 _cANALYSER_INSTRTYPE_DEBUG_COPY = 101;
@@ -227,13 +233,41 @@ ui64[1024] s_label_bytes;
 ui64[1024] s_string_table_offsets;
 ui16 s_string_table_offsets_count = 0;
 
-struct Token {
+class Token {
 	ui16 type;
 	ui32 line;
 	ui32 column;
 	ref<ui8> file;
 	ref<ui8> text;
 	ui64 textLength;
+	ui32 matchingTokenIndex;
+
+	void StartNew(ref<ui8> textPtr, ui32 columnIndex) {
+		text = textPtr;
+		column = columnIndex;
+		matchingTokenIndex = 0;
+	}
+
+	ui16 GetType() {
+		return type;
+	}
+
+	ui32 GetMatchingIndex() {
+		return matchingTokenIndex;
+	}
+
+	void DebugPrint() {
+		stdout.write("Token (text='");
+		SYS_WRITE(1, text, textLength);
+		stdout.write("', type=");
+		stdout.write(type);
+		stdout.write(")\n");
+	}
+}
+
+struct TokenRef {
+	ui8 character;
+	ui64 tokenIndex;
 }
 
 class Node {
@@ -247,11 +281,15 @@ class Node {
 		nextSibling = ns;
 	}
 
+	i32 GetNS() {
+		return nextSibling;
+	}
+
 	void SetFC(i32 fc) {
 		firstChild = fc;
 	}
 
-	ui64 GetFC() {
+	i32 GetFC() {
 		return firstChild;
 	}
 
@@ -479,7 +517,10 @@ class DynArray {
 
 	ref<ui8> At(ui64 index) {
 		if index > count {
-			stdout.writeln("[DynArray]: Error: Array index out of bounds");
+			stdout.write("[DynArray]: Error: Array index out of bounds. Accessed index ");
+			stdout.write(index);
+			stdout.write(" in Array of size ");
+			stdout.writeln(count);
 			SYS_EXIT(1);
 		}
 		return data + (index * entrySize);
@@ -564,11 +605,13 @@ class DynArray {
 }
 
 void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8> file) {
-	Token currentToken = {1, 1, 0, file, 0, 0};
+	Token currentToken = {1, 1, 0, file, 0, 0, 0};
 	ui64 start = 0;
 	ui16 currentType = 0;
 	ui64 textLength = 0;
 	ui32 line = 1;
+	DynArray tokenStack = {0, 0, 0, 9};
+	tokenStack.New(128);
 	loop i, 0..sourceLength {
 		start += 1;
 		ui8 byte = source[i];
@@ -599,16 +642,10 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 		if (byte >= '0') & (byte <= '9') {
 			if currentType == _cTOKENTYPE_NONE {
 				currentType = _cTOKENTYPE_INTEGER;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			} else if currentType <= _cTOKENTYPE_CHAR {
 				textLength += 1;
-			} else if currentType == _cTOKENTYPE_NONE {
-				currentType = _cTOKENTYPE_INTEGER;
-				currentToken.column = start;
-				currentToken.text = source + i;
-				textLength = 1;
 			} else if currentType == _cTOKENTYPE_MINUS {
 				currentType = _cTOKENTYPE_INTEGER;
 				textLength += 1;
@@ -619,8 +656,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_INTEGER;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == '.' {
@@ -649,8 +685,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_DOT;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == '/' {
@@ -664,8 +699,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_DIVIDE;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == '-' {
@@ -673,120 +707,117 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_MINUS;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '+' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_PLUS;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '@' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_DEREFERENCE;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '!' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_NOT;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '~' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_NEGATE;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '(' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
+			TokenRef t = { byte, tokens.GetCount()};
+			tokenStack.Add(\t);
 			currentType = _cTOKENTYPE_PARENTHESIS_OPEN;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == ')' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
+			currentToken.matchingTokenIndex = 0;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_PARENTHESIS_CLOSE;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
+			currentToken.matchingTokenIndex = MatchToken(tokens, \tokenStack, \currentToken, 40);
 			textLength = 1;
 		} else if byte == 123 { // Opening '{'
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
+			TokenRef t = { byte, tokens.GetCount()};
+			tokenStack.Add(\t);
 			currentType = _cTOKENTYPE_CURLY_OPEN;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '}' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
+			currentToken.matchingTokenIndex = 0;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_CURLY_CLOSE;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
+			currentToken.matchingTokenIndex = MatchToken(tokens, \tokenStack, \currentToken, 123);
 			textLength = 1;
 		} else if byte == '[' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
+			TokenRef t = { byte, tokens.GetCount()};
+			tokenStack.Add(\t);
 			currentType = _cTOKENTYPE_SQUARE_OPEN;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == ']' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
+			currentToken.matchingTokenIndex = 0;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_SQUARE_CLOSE;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
+			currentToken.matchingTokenIndex = MatchToken(tokens, \tokenStack, \currentToken, 91);
 			textLength = 1;
 		} else if byte == ',' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_COMMA;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '^' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_XOR;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '#' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_MACRO;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '%' {
 			currentToken.type = currentType;
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_MODULUS;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if byte == '=' {
 			if ((currentType >= _cTOKENTYPE_MINUS) & (currentType <= _cTOKENTYPE_BOOL_AND)) | (currentType == _cTOKENTYPE_ASSIGNMENT) {
@@ -800,8 +831,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_ASSIGNMENT;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == ':' {
@@ -816,8 +846,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_COLON;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == '|' {
@@ -829,8 +858,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_OR;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == '&' {
@@ -842,8 +870,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_MODULUS;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == '*' {
@@ -863,8 +890,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_MULTIPLY;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == '>' {
@@ -876,8 +902,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_GREATER_THAN;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == '<' {
@@ -889,8 +914,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_LESS_THAN;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == '"' {
@@ -905,8 +929,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_STRING;
-				currentToken.column = start;
-				currentToken.text = (source + i) + 1;
+				currentToken.StartNew((source + i) + 1, start);
 				textLength = 1;
 			}
 		} else if byte == 39 { // single quote
@@ -932,8 +955,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_CHAR;
-				currentToken.column = start;
-				currentToken.text = (source + i) + 1;
+				currentToken.StartNew((source + i) + 1, start);
 				textLength = 0;
 			}
 		} else if byte == 92 { // '\'
@@ -946,8 +968,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_REFERENCE_OF;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else if byte == ';' {
@@ -955,8 +976,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = _cTOKENTYPE_SEMICOLON;
-			currentToken.column = start;
-			currentToken.text = source + i;
+			currentToken.StartNew(source + i, start);
 			textLength = 1;
 		} else if (byte == 32) | (byte == 9) { // ' ' or '\t'
 			if ((currentType == _cTOKENTYPE_SINGLELINE_COMMENT) | (currentType == _cTOKENTYPE_MULTILINE_COMMENT)) | ((currentType == _cTOKENTYPE_STRING) | (currentType == _cTOKENTYPE_CHAR)) {
@@ -987,8 +1007,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_KEYWORD_IDENTIFIER;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			}
 		} else {
@@ -997,8 +1016,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 				currentToken.textLength = textLength;
 				EndToken(tokens, \currentToken);
 				currentType = _cTOKENTYPE_KEYWORD_IDENTIFIER;
-				currentToken.column = start;
-				currentToken.text = source + i;
+				currentToken.StartNew(source + i, start);
 				textLength = 1;
 			} else {
 				textLength += 1;
@@ -1015,6 +1033,25 @@ void EndToken(ref<DynArray> tokens, ref<Token> token) {
 	if (((t.type) != _cTOKENTYPE_NONE) & ((t.type) != _cTOKENTYPE_SINGLELINE_COMMENT)) & ((t.type) != _cTOKENTYPE_MULTILINE_COMMENT) {
 		tokens.Add(token);
 	}
+}
+
+// Returns the tokenIndex of the matching token in tokenisation
+ui64 MatchToken(ref<DynArray> tArr, ref<DynArray> tStack, ref<Token> currentToken, char expectedChar) {
+	ref<TokenRef> tRef = tStack.Pop();
+	TokenRef t = @tRef;
+	if (t.character) == expectedChar {
+		ui32 tokenCount = tArr.GetCount();
+		tArr.UpdateField(t.tokenIndex, 34, \tokenCount, 4);
+		return t.tokenIndex;
+	} else {
+		// Print Error unexpected token
+		stdout.write("[Tokeniser#MatchToken]: Unexpected token ");
+		PrintToken(currentToken);
+		stdout.write("Expected: ");
+		stdout.writeln(expectedChar);
+		SYS_EXIT(1);
+	}
+	return 0;
 }
 
 ref<DynArray> s_struct_array = 0;
@@ -1122,8 +1159,8 @@ ref<ui8> GetNameFromTypeIndex(ui64 typeType) {
 
 bool IsTokenSpecifiedType(ref<DynArray> tArr, ui64 offset, ui16 desiredType) {
 	ref<Token> t = tArr.At(offset);
-	Token token = @t;
-	return (token.type) == desiredType;
+	ui16 ttype = t.GetType();
+	return ttype == desiredType;
 }
 
 ui64[256] s_nested_types;
@@ -1135,12 +1172,12 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 	ui64 tokenCount = tArr.GetCount();
 	// id [<? ]>?
 	ref<Token> t = tArr.At(offset);
+	ui64 ttype = t.GetType();
 	Token token = @t;
 
-	ui64 ttype = token.type;
 	if (ttype != _cTOKENTYPE_KEYWORD_IDENTIFIER) {
-		stdout.write("[Parser]: Expected a type identifier but got ");
-		PrintToken(t);
+		stdout.write("[Parser#ParseType]: Expected a type identifier but got ");
+		t.DebugPrint();
 		SYS_EXIT(1);
 		return 0;
 	}
@@ -1149,7 +1186,7 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 	ui64 childTypeIndex = GetTypeIndexFromName(typeArr, t);
 	t = tArr.At(offset + 1);
 	Token nextToken = @t;
-	ttype = nextToken.type;
+	ttype = t.GetType();
 
 	// if childType == 15, it's not a primitive type
 	if childTypeIndex == 15 {
@@ -1299,15 +1336,11 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, ui64 max) {
 	ui64 returnValue = 0;
 	Node currentNode = { 0, 0, 0, 0, 0 };
-	currentNode.type = _cPARSER_NODETYPE_EXPRESSION;
-	currentNode.firstChild = nodeArr.GetCount() + 1;
-	currentNode.typeIndex = -1;
-	currentNode.tokenIndex = offset;
-	nodeArr.Add(\currentNode);
 
-	currentNode.type = _cPARSER_NODETYPE_EXPRESSION_PROPERTY;
+	currentNode.type = _cPARSER_NODETYPE_EXPRESSION_PROPERTY_CHAIN;
 	currentNode.nextSibling = -1;
 	currentNode.firstChild = nodeArr.GetCount() + 1;
+	currentNode.tokenIndex = offset;
 	nodeArr.Add(\currentNode);
 
 	currentNode.type = _cPARSER_NODETYPE_EXPRESSION_VARIABLE;
@@ -1326,14 +1359,10 @@ ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 off
 		bool isDot = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_DOT);
 		bool isArr = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_SQUARE_OPEN);
 		if isDot {
-			currentNode.type = _cPARSER_NODETYPE_EXPRESSION_PROPERTY;
-			currentNode.nextSibling = -1;
-			currentNode.firstChild = nodeArr.GetCount() + 1;
-			nodeArr.Add(\currentNode);
-
-			currentNode.type = _cPARSER_NODETYPE_EXPRESSION_VARIABLE;
-			currentNode.firstChild = -1;
 			nodeState = nodeArr.GetCount();
+			currentNode.type = _cPARSER_NODETYPE_EXPRESSION_PROPERTY;
+			currentNode.firstChild = -1;
+			currentNode.tokenIndex = i + 1;
 			nodeArr.Add(\currentNode);
 
 			returnValue += 1; // Skip .prop
@@ -1342,6 +1371,7 @@ ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 off
 			currentNode.type = _cPARSER_NODETYPE_EXPRESSION_INDEX;
 			currentNode.nextSibling = -1;
 			currentNode.firstChild = nodeArr.GetCount() + 1;
+			currentNode.tokenIndex = i;
 			nodeState = nodeArr.GetCount();
 			nodeArr.Add(\currentNode);
 
@@ -1476,8 +1506,57 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ui64 offset, ui6
 				skip;
 			}
 		} else if isListInit {
-			// TODO: Implement this
-			// But like, also model it before implementation
+			ui64 nodeCount = nodeArr.GetCount();
+			ui64 listInitState = nodeCount;
+			currentNode.type = _cPARSER_NODETYPE_EXPRESSION_LIST_INIT;
+			currentNode.firstChild = nodeCount + 1;
+			currentNode.nextSibling = -1;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i;
+			nodeArr.Add(\currentNode);
+			
+			ref<Token> currentToken = tArr.At(currentNode.tokenIndex);
+			ui32 closingInitIndex = currentToken.GetMatchingIndex();
+
+			loop j, i + 1 .. closingInitIndex {
+				ui64 listInitItemState = nodeArr.GetCount();
+				currentNode.type = _cPARSER_NODETYPE_EXPRESSION_LIST_INIT_ITEM;
+				currentNode.firstChild = listInitState + 1;
+				currentNode.nextSibling = -1; // Unknown as of now
+				currentNode.tokenIndex = i + 1;
+				nodeArr.Add(\currentNode);
+				
+				ui64 localToSkip = ParseExpression(tArr, nodeArr, j, closingInitIndex, _cTOKENTYPE_COMMA);
+				bool hasNextItem = (j + localToSkip) != closingInitIndex;
+
+				if hasNextItem {
+					nodeCount = nodeArr.GetCount();
+					nodeArr.UpdateField(listInitState, 4, \nodeCount, 4);
+					// comma gets skipped on the next iteration of the loop
+				} else {
+					i32 reset = -1;
+					nodeArr.UpdateField(listInitItemState, 4, \reset, 4);
+					localToSkip += 1;
+					returnValue += localToSkip;
+					i += localToSkip;
+					break;
+				}
+				j += localToSkip;
+				i += localToSkip;
+				returnValue += localToSkip;
+			}
+
+			nodeCount = nodeArr.GetCount();
+			isNextEnd = IsTokenSpecifiedType(tArr, i + 1, endType);
+			isNextMax = (i + 1) == max;
+			if isNextEnd | isNextMax {
+				i32 reset = -1;
+				nodeArr.UpdateField(listInitState, 4, \reset, 4);
+			} else {
+				nodeArr.UpdateField(listInitState, 4, \nodeCount, 4);
+			}
+
+			skip;
 		}
 		currentNode.type = _cPARSER_NODETYPE_EXPRESSION;
 		currentNode.firstChild = -1;
@@ -2993,6 +3072,79 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			
 			currentInstr.type = _cANALYSER_INSTRTYPE_CALL_FUNC;
 			instrArr.Add(\currentInstr);
+		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_LIST_INIT {
+			// Iterate over list items
+			// Call AnalyseExpression for each
+			// Then add instr UNKNOWN
+			ui64 child = exprNode.GetFC();
+			ref<Node> listInitItemRef = nodeArr.At(child);
+			Node listInitItemNode = @listInitItemRef;
+			
+			if (listInitItemNode.type) != _cPARSER_NODETYPE_EXPRESSION_LIST_INIT_ITEM {
+				stdout.write("[Compiler#AnalyseExpression]: List Init Item node was not a list init item, but ");
+				ui64 type = listInitItemNode.type;
+				stdout.writeln(type);
+				SYS_EXIT(1);
+			}
+
+			ui64 listInitState = instrArr.GetCount();
+			currentInstr.type = _cANALYSER_INSTRTYPE_WITH_LIST;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_LITERAL;
+			currentInstr.value = 0;
+			instrArr.Add(\currentInstr);
+			
+			if (listInitItemNode.firstChild) != -1 {
+				// We have arguments
+				// First child is pointing at an expression
+				ui64 argIt = child;
+				ui64 counter = 0;
+				loop {
+					ref<Node> argNode = nodeArr.At(argIt); // is ListInitItem Node
+					i32 firstChild = argNode.GetFC();
+					AnalyseExpression(tArr, nodeArr, typeArr, instrArr, firstChild);
+					currentInstr.type = _cANALYSER_INSTRTYPE_SET_ITEM;
+					currentInstr.value = counter;
+					instrArr.Add(\currentInstr);
+					counter += 1;
+					
+					i32 nextSibling = argNode.GetNS();
+					if nextSibling == -1 {
+						break;
+					} else {
+						argIt = nextSibling;
+					}
+				}
+				instrArr.UpdateField(listInitState, 2, \counter, 8);
+			}
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
+			currentInstr.value = exprNode.tokenIndex;
+			instrArr.Add(\currentInstr);
+		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_PROPERTY_CHAIN {
+			// We are the property chain, our first child is the field name/variable name
+			// its next sibling is the continuation of the property/index chain
+			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
+			currentInstr.value = exprNode.tokenIndex;
+			instrArr.Add(\currentInstr);
+
+			i32 childIndex = exprNode.GetFC();
+			ref<Node> child = nodeArr.At(childIndex);
+			i32 nextSibling = child.GetNS();
+
+			AnalyseExpression(tArr, nodeArr, typeArr, instrArr, nextSibling);
+		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_PROPERTY {
+			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_PROPERTY;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
+			currentInstr.value = exprNode.tokenIndex;
+			instrArr.Add(\currentInstr);
+		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_INDEX {
+			AnalyseExpression(tArr, nodeArr, typeArr, instrArr, exprNode.firstChild);
+			currentInstr.type = _cANALYSER_INSTRTYPE_SET_INDEX;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_VARIABLE; // currentVar/currentMemOffset in compilation
+			currentInstr.value = 0;
+			instrArr.Add(\currentInstr);
 		} else {
 			stdout.write("[Compiler#AnalyseExpression]: Unknown ");
 			exprNodePtr.PrintNode();
@@ -3558,16 +3710,22 @@ void PrintInstr(ref<Instr> instrPtr) {
 		stdout.write("WITH_STACK ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_VALUE {
 		stdout.write("WITH_VALUE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_LIST {
+		stdout.write("WITH_LIST ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_VAR {
 		stdout.write("DEF_VAR ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_VALUE {
 		stdout.write("SET_VALUE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_ITEM {
+		stdout.write("SET_ITEM ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_INTEGER {
 		stdout.write("LOAD_INTEGER ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_VARIABLE {
 		stdout.write("LOAD_VARIABLE ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_STRING {
 		stdout.write("LOAD_STRING ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_PROPERTY {
+		stdout.write("LOAD_PROPERTY ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
 		stdout.write("RETURN ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_ADD {
@@ -5381,6 +5539,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			}
 			ref<Variable> variablePtr = variables.At(index);
 			Variable variable = @variablePtr;
+			memcopy2(\currentVar, \variable, 37);
 			ref<Node> nodePtr = nodeArr.At(variable.nodeIndex);
 			Node node = @nodePtr;
 			ref<Type> typePtr = typeArr.At(node.typeIndex);
@@ -5534,6 +5693,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			// RAX = 0
 			LoadFromSection(\textBytes, 0, _cCOMPILATION_SECTION_DATA, stringOffset, 8, 8);
 			regsInUse[0] = true;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_LIST {
+			// ignore
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_VALUE {
 			if (currentVar.location) == _cVARIABLE_LOCATION_STACK {
 				stdout.write("[Compiler#CompileToElf64.with_value]: Error: Wrong instruction type WITH_VALUE for a stack variable\n");
@@ -5558,6 +5719,32 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				stdout.writeln(location);
 				SYS_EXIT(1);
 			}
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_PROPERTY {
+			// get current offset (from currentVar if 0)
+			// get current type
+			// get type's struct index
+			// get struct's fields
+			// loop over fields and aliases to find actual Field
+			// update current offset and current type with Field's info
+			// TODO: Implement this
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_ITEM {
+			ui64 nodeIndex = currentVar.nodeIndex;
+			ref<Node> nodeRef = nodeArr.At(nodeIndex);
+			Node node = @nodeRef;
+			
+			i32 typeIndex = node.typeIndex;
+			ref<Type> typeRef = typeArr.At(node.typeIndex);
+			Type type = @typeRef;
+
+			i32 structIndex = type.extraIndex;
+			ref<Struct> structRef = s_struct_array.At(structIndex);
+			Struct strukt = @structRef;
+			
+			ui64 firstFieldIndex = strukt.firstFieldIndex;
+			ref<Field> fieldRef = s_field_array.At(firstFieldIndex + ((instruction.value) * 24)); // 24 is sizeof(Field)
+			Field field = @fieldRef;
+			ui64 memoryOffset = (currentVar.offset) - (field.offset);
+			// TODO: Move whatever is at RAX to this memory offset depending on currentVar's location (data, bss, stack)
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_TYPE {
 			ref<Type> typePtr = typeArr.At(instruction.value);
 			Type type = @typePtr;
@@ -5679,6 +5866,15 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				//lineInfoBytes.AddByte(0x07); // DW_LNS_set_basic_block
 			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END {
 				lineInfoBytes.AddByte(0x0a); // DW_LNS_set_prologue_end
+			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE {
+				// Handled by statement
+				/*
+				lineInfoBytes.AddByte(_cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE - 100);
+				ui32 value = instruction.value;
+				lineInfoBytes.AddSLEB128(value);
+				dbgLastLine += value;
+				shouldSkip = true;
+				*/
 			} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEBUG_SET_EPILOGUE_BEGIN {
 				lineInfoBytes.AddByte(0x0b); // DW_LNS_set_epilogue_begin
 
@@ -6037,7 +6233,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 
 
 ui8 main(cstring[] argv) {
-	DynArray tokens = {0, 0, 0, 34};
+	DynArray tokens = {0, 0, 0, 38};
 	tokens.New(1024);
 	i32 fd = SYS_OPEN(argv[1], 0, 0);
 	ui32 lengthOfFile = GetLengthOfCstring(argv[1]);
