@@ -5846,6 +5846,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				0xC3, // ret
 			};
 			textBytes.AddBytes(\epilogue, 2);
+			regsInUse[0] = false;
+			regsInUse[3] = false;
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_STRING {
 			ui64 tokenIndex = instruction.value;
 			ref<Token> tokenRef = tArr.At(tokenIndex);
