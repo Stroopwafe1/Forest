@@ -517,8 +517,8 @@ class DynArray {
 		if (count + 1) == size {
 			ui64 s = size * 2;
 			ref<ui8> newRef = alloc(s + 1);
-			memcopy2(newRef, data, count);
-			dealloc(data, count);
+			memcopy2(newRef, data, count * entrySize);
+			dealloc(data, count * entrySize);
 			data = newRef;
 			size = s;
 		}
@@ -5483,7 +5483,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 
 			// clean up variables
 			ui64 currVariableCount = variables.GetCount();
-			variables.DeleteLast(currVariableCount - variableState);
+			variables.DeleteLastN(currVariableCount - variableState);
 			
 			ui8[2] epilogue = {
 				0x5D, // pop rbp
@@ -5506,9 +5506,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					stdout.writeln(value);
 					SYS_EXIT(1);
 				}
+				s_stack_sizes[s_stack_count] = value;
+				s_stack_count += 1;
 			}
-			s_stack_sizes[s_stack_count] = value;
-			s_stack_count += 1;
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CALL_FUNC {
 			ref<Token> tokenPtr = tArr.At(instruction.value);
 			Token token = @tokenPtr;
@@ -5714,11 +5714,25 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				SYS_EXIT(1);
 			}
 			regsInUse[0] = false;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_LOADED {
+			bool raxUsed = regsInUse[0];
+			bool rbxUsed = regsInUse[3];
+			if (raxUsed & rbxUsed) {
+				ui8[3] cmpRaxRbx = {
+					0x48, 0x3B, 0xC3
+				};
+				textBytes.AddBytes(\cmpRaxRbx, 3);
+				regsInUse[0] = false;
+				regsInUse[3] = false;
+			} else {
+				stdout.write("[Compiler#CompileToELF64.cmp_loaded]: Error: Expected both RAX and RBX to be in use");
+				SYS_EXIT(1);
+			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LABEL {
 			ui64 byteOffsetLabel = s_label_bytes[instruction.value];
 			if byteOffsetLabel == 0 {
-				stdout.writeln("[Compiler]: Error: Jumping to unknown label");
-				s_undefined_jumps[s_jump_count] = bytes.GetCount();
+				stdout.writeln("[Compiler#CompileToELF64.jmp_label]: Warning: Jumping to unknown label\n");
+				s_undefined_jumps[s_jump_count] = textBytes.GetCount();
 				s_jump_labels[s_jump_count] = instruction.value;
 				s_jump_count += 1;
 			}
@@ -5807,8 +5821,31 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				i += (counter - 1);
 			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
-			// Restore however many stack allocations this block has had
+			// TODO: Restore however many stack allocations this block has had
 			// Add 0xC3
+			ui64 totalStackSize = 0;
+			loop j, 0..s_stack_count {
+				ui8 stackSize = s_stack_sizes[j];
+				totalStackSize += stackSize;
+			}
+			if totalStackSize > 255 {
+				// TODO: Fix
+				stdout.write("[Compiler#CompileToELF64.return]: Error: Total stack bigger than 255\n");
+				SYS_EXIT(1);
+			}
+			if totalStackSize != 0 {
+				ui8[3] addRsp = {
+					0x48, 0x83, 0xC4
+				};
+				textBytes.AddBytes(\addRsp, 3);
+				textBytes.AddByte(totalStackSize);
+			}
+			
+			ui8[2] epilogue = {
+				0x5D, // pop rbp
+				0xC3, // ret
+			};
+			textBytes.AddBytes(\epilogue, 2);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_STRING {
 			ui64 tokenIndex = instruction.value;
 			ref<Token> tokenRef = tArr.At(tokenIndex);
@@ -6171,7 +6208,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 		if instructionCounter != 0 {
 			instructionCounter -= 1;
 			if instructionCounter == 0 {
-				ui64 currCount = bytes.GetCount();
+				ui64 currCount = textBytes.GetCount();
 				ui8 relativeOffset = currCount - lastJumpState;
 				textBytes.UpdateByte(lastJumpState, (relativeOffset - 1));
 			}

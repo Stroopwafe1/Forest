@@ -14,5 +14,9 @@ ui8 main(array<ref<ui8> > argv) {
 	array<char> testStr = "Hello, World";
 	Hi hi = { 5 };
 	hi.field = 7;
-	return hi.field - 3;
+	if hi.field - 3 == 4 {
+		return 0;
+	} else {
+		return hi.field - 3;
+	}
 }
