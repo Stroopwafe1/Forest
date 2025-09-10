@@ -13,5 +13,6 @@ ui8 main(array<ref<ui8> > argv) {
 	ui8 test = returnSub2(value);
 	array<char> testStr = "Hello, World";
 	Hi hi = { 5 };
+	hi.field = 7;
 	return hi.field - 3;
 }
