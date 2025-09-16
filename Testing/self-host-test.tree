@@ -1,3 +1,9 @@
+enum TestEnum {
+	Test1,
+	Test2 = 5,
+	Test3,
+}
+
 struct Hi {
 	ui8 field;
 }
@@ -14,6 +20,9 @@ ui8 main(array<ref<ui8> > argv) {
 	array<char> testStr = "Hello, World";
 	Hi hi = { 5 };
 	hi.field = 7;
+
+	TestEnum t = TestEnum::Test1;
+	
 	if hi.field - 3 == 5 {
 		return 0;
 	} else {
