@@ -21,7 +21,7 @@ ui8 main(array<ref<ui8> > argv) {
 	Hi hi = { 5 };
 	hi.field = 7;
 
-	TestEnum t = TestEnum::Test1;
+	TestEnum t = TestEnum::Test2;
 	
 	if hi.field - 3 == 5 {
 		return 0;

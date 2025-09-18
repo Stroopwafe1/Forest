@@ -368,6 +368,13 @@ struct Function {
 	// rest same as SymbolEntry
 }
 
+struct Enum {
+	ref<ui8> name;
+	ui64 nameLength;	
+	ui64 value;
+	i32 typeIndex;
+}
+
 void memcopy2(ref<ui8> dest, ref<ui8> src, ui64 bytes) {
 	loop i, 0..bytes {
 		dest[i] = src[i];
@@ -618,6 +625,10 @@ class DynArray {
 		}
 		SYS_WRITE(1, data, count * entrySize);
 		stdout.write("\n");
+	}
+
+	void Clear() {
+		count = 0;
 	}
 }
 
@@ -1073,6 +1084,7 @@ ui64 MatchToken(ref<DynArray> tArr, ref<DynArray> tStack, ref<Token> currentToke
 
 ref<DynArray> s_struct_array = 0;
 ref<DynArray> s_field_array = 0;
+ref<DynArray> s_enum_array = 0;
 
 ui64 GetTypeIndexFromName(ref<DynArray> typArr, ref<Token> t) {
 	Token token = @t;
@@ -2781,7 +2793,7 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 	Struct s = {
 		structToken.text,
 		structToken.textLength,
-		s_field_array.GetCount(),
+		s_enum_array.GetCount(),
 		0
 	};
 
@@ -2797,7 +2809,6 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 	};
 	typeArr.Add(\structType);
 	
-	s_struct_array.Add(\s);
 
 	ref<Token> tOpenPtr = tArr.At(offset + 2); // Opening bracket
 
@@ -2820,8 +2831,12 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 	}
 
 	currentNode.firstChild = -1;
+	ui64 enumValue = 0;
+	DynArray exprInstr = {0, 0, 0, 10};
+	exprInstr.New(32);
+	ui64 memberCount = s_enum_array.GetCount();
+	
 	loop i, offset + 3..closingIndex {
-
 		isSyntaxCorrect = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_KEYWORD_IDENTIFIER);
 		if !isSyntaxCorrect {
 			stdout.write("[Parser#ParseEnum]: Expected a name as a value for the enum but got ");
@@ -2839,10 +2854,29 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 			currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT;
 			nodeArr.Add(\currentNode);
 
+			ref<Token> enumTokenPtr = tArr.At(i);
+			Token enumToken = @enumTokenPtr;
+
 			i += 2;
+			nodeCount = nodeArr.GetCount();
 			i += ParseExpression(tArr, nodeArr, typeArr, i, closingIndex, _cTOKENTYPE_COMMA);
+			
+			AnalyseExpression(tArr, nodeArr, typeArr, \exprInstr, nodeCount);
+			ui64 instrCount = exprInstr.GetCount();
+			enumValue = SimulateExpression(\exprInstr, 0, instrCount);
+			Enum e = { enumToken.text, enumToken.textLength, enumValue, typeCount };
+
+			s_enum_array.Add(\e);
+			enumValue += 1;
+			exprInstr.Clear();
+
 			i += 1;
 		} else {
+			ref<Token> enumTokenPtr = tArr.At(i);
+			Token enumToken = @enumTokenPtr;
+			Enum e = { enumToken.text, enumToken.textLength, enumValue, typeCount };
+			s_enum_array.Add(\e);
+			enumValue += 1;
 			currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
 			nodeArr.Add(\currentNode);
 		}
@@ -2854,6 +2888,10 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 	i32 negOne = -1;
 	nodeArr.UpdateField(nodeCount - 1, 4, \negOne, 4); // Last enum value should not have a sibling
 	ref<Token> tClosePtr = tArr.At(closingIndex); // Closing bracket
+
+	ui64 newCount = s_enum_array.GetCount();
+	s.fieldCount = newCount - memberCount;
+	s_struct_array.Add(\s);
 
 	nodeCount = nodeArr.GetCount();
 	nodeArr.UpdateField(enumNodeState, 4, \nodeCount, 4);
@@ -3146,6 +3184,22 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			}
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_ENUM {
 			// TODO: I have the type of the enum, and the token. Evaluate this to a proper value
+			ref<Token> enumMemberPtr = tArr.At(exprNode.tokenIndex);
+			Token enumMember = @enumMemberPtr;
+			ui64 index = s_enum_array.FindString(0, enumMember.text, enumMember.textLength);
+			ref<Enum> ePtr = s_enum_array.At(index);
+			Enum e = @ePtr;
+
+			if (e.typeIndex) != (exprNode.typeIndex) {
+				stdout.write("[Compiler#AnalyseExpression]: Error: We found an enum member with the same name but different enum parent type. This is a current limitation of the comipiler. TODO");
+				SYS_EXIT(1);
+			}
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_INTEGER;
+			currentInstr.value = e.value;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_LITERAL;
+			instrArr.Add(\currentInstr);
+			
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_FUNC_CALL {
 			// Iterate over arguments
 			// Call AnalyseExpression for each
@@ -5032,6 +5086,7 @@ ui64 DebugAddChildType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 typeIndex
 
 		s_debug_info.AddByte(0); // Close off children list
 	} else if typeType == _cPARSER_TYPETYPE_CLASS {
+		refType = s_debug_info.GetCount() - 1;
 		s_debug_abbrev.AddULEB128(0x02); // DW_TAG_class_type
 		s_debug_abbrev.AddByte(1); // Yes children
 
@@ -5054,6 +5109,55 @@ ui64 DebugAddChildType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 typeIndex
 			DebugAddField(tArr, typeArr, fieldIndex);
 			DebugEndChain();
 		}
+	} else if typeType == _cPARSER_TYPETYPE_ENUM {
+		refType = s_debug_info.GetCount() - 1;
+		s_debug_abbrev.AddULEB128(0x04); //DW_TAG_enumeration_type
+		s_debug_abbrev.AddByte(1); // yes children
+
+		ref<Struct> enumClassPtr = s_struct_array.At(type.extraIndex);
+		Struct enumClass = @enumClassPtr;
+
+		s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+		s_debug_abbrev.AddULEB128(0x08); // string
+		s_debug_info.AddBytes(enumClass.name, enumClass.nameLength); // name
+		s_debug_info.AddByte(0); // Null-terminated
+
+		s_debug_abbrev.AddULEB128(0x6d); // DW_AT_enum_class
+		s_debug_abbrev.AddULEB128(0x19); // DW_FORM_flag_present (means no byte needed in debug_info)
+			
+		s_debug_abbrev.AddULEB128(0x0b); // DW_AT_byte_size
+		s_debug_abbrev.AddULEB128(0x0f); // DW_FORM_udata
+		s_debug_info.AddULEB128(type.byteSize);
+
+		DebugEndChain();
+
+		loop i, 0..enumClass.fieldCount {
+			s_debug_info.AddULEB128(s_debug_index);
+			s_debug_abbrev.AddULEB128(s_debug_index);
+			s_debug_index += 1;
+			
+			s_debug_abbrev.AddULEB128(0x28); //DW_TAG_enumerator
+			s_debug_abbrev.AddByte(0); // no children
+			
+			s_debug_abbrev.AddULEB128(0x03); // DW_AT_name
+			s_debug_abbrev.AddULEB128(0x08); // string
+
+
+			ref<Enum> ePtr = s_enum_array.At((enumClass.firstFieldIndex) + i);
+			Enum e = @ePtr;
+			s_debug_info.AddBytes(e.name, e.nameLength);
+			s_debug_info.AddByte(0); // null-terminated
+
+			s_debug_abbrev.AddULEB128(0x1c); //DW_AT_const_value
+			s_debug_abbrev.AddULEB128(0x0f); //DW_FORM_udata
+			s_debug_info.AddULEB128(e.value);
+
+			//DebugEndChain();
+
+			DebugEndChain();
+		}
+		s_debug_info.AddByte(0); // Close off children list
+		
 	} else {
 		stdout.write("[Compiler#DebugAddChildType]: Error: Unexpected typetype in type parser ");
 		stdout.writeln(typeType);
@@ -6694,6 +6798,10 @@ ui8 main(cstring[] argv) {
 	DynArray fields = {0, 0, 0, 24};
 	fields.New(256);
 	s_field_array = \fields;
+
+	DynArray enums = {0, 0, 0, 28};
+	enums.New(256);
+	s_enum_array = \enums;
 
 	Parse(\tokens, \nodes, \types);
 
