@@ -22,6 +22,22 @@ ui8 main(array<ref<ui8> > argv) {
 	hi.field = 7;
 
 	TestEnum t = TestEnum::Test2;
+
+	match t {
+		TestEnum::Test1: { return 0; }
+		TestEnum::Test2: { return hi.field - 3; }
+	} else {
+		return -1;
+	}
+
+	/*
+	ui64 matchExpressionValue = match t {
+		Test1: 0;
+		Test2: 5;
+	} else {
+		-1;
+	}
+	 */
 	
 	if hi.field - 3 == 5 {
 		return 0;

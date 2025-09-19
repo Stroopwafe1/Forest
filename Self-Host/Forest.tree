@@ -108,6 +108,11 @@ ui8 _cPARSER_NODETYPE_END_FUNC = 44;
 ui8 _cPARSER_NODETYPE_PROPERTY_ASSIGNMENT = 45;
 ui8 _cPARSER_NODETYPE_ENUM = 46;
 ui8 _cPARSER_NODETYPE_EXPRESSION_ENUM = 47;
+ui8 _cPARSER_NODETYPE_EXPRESSION_MATCH = 48;
+ui8 _cPARSER_NODETYPE_MATCH = 49;
+ui8 _cPARSER_NODETYPE_MATCH_PARAMETER = 50;
+ui8 _cPARSER_NODETYPE_MATCH_BODY = 51;
+ui8 _cPARSER_NODETYPE_MATCH_CASE = 52;
 
 ui8 _cPARSER_TYPETYPE_VOID = 0;
 ui8 _cPARSER_TYPETYPE_UI8 = 1;
@@ -193,6 +198,7 @@ ui8 _cANALYSER_INSTRTYPE_WITH_VALUE = 55;
 ui8 _cANALYSER_INSTRTYPE_LOAD_PROPERTY = 56;
 ui8 _cANALYSER_INSTRTYPE_SET_INDEX = 57;
 ui8 _cANALYSER_INSTRTYPE_LOAD_VALUE = 58; // Use instrvalue type for what to load
+ui8 _cANALYSER_INSTRTYPE_DEF_LABEL = 59;
 
 ui8 _cANALYSER_INSTRTYPE_DEBUG_SPECIAL = 100;
 ui8 _cANALYSER_INSTRTYPE_DEBUG_COPY = 101;
@@ -299,6 +305,10 @@ class Node {
 
 	i32 GetFC() {
 		return firstChild;
+	}
+
+	ui16 GetType() {
+		return type;
 	}
 
 	ui64 GetTokenIndex() {
@@ -2048,6 +2058,57 @@ ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray
 	return toSkip;
 }
 
+ui64 ParseMatchBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset) {
+	ref<Token> tPtr = tArr.At(offset);
+	ui32 matchingIndex = tPtr.GetMatchingIndex();
+
+	ui64 nodeCount = nodeArr.GetCount();
+	Node currentNode = { nodeCount + 1, -1, _cPARSER_NODETYPE_MATCH_BODY, -1, offset };
+	nodeArr.Add(\currentNode);
+
+	ui64 matchCaseState = nodeCount;
+	ui64 tCount = tArr.GetCount();
+	loop i, offset + 1..matchingIndex {
+		nodeCount = nodeArr.GetCount();
+		matchCaseState = nodeCount;
+		currentNode.type = _cPARSER_NODETYPE_MATCH_CASE;
+		currentNode.tokenIndex = i;
+		currentNode.firstChild = nodeCount + 1;
+		currentNode.nextSibling = 0;
+		nodeArr.Add(\currentNode);
+		
+		nodeCount = nodeArr.GetCount();
+		ui64 condNodeState = nodeCount;
+		currentNode.type = _cPARSER_NODETYPE_CONDITION;
+		currentNode.firstChild = nodeCount + 1;
+		currentNode.nextSibling = 0;
+		currentNode.tokenIndex = i;
+		nodeArr.Add(\currentNode);
+		
+		i += ParseExpression(tArr, nodeArr, typeArr, i, tCount, _cTOKENTYPE_COLON);
+		i += 1;
+
+		nodeCount = nodeArr.GetCount();
+		nodeArr.UpdateField(condNodeState, 4, \nodeCount, 4);
+		
+		bool isBlock = IsTokenSpecifiedType(tArr, i, _cTOKENTYPE_CURLY_OPEN);
+		if isBlock {
+			i += ParseBody(tArr, nodeArr, typeArr, i);
+		} else {
+			stdout.write("[Parser#ParseMatchBody]: TODO: Having a match case without a block (surrounded by {}) is not supported yet.\n");
+			SYS_EXIT(1);
+		}
+
+		nodeCount = nodeArr.GetCount();
+		nodeArr.UpdateField(matchCaseState, 4, \nodeCount, 4);
+	}
+
+	i32 negOne = -1;
+	nodeArr.UpdateField(matchCaseState, 4, \negOne, 4);
+
+	return matchingIndex - offset;
+}
+
 // ParseBody parses until the matching '}'. Its returnValue is the offset from given offset to that matching bracket
 ui64 ParseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset) {
 	DynArray tokens = @tArr;
@@ -2186,6 +2247,50 @@ ui64 ParseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 				PrintToken(notSemi);
 				SYS_EXIT(1);
 			}
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
+			i += toSkip;
+			returnVal += (toSkip + 1);
+			skip;
+		}
+
+		equals = StrEquals(nextToken.text, "match", 5);
+		if equals {
+			currentNode.type = _cPARSER_NODETYPE_MATCH;
+			nodeCount = nodeArr.GetCount();
+			currentNode.firstChild = nodeCount + 1;
+			currentNode.nextSibling = 0;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i;
+			ui64 nodeState = nodeCount;
+			lastStatementState = nodeCount;
+			nodeArr.Add(\currentNode);
+			toSkip += 1;
+
+			nodeCount = nodeArr.GetCount();
+			currentNode.firstChild = nodeCount + 1;
+			currentNode.nextSibling = 0;
+			currentNode.typeIndex = -1;
+			currentNode.tokenIndex = i + toSkip;
+			currentNode.type = _cPARSER_NODETYPE_MATCH_PARAMETER;
+			ui64 matchParamNodeState = nodeCount;
+			nodeArr.Add(\currentNode);
+
+			toSkip += ParseExpression(tArr, nodeArr, typeArr, i + 1, tokens.count, _cTOKENTYPE_CURLY_OPEN);
+
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateField(matchParamNodeState, 4, \nodeCount, 4);
+
+			toSkip += ParseMatchBody(tArr, nodeArr, typeArr, i + toSkip);
+			
+			bool assert = IsTokenSpecifiedType(tArr, i + toSkip, _cTOKENTYPE_CURLY_CLOSE);
+			if !assert {
+				stdout.writeln("[Parser#ParseBody.match]: Error: Expected a '}' but got ");
+				ref<Token> debugT = tArr.At(i + toSkip);
+				PrintToken(debugT);
+				SYS_EXIT(1);
+			}
+			
 			nodeCount = nodeArr.GetCount();
 			nodeArr.UpdateField(nodeState, 4, \nodeCount, 4);
 			i += toSkip;
@@ -3183,7 +3288,6 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 				instrArr.Add(\currentInstr);
 			}
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_ENUM {
-			// TODO: I have the type of the enum, and the token. Evaluate this to a proper value
 			ref<Token> enumMemberPtr = tArr.At(exprNode.tokenIndex);
 			Token enumMember = @enumMemberPtr;
 			ui64 index = s_enum_array.FindString(0, enumMember.text, enumMember.textLength);
@@ -3191,7 +3295,7 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			Enum e = @ePtr;
 
 			if (e.typeIndex) != (exprNode.typeIndex) {
-				stdout.write("[Compiler#AnalyseExpression]: Error: We found an enum member with the same name but different enum parent type. This is a current limitation of the comipiler. TODO");
+				stdout.write("[Compiler#AnalyseExpression]: Error: We found an enum member with the same name but different enum parent type. This is a current limitation of the compiler. TODO");
 				SYS_EXIT(1);
 			}
 
@@ -3509,7 +3613,133 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_MEMORY;
 			currentInstr.value = 0;
 			instrArr.Add(\currentInstr);
-			
+		} else if (node.type) == _cPARSER_NODETYPE_MATCH {
+			ref<Node> nsPtr = nodeArr.At(node.nextSibling);
+
+			ui16 nsType = nsPtr.GetType();
+			bool hasElse = nsType == _cPARSER_NODETYPE_ELSE;
+
+			ref<Node> matchParamPtr = nodeArr.At(node.firstChild);
+			i32 matchParamChild = matchParamPtr.GetFC();
+			AnalyseExpression(tArr, nodeArr, typeArr, instrArr, matchParamChild);
+
+			i32 matchParamSibling = matchParamPtr.GetNS();
+			ref<Node> matchBodyPtr = nodeArr.At(matchParamSibling);
+
+			i32 matchCaseIndex = matchBodyPtr.GetFC();
+
+			ui64 beginLabelCount = labelCount;
+			loop {
+				if matchCaseIndex == -1 {
+					break;
+				}
+				ref<Node> matchCasePtr = nodeArr.At(matchCaseIndex);
+				i32 matchCaseFC = matchCasePtr.GetFC();
+				ref<Node> matchConditionPtr = nodeArr.At(matchCaseFC);
+				i32 matchCondFC = matchConditionPtr.GetFC();
+
+				ui64 instrState = instrArr.GetCount();
+				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, matchCondFC);
+				ui64 instrCount = instrArr.GetCount();
+				ui64 constValue = SimulateExpression(instrArr, instrState, instrCount);
+				instrArr.DeleteLastN(instrCount - instrState);
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_CMP_VALUE;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_LITERAL;
+				currentInstr.value = constValue;
+				instrArr.Add(\currentInstr);
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_JMP_EQ;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
+				currentInstr.value = labelCount;
+				labelCount += 1;
+				instrArr.Add(\currentInstr);
+				
+				matchCaseIndex = matchCasePtr.GetNS();
+			}
+
+			// Jump to match_else or end_match if no else
+			currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LABEL;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
+			currentInstr.value = labelCount;
+			ui64 endOrElseMatch = labelCount;
+			labelCount += 1;
+			instrArr.Add(\currentInstr);
+
+			ui64 endMatchLabel = endOrElseMatch;
+			if hasElse {
+				endMatchLabel += 1;
+				labelCount += 1;
+			}
+
+			matchCaseIndex = matchBodyPtr.GetFC();
+			loop {
+				if matchCaseIndex == -1 {
+					break;
+				}
+				ref<Node> matchCasePtr = nodeArr.At(matchCaseIndex);
+				i32 matchCaseFC = matchCasePtr.GetFC();
+				ref<Node> matchConditionPtr = nodeArr.At(matchCaseFC);
+				i32 matchCondNS = matchConditionPtr.GetNS();
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LABEL;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
+				currentInstr.value = beginLabelCount;
+				instrArr.Add(\currentInstr);
+
+				ui64 currentState = instrArr.GetCount();
+				currentInstr.type = _cANALYSER_INSTRTYPE_WITH_STACK;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
+				currentInstr.value = 0;
+				instrArr.Add(\currentInstr);
+
+				ui64 localStackSize = AnalyseBody(tArr, nodeArr, typeArr, instrArr, matchCondNS, \labelCount);
+				instrArr.UpdateField(currentState, 2, \localStackSize, 8);
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LABEL;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
+				currentInstr.value = endMatchLabel;
+				instrArr.Add(\currentInstr);
+
+				beginLabelCount += 1;
+				
+				matchCaseIndex = matchCasePtr.GetNS();
+			}
+
+			// NOTE: Copied from ELSE branch in this AnalyseBody function
+			if hasElse {
+				currentInstr.type = _cANALYSER_INSTRTYPE_ELSE;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
+				currentInstr.value = endOrElseMatch;
+				instrArr.Add(\currentInstr);
+
+				ui64 currentState = instrArr.GetCount();
+				currentInstr.type = _cANALYSER_INSTRTYPE_WITH_STACK;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
+				currentInstr.value = 0;
+				instrArr.Add(\currentInstr);
+
+				i32 elseBody = nsPtr.GetFC();
+				ui64 localStackSize = AnalyseBody(tArr, nodeArr, typeArr, instrArr, elseBody, \labelCount);
+				instrArr.UpdateField(currentState, 2, \localStackSize, 8);
+
+				currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LABEL;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
+				currentInstr.value = endMatchLabel;
+				instrArr.Add(\currentInstr);
+
+				i = nsPtr.GetNS();
+				if i == -1 {
+					memcopy2(labelCountPtr, \labelCount, 8);
+					return stackSize;
+				}
+				skip;
+			}
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_LABEL;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_LABEL;
+			currentInstr.value = endMatchLabel;
+			instrArr.Add(\currentInstr);
 		} else if ((node.type) == _cPARSER_NODETYPE_IF) | ((node.type) == _cPARSER_NODETYPE_ELSE_IF) {
 			if (node.type) == _cPARSER_NODETYPE_ELSE_IF {
 				currentInstr.type = _cANALYSER_INSTRTYPE_ELSE;
@@ -3930,6 +4160,8 @@ void PrintInstr(ref<Instr> instrPtr) {
 		stdout.write("END_FUNC ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_PARAM {
 		stdout.write("DEF_PARAM ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LABEL {
+		stdout.write("DEF_LABEL ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_TYPE {
 		stdout.write("WITH_TYPE ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_STACK {
@@ -3976,6 +4208,8 @@ void PrintInstr(ref<Instr> instrPtr) {
 		stdout.write("CMP_LOADED ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_VARIABLE {
 		stdout.write("CMP_VARIABLE ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_VALUE {
+		stdout.write("CMP_VALUE ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LABEL {
 		stdout.write("JMP_LABEL ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_HEADER {
@@ -5653,6 +5887,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	ui8 currentMemoryLocation = 0;
 	ui8 currentMemoryReg = 0;
 
+	// TODO: Bug on match case jump, they're jumping by 0 bytes
+
 	dbgLastOpcodeByte = 46;
 	ui64 lastFunctionOffset = 0;
 	loop i, 0..instrCount {
@@ -5763,6 +5999,10 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				}
 			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP {
+			ui64 currentByteCount = textBytes.GetCount();
+			s_label_bytes[instruction.value] = currentByteCount;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LABEL {
+			regsInUse[0] = false; // Clear RAX after match parameter comparisons
 			ui64 currentByteCount = textBytes.GetCount();
 			s_label_bytes[instruction.value] = currentByteCount;
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP_HEADER {
@@ -5962,6 +6202,20 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				regsInUse[3] = false;
 			} else {
 				stdout.write("[Compiler#CompileToELF64.cmp_loaded]: Error: Expected both RAX and RBX to be in use");
+				SYS_EXIT(1);
+			}
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_VALUE {
+			bool raxUsed = regsInUse[0];
+			if (raxUsed) {
+				ui8[2] cmpRaxLit = {
+					0x48, 0x3D
+				};
+				textBytes.AddBytes(\cmpRaxLit, 2);
+				textBytes.AddUI32(instruction.value);
+				//regsInUse[0] = false; RAX gets unset at a DEF_LABEL
+				// NOTE: THis is for match cases
+			} else {
+				stdout.write("[Compiler#CompileToELF64.cmp_value]: Error: Expected RAX to be in use");
 				SYS_EXIT(1);
 			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LABEL {
