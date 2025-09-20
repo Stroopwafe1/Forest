@@ -275,14 +275,14 @@ class Token {
 		stdout.write(type);
 		stdout.write(")\n");
 	}
-
-
 }
+ui8 s_sizeof_Token = 38;
 
 struct TokenRef {
 	ui8 character;
 	ui64 tokenIndex;
 }
+ui8 s_sizeof_TokenRef = 9;
 
 class Node {
 	i32 firstChild;
@@ -329,6 +329,7 @@ class Node {
 		stdout.write(")");
 	}
 }// (size 22)
+ui8 s_sizeof_Node = 22;
 
 struct Type {
 	i32 firstChild;
@@ -339,6 +340,7 @@ struct Type {
 	bool signed;
 	ui8 typeType; // VOID, UI8, UI16, UI32, UI64, I8, I16, I32, I64, F8, F16, F32, F64, BOOL, CHAR, REF, ARRAY, STRUCT, CLASS, ENUM
 } // (size 18)
+ui8 s_sizeof_Type = 18;
 
 struct Struct { // Also valid for classes
 	ref<ui8> name;
@@ -346,6 +348,7 @@ struct Struct { // Also valid for classes
 	ui64 firstFieldIndex; // Points to the first field in the dynamic array of fields. Every next field is + sizeof(Field)
 	ui64 fieldCount;
 }
+ui8 s_sizeof_Struct = 32;
 
 struct Field {
 	ui64 typeIndex;
@@ -353,12 +356,14 @@ struct Field {
 	ui64 aliasCount;
 	ui64 offset;
 }
+ui8 s_sizeof_Field = 32;
 
 struct Instr {
 	ui8 type;
 	ui8 valueType;
 	ui64 value;
 }
+ui8 s_sizeof_Instr = 10;
 
 struct Variable {
 	ui64 nodeIndex;
@@ -368,6 +373,7 @@ struct Variable {
 	i32 offset;
 	ui8 location;
 }
+ui8 s_sizeof_Variable = 37;
 
 struct Function {
 	ref<ui8> name;
@@ -377,6 +383,7 @@ struct Function {
 	ui64 definingNodeIndex;
 	// rest same as SymbolEntry
 }
+ui8 s_sizeof_Function = 40;
 
 struct Enum {
 	ref<ui8> name;
@@ -384,6 +391,15 @@ struct Enum {
 	ui64 value;
 	i32 typeIndex;
 }
+ui8 s_sizeof_Enum = 28;
+
+struct ParserVariable {
+	ref<ui8> name;
+	ui64 nameLength;
+	ui64 typeIndex;
+	ui64 value; // Optional value if it's a compile time expression
+}
+ui8 s_sizeof_ParserVariable = 32;
 
 void memcopy2(ref<ui8> dest, ref<ui8> src, ui64 bytes) {
 	loop i, 0..bytes {
@@ -648,7 +664,7 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 	ui16 currentType = 0;
 	ui64 textLength = 0;
 	ui32 line = 1;
-	DynArray tokenStack = {0, 0, 0, 9};
+	DynArray tokenStack = {0, 0, 0, s_sizeof_TokenRef};
 	tokenStack.New(128);
 	loop i, 0..sourceLength {
 		start += 1;
@@ -1095,6 +1111,7 @@ ui64 MatchToken(ref<DynArray> tArr, ref<DynArray> tStack, ref<Token> currentToke
 ref<DynArray> s_struct_array = 0;
 ref<DynArray> s_field_array = 0;
 ref<DynArray> s_enum_array = 0;
+ref<DynArray> s_parser_variables_array = 0;
 
 ui64 GetTypeIndexFromName(ref<DynArray> typArr, ref<Token> t) {
 	Token token = @t;
@@ -1376,6 +1393,14 @@ ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynA
 	ui64 returnValue = 0;
 	Node currentNode = { 0, 0, 0, 0, 0 };
 
+	ref<Token> tokenPtr = tArr.At(offset);
+	Token token = @tokenPtr;
+	ui64 pvIndex = s_parser_variables_array.FindString(0, token.text, token.textLength); // 0 is offset_of_name
+	ref<ParserVariable> pvPtr = s_parser_variables_array.At(pvIndex);
+	ParserVariable pv = @pvPtr;
+	
+	currentNode.typeIndex = pv.typeIndex;
+
 	currentNode.type = _cPARSER_NODETYPE_EXPRESSION_PROPERTY_CHAIN;
 	currentNode.nextSibling = -1;
 	currentNode.firstChild = nodeArr.GetCount() + 1;
@@ -1421,8 +1446,8 @@ ui64 ParseExpressionProperty(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynA
 			i += (returnValue - cache);
 		} else {
 			stdout.write("[Parser#ParseExpressionProperty]: Unknown token ");
-			ref<Token> token = tArr.At(i);
-			PrintToken(token);
+			tokenPtr = tArr.At(i);
+			PrintToken(tokenPtr);
 			SYS_EXIT(1);
 		}
 
@@ -1971,6 +1996,7 @@ ui64 ParseVarAssignment(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray>
 		return 0;
 	}
 
+
 	// VAR_ASSIGN -FC-> ASSIGNMENT -FC-> EXPR
 	ui64 nodeCount = nodeArr.GetCount();
 	Node currentNode = {
@@ -1980,6 +2006,14 @@ ui64 ParseVarAssignment(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray>
 		.typeIndex = -1;
 		.tokenIndex = offset;
 	};
+	
+	ref<Token> tokenPtr = tArr.At(offset);
+	Token token = @tokenPtr;
+	ui64 pvIndex = s_parser_variables_array.FindString(0, token.text, token.textLength); // 0 is offset_of_name
+	ref<ParserVariable> pvPtr = s_parser_variables_array.At(pvIndex);
+	ParserVariable pv = @pvPtr;
+	
+	currentNode.typeIndex = pv.typeIndex;
 
 	ui64 currentNodeState = nodeCount;
 	nodeArr.Add(\currentNode);
@@ -2019,7 +2053,8 @@ ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray
 	DynArray types = @typeArr;
 	DynArray tokens = @tArr;
 	ui64 toSkip = ParseType(tArr, typeArr, offset);
-	ref<Token> token = tArr.At(offset);
+	ref<Token> token = tArr.At(offset + toSkip);
+	Token t = @token;
 	ui64 ttypeIndex = s_nested_types[0];
 	ref<Token> assignTokenPtr = tArr.At((offset + toSkip) + 1);
 	Token assignToken = @assignTokenPtr;
@@ -2027,7 +2062,11 @@ ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray
 	Node currentNode = {0, 0, 0, 0, 0};
 	currentNode.typeIndex = ttypeIndex;
 	currentNode.tokenIndex = offset + toSkip;
+
 	ui64 nodeCount = nodeArr.GetCount();
+	ParserVariable pv = { t.text, t.textLength, ttypeIndex, 0};
+	s_parser_variables_array.Add(\pv);
+	
 	if ((assignToken.type) & _cTOKENTYPE_ASSIGNMENT) == _cTOKENTYPE_ASSIGNMENT {
 		currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT;
 		currentNode.firstChild = nodeCount + 1;
@@ -2128,6 +2167,9 @@ ui64 ParseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 		PrintToken(bodyToken);
 		SYS_EXIT(1);
 	}
+
+	ui64 parserVarCount = s_parser_variables_array.GetCount();
+	
 	ui64 nodeCount = nodeArr.GetCount();
 	Node currentNode = { nodeCount + 1, -1, _cPARSER_NODETYPE_BLOCK, -1, offset };
 	ui64 lastStatementState = nodeCount;
@@ -2526,6 +2568,10 @@ ui64 ParseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 		returnVal += toSkip;
 		returnVal += 1;
 	}
+
+	ui64 parserVarCountEnd = s_parser_variables_array.GetCount();
+	s_parser_variables_array.DeleteLastN(parserVarCountEnd - parserVarCount);
+	
 	return returnVal;
 }
 
@@ -3279,6 +3325,16 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			currentInstr.type = _cANALYSER_INSTRTYPE_POWER;
 			currentInstr.value = 0;
 			instrArr.Add(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_REFERENCE_OF {
+			if (currentInstr.type) == _cANALYSER_INSTRTYPE_LOAD_VARIABLE {
+				instrArr.Pop();
+				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE_MEMORY;
+				instrArr.Add(\currentInstr);
+			} else {
+				stdout.write("[Compiler#AnalyseExpression]: Expected to take reference of variable but got ");
+				PrintInstr(\currentInstr);
+				SYS_EXIT(1);
+			}
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_VARIABLE {
 			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
@@ -3416,6 +3472,8 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_PROPERTY_CHAIN {
 			// We are the property chain, our first child is the field name/variable name
 			// its next sibling is the continuation of the property/index chain
+			
+			// TODO: Set type to LOAD_VARIABLE if the current type is ref<>
 			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE_MEMORY;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 			currentInstr.value = exprNode.tokenIndex;
@@ -7051,7 +7109,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 
 
 ui8 main(cstring[] argv) {
-	DynArray tokens = {0, 0, 0, 38};
+	DynArray tokens = {0, 0, 0, s_sizeof_Token};
 	tokens.New(1024);
 	i32 fd = SYS_OPEN(argv[1], 0, 0);
 	ui32 lengthOfFile = GetLengthOfCstring(argv[1]);
@@ -7078,29 +7136,33 @@ ui8 main(cstring[] argv) {
 	Tokenise(\tokens, source, sizeRead, \s_file_name);
 	ui64 tokenCount = tokens.count;
 
-	DynArray nodes = {0, 0, 0, 22};
+	DynArray nodes = {0, 0, 0, s_sizeof_Node};
 	nodes.New(tokenCount);
-	DynArray types = {0, 0, 0, 18};
+	DynArray types = {0, 0, 0, s_sizeof_Type};
 	types.New(256);
 	SetupTypeArray(\types);
 
-	DynArray structs = {0, 0, 0, 32};
+	DynArray structs = {0, 0, 0, s_sizeof_Struct};
 	structs.New(256);
 	s_struct_array = \structs;
 
-	DynArray fields = {0, 0, 0, 24};
+	DynArray fields = {0, 0, 0, s_sizeof_Field};
 	fields.New(256);
 	s_field_array = \fields;
 
-	DynArray enums = {0, 0, 0, 28};
+	DynArray enums = {0, 0, 0, s_sizeof_Enum};
 	enums.New(256);
 	s_enum_array = \enums;
+
+	DynArray parserVars = {0, 0, 0, s_sizeof_ParserVariable};
+	parserVars.New(256);
+	s_parser_variables_array = \parserVars;
 
 	Parse(\tokens, \nodes, \types);
 
 	PrintASTAsDot(\tokens, \nodes);
 
-	DynArray instructions = {0, 0, 0, 10};
+	DynArray instructions = {0, 0, 0, s_sizeof_Instr};
 	instructions.New(tokenCount * 2);
 	Analyse(\tokens, \nodes, \types, \instructions);
 	PrintInstrArray(\instructions);
