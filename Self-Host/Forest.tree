@@ -1629,9 +1629,7 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> ty
 				i = j;
 				returnValue += localToSkip;
 			}
-
-			ref<Token> debugToken = tArr.At(i + 1);
-			PrintToken(debugToken);
+			
 			nodeCount = nodeArr.GetCount();
 			isNextEnd = IsTokenSpecifiedType(tArr, i + 1, endType);
 			isNextMax = (i + 1) == max;
@@ -2896,7 +2894,6 @@ ui64 ParseClass(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr
 }
 
 ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ui64 offset) {
-	// TODO
 	// enum EnumTypeName { VALUE1, VALUE2, VALUE3 = 4 }
 	ui64 nodeCount = nodeArr.GetCount();
 	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_ENUM, -1, offset + 1 };
@@ -2924,7 +2921,6 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 	};
 	typeArr.Add(\structType);
 	
-
 	ref<Token> tOpenPtr = tArr.At(offset + 2); // Opening bracket
 
 	bool isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + 2, _cTOKENTYPE_CURLY_OPEN);
@@ -2966,6 +2962,7 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 
 		bool isAssignment = IsTokenSpecifiedType(tArr, i + 1, _cTOKENTYPE_ASSIGNMENT);
 		if isAssignment {
+			ui64 enumValueState = nodeArr.GetCount();
 			currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT;
 			nodeArr.Add(\currentNode);
 
@@ -2985,6 +2982,8 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 			enumValue += 1;
 			exprInstr.Clear();
 
+			nodeCount = nodeArr.GetCount();
+			nodeArr.UpdateField(enumValueState, 4, \nodeCount, 4); // Enum's NS should point to the next enum after assignment
 //			i += 1;
 		} else {
 			ref<Token> enumTokenPtr = tArr.At(i);
