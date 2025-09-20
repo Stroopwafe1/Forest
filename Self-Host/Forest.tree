@@ -1601,31 +1601,37 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> ty
 			loop j, i + 1 .. closingInitIndex {
 				ui64 listInitItemState = nodeArr.GetCount();
 				currentNode.type = _cPARSER_NODETYPE_EXPRESSION_LIST_INIT_ITEM;
-				currentNode.firstChild = listInitState + 1;
+				currentNode.firstChild = listInitItemState + 1;
 				currentNode.nextSibling = -1; // Unknown as of now
-				currentNode.tokenIndex = i + 1;
+				currentNode.tokenIndex = j + 1;
 				nodeArr.Add(\currentNode);
 				
 				ui64 localToSkip = ParseExpression(tArr, nodeArr, typeArr, j, closingInitIndex, _cTOKENTYPE_COMMA);
+
+				
 				bool hasNextItem = (j + localToSkip) != closingInitIndex;
 
 				if hasNextItem {
 					nodeCount = nodeArr.GetCount();
-					nodeArr.UpdateField(listInitState, 4, \nodeCount, 4);
+					nodeArr.UpdateField(listInitItemState, 4, \nodeCount, 4);
 					// comma gets skipped on the next iteration of the loop
+					//localToSkip += 1;
 				} else {
 					i32 reset = -1;
 					nodeArr.UpdateField(listInitItemState, 4, \reset, 4);
 					localToSkip += 1;
-					returnValue += localToSkip;
+					
 					i += localToSkip;
+					returnValue += localToSkip;
 					break;
 				}
 				j += localToSkip;
-				i += localToSkip;
+				i = j;
 				returnValue += localToSkip;
 			}
 
+			ref<Token> debugToken = tArr.At(i + 1);
+			PrintToken(debugToken);
 			nodeCount = nodeArr.GetCount();
 			isNextEnd = IsTokenSpecifiedType(tArr, i + 1, endType);
 			isNextMax = (i + 1) == max;
@@ -1690,7 +1696,11 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> ty
 		Token token = @tokenPtr;
 		bool isOperator = IsOperator(tokenPtr);
 
-		if ((token.type) == _cTOKENTYPE_INTEGER) | ((token.type) == _cTOKENTYPE_KEYWORD_IDENTIFIER) {
+		bool isInt = (token.type) == _cTOKENTYPE_INTEGER;
+		bool isIdentifier = (token.type) == _cTOKENTYPE_KEYWORD_IDENTIFIER;
+		bool isListInit = (token.type) == _cTOKENTYPE_CURLY_OPEN;
+
+		if (isInt | isIdentifier) | isListInit {
 			s_expression_indices[s_expression_indices_count] = it;
 			s_expression_indices_count += 1;
 		} else if (token.type) == _cTOKENTYPE_PARENTHESIS_OPEN {
@@ -4316,11 +4326,17 @@ void PrintASTAsDot(ref<DynArray> tArr, ref<DynArray> nodeArr) {
 		} else {
 			ref<Token> tok = tArr.At(node.tokenIndex);
 			Token t = @tok;
-			SYS_WRITE(1, t.text, t.textLength);
+			ref<ui8> tBytePtr = t.text;
+			ui8 tByte = @tBytePtr;
+			if tByte == '\\' {
+				stdout.write("*ESCAPE*");
+			} else {
+				SYS_WRITE(1, t.text, t.textLength);
+			}
 		}
 		stdout.write("\" tooltip=\"");
 		n.PrintNode();
-		stdout.write("\"] ;\n");
+		stdout.write("\"];\n");
 
 		if ((node.firstChild) != -1) & ((node.firstChild) != nodeCount) {
 			stdout.write("n");
