@@ -24,6 +24,7 @@ ui8 main(array<ref<ui8> > argv) {
 	hi.field = 7;
 
 	ref<Hi> hiPtr = \hi;
+	hiPtr.field2 = 8;
 
 	TestEnum t = TestEnum::Test3;
 

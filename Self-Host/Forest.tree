@@ -229,6 +229,7 @@ ui8 _cANALYSER_INSTRVALUE_LITERAL = 9;
 ui8 _cVARIABLE_LOCATION_STACK = 0;
 ui8 _cVARIABLE_LOCATION_DATA = 1;
 ui8 _cVARIABLE_LOCATION_BSS = 2;
+ui8 _cVARIABLE_LOCATION_REGISTER = 3;
 
 ui8 _cCOMPILATION_SECTION_TEXT = 0;
 ui8 _cCOMPILATION_SECTION_DATA = 1;
@@ -3474,7 +3475,13 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			// its next sibling is the continuation of the property/index chain
 			
 			// TODO: Set type to LOAD_VARIABLE if the current type is ref<>
-			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE_MEMORY;
+			ref<Type> typePtr = typeArr.At(exprNode.typeIndex);
+			Type type = @typePtr;
+			if (type.typeType) == _cPARSER_TYPETYPE_REF {
+				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
+			} else {
+				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE_MEMORY;
+			}
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 			currentInstr.value = exprNode.tokenIndex;
 			instrArr.Add(\currentInstr);
@@ -4783,6 +4790,17 @@ ui64 GetRelocationInfo(ui64 symbol, ui64 type) {
 	return (symbol << 32) + (type & 0xffffffff);
 }
 
+// NOTE: IDEA: Maybe use something like this instead of making nearly the same function several times
+struct X86_64Instr {
+	ui8 srcReg;
+	ui8 destReg;
+	ui8 srcSize;
+	ui8 destSize;
+	bool deref;
+	i32 offset;
+	bool srcIsSection;
+}
+
 void MoveRBP(ref<ByteArr> bytes, i32 offset, ui8 reg, ui8 size) {
 	/*
 	[0] => rax
@@ -4850,6 +4868,14 @@ void MoveRAX(ref<ByteArr> bytes, ui8 reg, bool to) {
 	} else {
 		bytes.AddByte(0x8B);
 	}
+	bytes.AddByte(modRM);
+}
+
+void MoveIntoRAX(ref<ByteArr> bytes, ui8 srcReg) {
+	ui8 rex = GetREX(true, srcReg > 7, false, false);
+	bytes.AddByte(rex);
+	ui8 modRM = 0x00 + ((srcReg % 8) * 8);
+	bytes.AddByte(0x89);
 	bytes.AddByte(modRM);
 }
 
@@ -6191,6 +6217,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					MoveRBP(\textBytes, currentMemOffset, 3, currentType.byteSize);
 				} else if currentMemoryLocation == _cVARIABLE_LOCATION_DATA {
 					MoveToSection(\textBytes, 0, _cCOMPILATION_SECTION_DATA, currentMemOffset, currentType.byteSize);
+				} else if currentMemoryLocation == _cVARIABLE_LOCATION_REGISTER {
+					MoveIntoRAX(\textBytes, 3);
 				} else {
 					stdout.write("[Compiler#CompileToElf64.set_value]: Error: Unknown variable location ");
 					stdout.writeln(currentMemoryLocation);
@@ -6221,11 +6249,19 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			Node node = @nodePtr;
 			ref<Type> typePtr = typeArr.At(node.typeIndex);
 			Type type = @typePtr;
+			
 			bool inUse = regsInUse[0];
 			ui8 inUseReg = 0;
 			if inUse {
 				inUseReg = 3;
 			}
+
+			if (type.typeType) == _cPARSER_TYPETYPE_REF {
+				currentMemOffset = 0;
+				currentMemoryLocation = _cVARIABLE_LOCATION_REGISTER;
+				currentMemoryReg = inUseReg;
+			}
+			
 			if (variable.location) == _cVARIABLE_LOCATION_STACK {
 				MoveFromRBP(\textBytes, variable.offset, inUseReg, type.byteSize, 8);
 			} else if (variable.location) == _cVARIABLE_LOCATION_DATA {
@@ -6559,6 +6595,14 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ui64 foundFieldOffset = foundField.offset;
 			currentMemOffset += foundFieldOffset;
 
+			if currentMemoryLocation == _cVARIABLE_LOCATION_REGISTER {
+				ui8[3] addRax = {
+					0x48, 0x81, 0xC0 // REX.W ADD r/m64, imm32
+				};
+				textBytes.AddBytes(\addRax, 3);
+				textBytes.AddUI32(foundFieldOffset);
+			}
+
 			ref<Type> foundFieldTypeRef = typeArr.At(foundField.typeIndex);
 			Type foundFieldType = @foundFieldTypeRef;
 			
@@ -6581,6 +6625,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					MoveFromRBP(\textBytes, currentMemOffset, inUseReg, currentType.byteSize, 8);
 				} else if currentMemoryLocation == _cVARIABLE_LOCATION_DATA {
 					MoveFromSection(\textBytes, inUseReg, _cCOMPILATION_SECTION_DATA, currentMemOffset, currentType.byteSize);
+				} else if currentMemoryLocation == _cVARIABLE_LOCATION_REGISTER {
+					// Do absolutely nothing, we're already loaded
 				} else {
 					stdout.write("[Compiler#CompileToElf64.load_value]: Error: Unknown variable location ");
 					ui16 location = currentVar.location;
