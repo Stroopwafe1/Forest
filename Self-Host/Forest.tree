@@ -550,7 +550,7 @@ class DynArray {
 	}
 
 	ref<ui8> At(ui64 index) {
-		if index > count {
+		if (index > count) | (index == -1) {
 			stdout.write("[DynArray]: Error: Array index out of bounds. Accessed index ");
 			stdout.write(index);
 			stdout.write(" in Array of size ");
@@ -2975,7 +2975,7 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 			enumValue += 1;
 			exprInstr.Clear();
 
-			i += 1;
+//			i += 1;
 		} else {
 			ref<Token> enumTokenPtr = tArr.At(i);
 			Token enumToken = @enumTokenPtr;
@@ -2984,9 +2984,9 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 			enumValue += 1;
 			currentNode.type = _cPARSER_NODETYPE_VARIABLE_DECLARATION;
 			nodeArr.Add(\currentNode);
+			i += 1; // skip comma
 		}
 
-		i += 1; // skip comma
 	}
 
 	nodeCount = nodeArr.GetCount();
@@ -3293,9 +3293,14 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			ui64 index = s_enum_array.FindString(0, enumMember.text, enumMember.textLength);
 			ref<Enum> ePtr = s_enum_array.At(index);
 			Enum e = @ePtr;
-
+			
 			if (e.typeIndex) != (exprNode.typeIndex) {
-				stdout.write("[Compiler#AnalyseExpression]: Error: We found an enum member with the same name but different enum parent type. This is a current limitation of the compiler. TODO");
+				stdout.write("[Compiler#AnalyseExpression]: Error: We found an enum member with the same name but different enum parent type. This is a current limitation of the compiler. TODO\n");
+				ui16 eType = e.typeIndex;
+				ui16 exprType = exprNode.typeIndex;
+				stdout.writeln(eType);
+				stdout.writeln(exprType);
+				
 				SYS_EXIT(1);
 			}
 
@@ -3303,7 +3308,6 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			currentInstr.value = e.value;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LITERAL;
 			instrArr.Add(\currentInstr);
-			
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_FUNC_CALL {
 			// Iterate over arguments
 			// Call AnalyseExpression for each
@@ -5887,8 +5891,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	ui8 currentMemoryLocation = 0;
 	ui8 currentMemoryReg = 0;
 
-	// TODO: Bug on match case jump, they're jumping by 0 bytes
-
 	dbgLastOpcodeByte = 46;
 	ui64 lastFunctionOffset = 0;
 	loop i, 0..instrCount {
@@ -6220,13 +6222,15 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LABEL {
 			ui64 byteOffsetLabel = s_label_bytes[instruction.value];
+			textBytes.AddByte(0xE9);
+			
 			if byteOffsetLabel == 0 {
 				stdout.writeln("[Compiler#CompileToELF64.jmp_label]: Warning: Jumping to unknown label\n");
 				s_undefined_jumps[s_jump_count] = textBytes.GetCount();
 				s_jump_labels[s_jump_count] = instruction.value;
 				s_jump_count += 1;
 			}
-			textBytes.AddByte(0xE9);
+			
 			i64 currentByteCount = textBytes.GetCount();
 			textBytes.AddUI32(byteOffsetLabel - (currentByteCount + 4));
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_LT {
@@ -6235,10 +6239,30 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			lastJumpState = textBytes.GetCount();
 			textBytes.AddByte(0x0);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_EQ {
-			instructionCounter = instruction.value;
-			textBytes.AddByte(0x74); // JE
-			lastJumpState = textBytes.GetCount();
-			textBytes.AddByte(0x0);
+			if (instruction.valueType) == _cANALYSER_INSTRVALUE_LABEL {
+				// JE rel32
+				textBytes.AddByte(0x0F);
+				textBytes.AddByte(0x84);
+
+				if (instruction.value) >= s_jump_count {
+					stdout.writeln("[Compiler#CompileToELF64.jmp_eq]: Warning: Jumping to unknown label\n");
+					s_undefined_jumps[s_jump_count] = textBytes.GetCount();
+					s_jump_labels[s_jump_count] = instruction.value;
+					s_jump_count += 1;
+
+					textBytes.AddUI32(0);
+				} else {
+					ui64 byteOffsetLabel = s_label_bytes[instruction.value];
+					i64 currentByteCount = textBytes.GetCount();
+					textBytes.AddUI32(byteOffsetLabel - (currentByteCount + 4));
+				}
+
+			} else {
+				instructionCounter = instruction.value;
+				textBytes.AddByte(0x74); // JE rel8
+				lastJumpState = textBytes.GetCount();
+				textBytes.AddByte(0x0);
+			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_INTEGER {
 			ui64 counter = 1;
 			loop {
@@ -6721,7 +6745,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	lineInfoBytes.AddByte(1); // DW_LNE_end_sequence
 
 	loop i, 0..s_jump_count {
-		ui64 byteToUpdate = s_undefined_jumps[i] + 1;
+		ui64 byteToUpdate = s_undefined_jumps[i];
 		ui64 labelValue = s_jump_labels[i];
 		ui64 labelByteOffset = s_label_bytes[labelValue];
 		i32 relativeOffset = labelByteOffset - (byteToUpdate + 4);

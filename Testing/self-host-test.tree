@@ -21,13 +21,13 @@ ui8 main(array<ref<ui8> > argv) {
 	Hi hi = { 5 };
 	hi.field = 7;
 
-	TestEnum t = TestEnum::Test2;
+	TestEnum t = TestEnum::Test3;
 
 	match t {
 		TestEnum::Test1: { return 0; }
 		TestEnum::Test2: { return hi.field - 3; }
 	} else {
-		return -1;
+		return t;
 	}
 
 	/*
