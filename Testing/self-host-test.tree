@@ -10,6 +10,25 @@ struct Hi {
 	ui8 field3;
 }
 
+class String {
+	ref<char> data;
+	ui64 size;
+}
+
+class FileDescriptor {
+	ui8 fd;
+
+	ui64 Write(String s) {
+		ui64 bytesWritten = SYS_WRITE(fd, s.data, s.size);
+		return bytesWritten;
+	}
+}
+
+
+FileDescriptor stdin = { 0 };
+FileDescriptor stdout = { 1 };
+FileDescriptor stderr = { 2 };
+
 ui8 returnSub2(ui16 value) {
 	return value - 2;
 }
@@ -27,6 +46,9 @@ ui8 main(array<ref<ui8> > argv) {
 	hiPtr.field2 = 8;
 
 	TestEnum t = TestEnum::Test3;
+
+	String hello = "Hello, World!";
+	stdout.Write(hello);
 
 	match t {
 		TestEnum::Test1: { return 0; }
