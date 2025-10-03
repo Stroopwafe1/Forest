@@ -2761,22 +2761,8 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			j += 1;
 			aliasCount += 1;
 		}
-		f.aliasCount = aliasCount;
-		ref<Type> typePtr = typeArr.At(typeIndex);
-		Type type = @typePtr;
-		if isAligned {
-			if (type.align) > alignment {
-				alignment = type.align;
-			}
-			ui8 padding = ((type.align) - (byteSize % (type.align))) % (type.align);
-			byteSize += padding;
-		} else {
-			byteSize += (type.byteSize);
-		}
-		s_field_array.Add(\f);
-
+		// We are parsing the class functions as fields. Abort!
 		if shouldExit {
-			nodeArr.DeleteLast();
 			nodeCount = nodeArr.GetCount();
 			i32 reset = -1;
 			nodeArr.UpdateField(nodeCount - 1, 4, \reset, 4);
@@ -2799,6 +2785,21 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 
 			return returnVal;
 		}
+		
+		f.aliasCount = aliasCount;
+		ref<Type> typePtr = typeArr.At(typeIndex);
+		Type type = @typePtr;
+		if isAligned {
+			if (type.align) > alignment {
+				alignment = type.align;
+			}
+			ui8 padding = ((type.align) - (byteSize % (type.align))) % (type.align);
+			byteSize += padding;
+		} else {
+			byteSize += (type.byteSize);
+		}
+		s_field_array.Add(\f);
+
 		i += toSkip;
 		returnVal += (toSkip + 1);
 		nodeCount = nodeArr.GetCount();
@@ -6730,9 +6731,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				i64 exprValue = instruction.value;
 				ui64 byteSize = currentType.byteSize;
 				dataBytes.AddBytes(\exprValue, currentType.byteSize);
-				stdout.write("------------------------------\n");
-				stdout.writeln(exprValue);
-				stdout.writeln(byteSize);
 			} else {
 				stdout.write("[Compiler#CompileToElf64.with_value]: Error: Unknown variable location ");
 				ui16 location = currentVar.location;
