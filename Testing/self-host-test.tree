@@ -25,9 +25,9 @@ class FileDescriptor {
 }
 
 
-FileDescriptor stdin = { 0 };
-FileDescriptor stdout = { 1 };
-FileDescriptor stderr = { 2 };
+FileDescriptor stdin = 0;
+FileDescriptor stdout = 1;
+FileDescriptor stderr = 2;
 
 ui8 returnSub2(ui16 value) {
 	return value - 2;
