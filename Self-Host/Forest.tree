@@ -376,6 +376,20 @@ struct Variable {
 }
 ui8 s_sizeof_Variable = 37;
 
+void PrintVariable(ref<Variable> var) {
+	stdout.write("Variable ");
+	Variable v = @var;
+	SYS_WRITE(1, v.name, v.nameLength);
+	stdout.write(" location=");
+	i32 offset = v.offset;
+	if (v.location) == _cVARIABLE_LOCATION_STACK {
+		stdout.write("rbp-");
+	} else if (v.location) == _cVARIABLE_LOCATION_DATA {
+		stdout.write("ds:");
+	}
+	stdout.writeln(offset);
+}
+
 struct Function {
 	ref<ui8> name;
 	ui64 nameLength;
@@ -6537,6 +6551,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				ui64 dataCount = dataBytes.GetCount();
 				if (currentVar.offset) != dataCount {
 					stdout.write("[Compiler#CompileToElf64.with_value]: Assertion Error: Variable offset did not match data bytes count\n");
+					stdout.writeln(dataCount);
+					i32 offset = currentVar.offset;
+					stdout.writeln(offset);
 					SYS_EXIT(1);
 				}
 
@@ -6725,8 +6742,11 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ui16 size = type.byteSize;
 
 			if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_PARAM {
-				offsets[_cVARIABLE_LOCATION_STACK] += size;
-				currentVar.offset = offsets[_cVARIABLE_LOCATION_STACK] * -1;
+				i32 offset = offsets[_cVARIABLE_LOCATION_STACK];
+				i32 newOffset = offset + size;
+				offsets[_cVARIABLE_LOCATION_STACK] = newOffset;
+				currentVar.offset = newOffset * -1;
+				
 				variables.Add(\currentVar);
 				// mov [rbp-offset], param index
 				// paramCount += 1
@@ -6741,21 +6761,29 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				DebugAddWithType(instruction.value);
 				DebugEndChain();
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_VAR {
-				offsets[_cVARIABLE_LOCATION_STACK] += size;
-				currentVar.offset = offsets[_cVARIABLE_LOCATION_STACK] * -1;
+				i32 offset = offsets[_cVARIABLE_LOCATION_STACK];
+				i32 newOffset = offset + size;
+				offsets[_cVARIABLE_LOCATION_STACK] = newOffset;
+				currentVar.offset = newOffset * -1;
+				
 				variables.Add(\currentVar);
 				DebugAddVariable(currentVar.name, currentVar.nameLength, currentVar.offset);
 				DebugAddWithType(instruction.value);
 				DebugEndChain();
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_GLOBAL_VAR {
 				currentVar.offset = offsets[_cVARIABLE_LOCATION_BSS];
-				offsets[_cVARIABLE_LOCATION_BSS] += size;
+				i32 offset = offsets[_cVARIABLE_LOCATION_BSS];
+				i32 newOffset = offset + size;
+				offsets[_cVARIABLE_LOCATION_BSS] = newOffset;
 				
 				bssBytes.AddToCount(size);
 				variables.Add(\currentVar);
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_ASSIGN_GLOBAL_VAR {
 				currentVar.offset = offsets[_cVARIABLE_LOCATION_DATA];
-				offsets[_cVARIABLE_LOCATION_DATA] += size;
+				i32 offset = offsets[_cVARIABLE_LOCATION_DATA];
+				i32 newOffset = offset + size;
+				offsets[_cVARIABLE_LOCATION_DATA] = newOffset;
+
 				variables.Add(\currentVar);
 			} else if lastInstructionType == _cANALYSER_INSTRTYPE_DEF_FUNC {
 				DebugAddWithType(instruction.value);
