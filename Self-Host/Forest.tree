@@ -199,6 +199,7 @@ ui8 _cANALYSER_INSTRTYPE_LOAD_PROPERTY = 56;
 ui8 _cANALYSER_INSTRTYPE_SET_INDEX = 57;
 ui8 _cANALYSER_INSTRTYPE_LOAD_VALUE = 58; // Use instrvalue type for what to load
 ui8 _cANALYSER_INSTRTYPE_DEF_LABEL = 59;
+ui8 _cANALYSER_INSTRTYPE_LOAD_CLASS = 60;
 
 ui8 _cANALYSER_INSTRTYPE_DEBUG_SPECIAL = 100;
 ui8 _cANALYSER_INSTRTYPE_DEBUG_COPY = 101;
@@ -230,6 +231,7 @@ ui8 _cVARIABLE_LOCATION_STACK = 0;
 ui8 _cVARIABLE_LOCATION_DATA = 1;
 ui8 _cVARIABLE_LOCATION_BSS = 2;
 ui8 _cVARIABLE_LOCATION_REGISTER = 3;
+ui8 _cVARIABLE_LOCATION_CLASS_OFFSET = 4;
 
 ui8 _cCOMPILATION_SECTION_TEXT = 0;
 ui8 _cCOMPILATION_SECTION_DATA = 1;
@@ -586,7 +588,7 @@ class DynArray {
 			stdout.write(index);
 			stdout.write(" in Array of size ");
 			stdout.writeln(count);
-			//SYS_KILL(0, 5); SIGTRAP ourselves so we can inspect the backtrace
+			SYS_KILL(0, 5); //SIGTRAP ourselves so we can inspect the backtrace
 			SYS_EXIT(1);
 		}
 		return data + (index * entrySize);
@@ -1875,6 +1877,13 @@ ui64 ParseFunctionCall(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			currentNode.nextSibling = nodeCount + 1;
 			currentNode.tokenIndex = j;
 			currentNode.typeIndex = -1;
+
+			ui64 pvIndex = s_parser_variables_array.FindString(0, funcCallToken.text, funcCallToken.textLength); // 0 is offset_of_name
+			ref<ParserVariable> pvPtr = s_parser_variables_array.At(pvIndex);
+			ParserVariable pv = @pvPtr;
+			
+			currentNode.typeIndex = pv.typeIndex;
+			
 			nodeArr.Add(\currentNode);
 			localToSkip += 1;
 		}
@@ -2854,6 +2863,10 @@ ui64 ParseStruct(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 	s.firstFieldIndex = fieldCountCache;
 	s.fieldCount = s_field_array.GetCount() - fieldCountCache;
 
+	i32 typeIndex = typeArr.GetCount();
+	typeIndex -= 1;
+	nodeArr.UpdateField(structNodeState, 10, \typeIndex, 4);
+
 	isSyntaxCorrect = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_CLOSE);
 	if !isSyntaxCorrect {
 		stdout.write("[Parser]: Expected a '}' for the closing of struct but got ");
@@ -2906,6 +2919,10 @@ ui64 ParseClass(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr
 	c.firstFieldIndex = fieldCountCache;
 	c.fieldCount = s_field_array.GetCount() - fieldCountCache;
 
+	i32 typeIndex = typeArr.GetCount();
+	typeIndex -= 1;
+	nodeArr.UpdateField(classNodeState, 10, \typeIndex, 4);
+
 	bool isEnd = IsTokenSpecifiedType(tArr, offset + returnVal, _cTOKENTYPE_CURLY_CLOSE);
 	if isEnd {
 		nodeCount = nodeArr.GetCount();
@@ -2940,7 +2957,6 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 	ui64 nodeCount = nodeArr.GetCount();
 	Node currentNode = { nodeCount + 1, 0, _cPARSER_NODETYPE_ENUM, -1, offset + 1 };
 	ui64 enumNodeState = nodeCount;
-	nodeArr.Add(\currentNode);
 
 	ref<Token> structTokenPtr = tArr.At(offset + 1);
 	Token structToken = @structTokenPtr;
@@ -2962,6 +2978,9 @@ ui64 ParseEnum(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr,
 		_cPARSER_TYPETYPE_ENUM
 	};
 	typeArr.Add(\structType);
+
+	currentNode.typeIndex = typeCount;
+	nodeArr.Add(\currentNode);
 	
 	ref<Token> tOpenPtr = tArr.At(offset + 2); // Opening bracket
 
@@ -3260,6 +3279,80 @@ i64 SimulateExpression(ref<DynArray> instrArr, ui64 beginIndex, ui64 endIndex) {
 	return returnValue;
 }
 
+void AnalyseFunctionCall(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ref<DynArray> instrArr, ref<Node> exprNodePtr) {
+	Instr currentInstr = {0, 0, 0}; // type, valueType, value
+	Node exprNode = @exprNodePtr;
+	
+	ref<Token> tokenPtr = tArr.At(exprNode.tokenIndex);
+	Token token = @tokenPtr;
+
+	if ((exprNode.type) != _cPARSER_NODETYPE_EXPRESSION_FUNC_CALL) & ((exprNode.type) != _cPARSER_NODETYPE_FUNCTION_CALL) {
+		stdout.write("[Compiler#AnalyseFunctionCall]: Excepted Node to be a function call");
+		SYS_EXIT(1);
+	}
+	// Iterate over arguments
+	// Call AnalyseExpression for each
+	// Then add instr SET_ARG
+	ui64 child = exprNode.GetFC();
+	if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_FUNC_CALL {
+		ref<Node> funcCall = nodeArr.At(child);
+		child = funcCall.GetFC();
+	}
+	ref<Node> funcName = nodeArr.At(child);
+	ui64 type = funcName.GetType();
+
+	if type == _cPARSER_NODETYPE_CLASS {
+		Node classNode = @funcName;
+		i32 typeIndex = classNode.typeIndex;
+		currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_CLASS;
+		currentInstr.valueType = _cANALYSER_INSTRVALUE_TYPE;
+		currentInstr.value = typeIndex;
+		instrArr.Add(\currentInstr);
+
+		child = funcName.GetNS();
+		funcName = nodeArr.At(child);
+		type = funcName.GetType();
+	}
+	
+	if type != _cPARSER_NODETYPE_FUNCTION {
+		stdout.write("[Compiler#AnalyseFunctionCall]: Function call node was not a function, but ");
+		stdout.writeln(type);
+		SYS_EXIT(1);
+	}
+	child = funcName.GetFC();
+	ref<Node> argsPtr = nodeArr.At(child);
+	Node args = @argsPtr;
+	if (args.firstChild) != -1 {
+		// We have arguments
+		// First child is pointing at an ARGUMENT node whose first child is an expression
+		ui64 argIt = args.firstChild;
+		ui64 counter = 0;
+		loop {
+			ref<Node> argNodePtr = nodeArr.At(argIt);
+			Node argNode = @argNodePtr;
+			AnalyseExpression(tArr, nodeArr, typeArr, instrArr, argNode.firstChild);
+			currentInstr.type = _cANALYSER_INSTRTYPE_SET_ARG;
+			currentInstr.value = counter;
+			instrArr.Add(\currentInstr);
+			counter += 1;
+
+			if (argNode.nextSibling) == -1 {
+				break;
+			} else {
+				argIt = argNode.nextSibling;
+			}
+		}
+	}
+
+	currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+	currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
+	currentInstr.value = exprNode.tokenIndex;
+	instrArr.Add(\currentInstr);
+	
+	currentInstr.type = _cANALYSER_INSTRTYPE_CALL_FUNC;
+	instrArr.Add(\currentInstr);
+}
+
 ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ref<DynArray> instrArr, ui64 offset) {
 	Instr currentInstr = {0, 0, 0}; // type, valueType, value
 	ui64 i = offset;
@@ -3370,52 +3463,7 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LITERAL;
 			instrArr.Add(\currentInstr);
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_FUNC_CALL {
-			// Iterate over arguments
-			// Call AnalyseExpression for each
-			// Then add instr SET_ARG
-			ui64 child = exprNode.GetFC();
-			ref<Node> funcCall = nodeArr.At(child);
-			child = funcCall.GetFC();
-			ref<Node> funcName = nodeArr.At(child);
-			Node funcCallNode = @funcName;
-			if (funcCallNode.type) != _cPARSER_NODETYPE_FUNCTION {
-				stdout.write("[Compiler#AnalyseExpression]: Function call node was not a function, but ");
-				ui64 type = funcCallNode.type;
-				stdout.writeln(type);
-				SYS_EXIT(1);
-			}
-			child = funcName.GetFC();
-			ref<Node> argsPtr = nodeArr.At(child);
-			Node args = @argsPtr;
-			if (args.firstChild) != -1 {
-				// We have arguments
-				// First child is pointing at an ARGUMENT node whose first child is an expression
-				ui64 argIt = args.firstChild;
-				ui64 counter = 0;
-				loop {
-					ref<Node> argNodePtr = nodeArr.At(argIt);
-					Node argNode = @argNodePtr;
-					AnalyseExpression(tArr, nodeArr, typeArr, instrArr, argNode.firstChild);
-					currentInstr.type = _cANALYSER_INSTRTYPE_SET_ARG;
-					currentInstr.value = counter;
-					instrArr.Add(\currentInstr);
-					counter += 1;
-
-					if (argNode.nextSibling) == -1 {
-						break;
-					} else {
-						argIt = argNode.nextSibling;
-					}
-				}
-			}
-
-			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
-			currentInstr.value = exprNode.tokenIndex;
-			instrArr.Add(\currentInstr);
-			
-			currentInstr.type = _cANALYSER_INSTRTYPE_CALL_FUNC;
-			instrArr.Add(\currentInstr);
+			AnalyseFunctionCall(tArr, nodeArr, typeArr, instrArr, exprNodePtr);
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_LIST_INIT {
 			// Iterate over list items
 			// Call AnalyseExpression for each
@@ -3587,6 +3635,8 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 				ui64 state = instrArr.GetCount();
 				instrArr.Add(\currentInstr);
 			}
+		} else if (node.type) == _cPARSER_NODETYPE_FUNCTION_CALL {
+			AnalyseFunctionCall(tArr, nodeArr, typeArr, instrArr, nodePtr);
 		} else if (node.type) == _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT {
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_VAR;
 			currentInstr.value = i;
@@ -4183,8 +4233,8 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 		} else if (node.type) == _cPARSER_NODETYPE_CLASS {
 			// Partially ignore because class only has function intermediate representation
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_CLASS;
-			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
-			currentInstr.value = node.tokenIndex;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_TYPE;
+			currentInstr.value = node.typeIndex;
 			instrArr.Add(\currentInstr);
 			
 			ref<Node> iterPtr = nodeArr.At(node.firstChild);
@@ -4232,6 +4282,11 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 				iterPtr = nodeArr.At(iterIndex);
 				iterIndex = iterPtr.GetNS();
 			}
+
+			currentInstr.type = _cANALYSER_INSTRTYPE_END_CLASS;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_TYPE;
+			currentInstr.value = node.typeIndex;
+			instrArr.Add(\currentInstr);
 			
 		} else if (node.type) == _cPARSER_NODETYPE_ENUM {
 			// TODO: Enums don't have intermediate representation and get replaced at compile time with their value. We shouldn't be dealing with Enums in the Analyse step
@@ -4295,6 +4350,10 @@ void PrintInstr(ref<Instr> instrPtr) {
 		stdout.write("DEF_FUNC ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_FUNC {
 		stdout.write("END_FUNC ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_CLASS {
+		stdout.write("DEF_CLASS ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_CLASS {
+		stdout.write("END_CLASS ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_PARAM {
 		stdout.write("DEF_PARAM ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LABEL {
@@ -4321,6 +4380,8 @@ void PrintInstr(ref<Instr> instrPtr) {
 		stdout.write("LOAD_VARIABLE_MEMORY ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_STRING {
 		stdout.write("LOAD_STRING ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_CLASS {
+		stdout.write("LOAD_CLASS ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_PROPERTY {
 		stdout.write("LOAD_PROPERTY ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_VALUE {
@@ -4764,6 +4825,13 @@ struct DwarfCompilationUnitHeader {
 	ui32 abbrevOffset;
 }
 
+struct CompClass {
+	ui32 typeIndex;
+	ui32 startFunctionIndex;
+	ui32 endFunctionIndex;
+}
+ui8 s_sizeof_CompClass = 12;
+
 ui32 _cSHT_NULL = 0;
 ui32 _cSHT_PROGBITS = 1;
 ui32 _cSHT_SYMTAB = 2;
@@ -4885,7 +4953,7 @@ void MoveRBP(ref<ByteArr> bytes, i32 offset, ui8 reg, ui8 size) {
 	} else {
 		rex = 0x48;
 	}
-	if size == 8 {
+	if size >= 8 {
 		bytes.AddByte(rex);
 	}
 	if size == 1 {
@@ -5926,6 +5994,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	compRelaArr.New(100);
 	s_comp_rela = \compRelaArr;
 
+	DynArray classArr = {0, 0, 0, s_sizeof_CompClass};
+	classArr.New(256);
+
 	ByteArr relaDebugArangesBytes = {0, 0, 0};
 	relaDebugArangesBytes.New(1024);
 
@@ -6021,7 +6092,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	ui8[6] callRegs = { 7, 6, 2, 1, 8, 9 };
 	ui64 stackVariables = 0;
 	ui64 paramCount = 0;
-	ui64[3] offsets = { 0, 0, 0 };
 	DynArray variables = {0, 0, 0, 37};
 	variables.New(128);
 	Variable currentVar = {0, 0, 0, 0, 0, 0};
@@ -6051,10 +6121,38 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 
 	dbgLastOpcodeByte = 46;
 	ui64 lastFunctionOffset = 0;
+	
+	CompClass currentClass = {0, 0, 0};
+	CompClass loadedClass = {0, 0, 0};
+	
+	ui64[5] offsets = { 0, 0, 0, 0, 0 };
+
 	loop i, 0..instrCount {
 		ref<Instr> instrPtr = instrArr.At(i);
 		Instr instruction = @instrPtr;
-		if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_FUNC {
+		// TODO: Have _cANALYSER_INSTRTYPE_DEF_CLASS/END_CLASS manage the begin and end indices of the DEF_FUNC offsets
+		if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_CLASS {
+			currentClass.typeIndex = instruction.value;
+			currentClass.startFunctionIndex = s_token_index_array_count;			
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_CLASS {
+			currentClass.endFunctionIndex = s_token_index_array_count - 1;
+			classArr.Add(\currentClass);
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_CLASS {
+			ui64 typeIndex = instruction.value;
+			ui64 classIndex = classArr.Find(0, \typeIndex, 4);
+			if classIndex == -1 {
+				stdout.write("[Compiler#CompileToElf64.load_class]: Could not find class with index ");
+				stdout.writeln(classIndex);
+				SYS_EXIT(1);
+			}
+
+			ref<CompClass> compClassPtr = classArr.At(classIndex);
+			CompClass temp = @compClassPtr;
+			
+			loadedClass.typeIndex = temp.typeIndex;
+			loadedClass.startFunctionIndex = temp.startFunctionIndex;
+			loadedClass.endFunctionIndex = temp.endFunctionIndex;
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_FUNC {
 			ui64 byteOffset = textBytes.GetCount();
 			lastFunctionOffset = byteOffset;
 
@@ -6145,7 +6243,14 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ref<Token> tokenPtr = tArr.At(instruction.value);
 			Token token = @tokenPtr;
 
-			loop j, 0..s_token_index_array_count {
+			ui32 start = 0;
+			ui32 end = s_token_index_array_count;
+			if (loadedClass.typeIndex) != 0 {
+				start = loadedClass.startFunctionIndex;
+				end = (loadedClass.endFunctionIndex) + 1;
+				loadedClass = {0, 0, 0};
+			}
+			loop j, start..end {
 				ui64 tokenIndex = s_token_index_array[j];
 				ref<Token> compareTokenPtr = tArr.At(tokenIndex);
 				Token compareToken = @compareTokenPtr;
@@ -6262,8 +6367,15 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				Node definingNode = @definingNodePtr;
 				ref<Type> typePtr = typeArr.At(definingNode.typeIndex);
 				Type type = @typePtr;
-				if (variable.location) == _cVARIABLE_LOCATION_STACK {	
-					MoveRBP(\textBytes, variable.offset, 0, type.byteSize);
+				if (variable.location) == _cVARIABLE_LOCATION_STACK {
+					i64 varOffset = variable.offset;
+					MoveRBP(\textBytes, varOffset, 0, type.byteSize);
+					if (type.byteSize) == 16 {
+						// mov qword [rbp-offset+8], rdx
+						// Reg 2 = RDX
+						MoveRBP(\textBytes, varOffset + 8, 2, 8);
+						regsInUse[2] = false;
+					}
 				} else {
 					stdout.write("[Compiler#CompileToElf64.set_value]: Error: Unknown variable location ");
 					ui16 location = variable.location;
@@ -6294,19 +6406,69 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ref<Token> varTokenPtr = tArr.At(instruction.value);
 			Token varToken = @varTokenPtr;
 
-			ui64 index = variables.FindString(16, varToken.text, varToken.textLength);
-			if index == -1 {
-				stdout.write("[Compiler#CompileToElf64.load_variable]: Error: Unknown variable ");
-				ref<Token> t = tArr.At(instruction.value);
-				PrintToken(t);
-				SYS_EXIT(1);
+			ui16 location = 0;
+			ref<Type> typePtr = 0;
+			i32 offset = 0;
+			ui64 index = -1;
+			bool isField = false;
+			
+			if (currentClass.typeIndex) != 0 {
+				// TODO: Variables inside classes should be using the offset from the class variable
+				ref<Type> classTypePtr = typeArr.At(currentClass.typeIndex);
+				Type classType = @classTypePtr;
+				i32 classIndex = classType.extraIndex;
+				ref<Struct> classPtr = s_struct_array.At(classIndex);
+				Struct klass = @classPtr;
+
+				ui64 start = klass.firstFieldIndex;
+				ui64 end = start + (klass.fieldCount);
+				ui64 foundIndex = -1;
+				loop fi, start..end {
+					ref<Field> fieldPtr = s_field_array.At(fi);
+					Field field = @fieldPtr;
+					ui64 nameStart = field.startTokenIndex;
+					ui64 nameEnd = nameStart + (2 * (field.aliasCount));
+					bool found = false;
+					loop fname, nameStart..nameEnd {
+						ref<Token> nameTokenPtr = tArr.At(fname);
+						Token nameToken = @nameTokenPtr;
+						bool equals = StrEquals(varToken.text, nameToken.text, varToken.textLength);
+						if equals {
+							found = true;
+							break;
+						}
+						fname += 1;
+					}
+					if found {
+						foundIndex = fi;
+						index = fi;
+						break;
+					}
+				}
 			}
-			ref<Variable> variablePtr = variables.At(index);
-			Variable variable = @variablePtr;
-			memcopy2(\currentVar, \variable, 37);
-			ref<Node> nodePtr = nodeArr.At(variable.nodeIndex);
-			Node node = @nodePtr;
-			ref<Type> typePtr = typeArr.At(node.typeIndex);
+			if index != -1 {
+				ref<Field> fieldPtr = s_field_array.At(index);
+				Field field = @fieldPtr;
+				typePtr = typeArr.At(field.typeIndex);
+				location = _cVARIABLE_LOCATION_CLASS_OFFSET;
+				offset = field.offset;
+			} else {
+				index = variables.FindString(16, varToken.text, varToken.textLength);
+				if index == -1 {
+					stdout.write("[Compiler#CompileToElf64.load_variable]: Error: Unknown variable ");
+					PrintToken(varTokenPtr);
+					SYS_EXIT(1);
+				}
+				ref<Variable> variablePtr = variables.At(index);
+				Variable variable = @variablePtr;
+				memcopy2(\currentVar, \variable, 37);
+				ref<Node> nodePtr = nodeArr.At(variable.nodeIndex);
+				Node node = @nodePtr;
+				
+				typePtr = typeArr.At(node.typeIndex);
+				location = variable.location;
+				offset = variable.offset;
+			}
 			Type type = @typePtr;
 			
 			bool inUse = regsInUse[0];
@@ -6321,13 +6483,15 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				currentMemoryReg = inUseReg;
 			}
 			
-			if (variable.location) == _cVARIABLE_LOCATION_STACK {
-				MoveFromRBP(\textBytes, variable.offset, inUseReg, type.byteSize, 8);
-			} else if (variable.location) == _cVARIABLE_LOCATION_DATA {
-				MoveFromSection(\textBytes, inUseReg, _cCOMPILATION_SECTION_DATA, variable.offset, type.byteSize, 8);
+			if location == _cVARIABLE_LOCATION_STACK {
+				MoveFromRBP(\textBytes, offset, inUseReg, type.byteSize, 8);
+			} else if location == _cVARIABLE_LOCATION_DATA {
+				MoveFromSection(\textBytes, inUseReg, _cCOMPILATION_SECTION_DATA, offset, type.byteSize, 8);
+			} else if location == _cVARIABLE_LOCATION_CLASS_OFFSET {
+				// NOTE: The class ptr is the first argument of any function call, so rbp-0 is the class beginning. This is how we can be sure that loading the member variable is at this offset
+				MoveFromRBP(\textBytes, offset, inUseReg, type.byteSize, 8);
 			} else {
 				stdout.write("[Compiler#CompileToElf64.load_variable]: Error: Unknown variable location ");
-				ui16 location = variable.location;
 				stdout.writeln(location);
 				SYS_EXIT(1);
 			}
@@ -6539,6 +6703,12 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 
 			// RAX = 0
 			LoadFromSection(\textBytes, 0, _cCOMPILATION_SECTION_DATA, stringOffset, 8, 8);
+			ui8[3] movRdx = {
+				0x48, 0xC7, 0xC2
+			};
+			textBytes.AddBytes(\movRdx, 3);
+			textBytes.AddUI32(token.textLength);
+			regsInUse[2] = true;
 			regsInUse[0] = true;
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_WITH_LIST {
 			// ignore
