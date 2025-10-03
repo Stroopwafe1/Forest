@@ -2763,6 +2763,7 @@ ui64 ParseFieldList(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 		}
 		// We are parsing the class functions as fields. Abort!
 		if shouldExit {
+			nodeArr.DeleteLast();
 			nodeCount = nodeArr.GetCount();
 			i32 reset = -1;
 			nodeArr.UpdateField(nodeCount - 1, 4, \reset, 4);
@@ -3345,9 +3346,10 @@ void AnalyseFunctionCall(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray
 		}
 	}
 
+	Node func = @funcName;
 	currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
 	currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
-	currentInstr.value = exprNode.tokenIndex;
+	currentInstr.value = func.tokenIndex;
 	instrArr.Add(\currentInstr);
 	
 	currentInstr.type = _cANALYSER_INSTRTYPE_CALL_FUNC;
@@ -6131,12 +6133,12 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	loop i, 0..instrCount {
 		ref<Instr> instrPtr = instrArr.At(i);
 		Instr instruction = @instrPtr;
-		// TODO: Have _cANALYSER_INSTRTYPE_DEF_CLASS/END_CLASS manage the begin and end indices of the DEF_FUNC offsets
+		
 		if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_CLASS {
 			currentClass.typeIndex = instruction.value;
 			currentClass.startFunctionIndex = s_token_index_array_count;			
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_CLASS {
-			currentClass.endFunctionIndex = s_token_index_array_count - 1;
+			currentClass.endFunctionIndex = s_token_index_array_count;
 			classArr.Add(\currentClass);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_CLASS {
 			ui64 typeIndex = instruction.value;
@@ -6164,7 +6166,6 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			s_token_index_array[s_token_index_array_count] = funcNode.tokenIndex;
 			s_func_byte_offsets[s_token_index_array_count] = byteOffset;
 			s_token_index_array_count += 1;
-
 
 			ref<Token> funcToken = tArr.At(funcNode.tokenIndex);
 			Token t = @funcToken;
@@ -6251,9 +6252,11 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				end = (loadedClass.endFunctionIndex) + 1;
 				loadedClass = {0, 0, 0};
 			}
+			bool found = false;
 			loop j, start..end {
 				ui64 tokenIndex = s_token_index_array[j];
 				ref<Token> compareTokenPtr = tArr.At(tokenIndex);
+				
 				Token compareToken = @compareTokenPtr;
 				bool equals = StrEquals(token.text, compareToken.text, token.textLength);
 				if equals {
@@ -6261,8 +6264,14 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					ui64 currentByteCount = textBytes.GetCount();
 					ui64 byteOffset = s_func_byte_offsets[j];
 					textBytes.AddUI32(byteOffset - (currentByteCount + 4));
+					found = true;
 					break;
 				}
+			}
+			if !found {
+				stdout.write("[Compiler#CompileToElf64.call_func]: Warning: could not find function ");
+				PrintToken(tokenPtr);
+				// TODO: Maybe mark this as external
 			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP {
 			ui64 currentByteCount = textBytes.GetCount();
@@ -7136,14 +7145,54 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	s_string_table_offsets[s_string_table_offsets_count] = stringTableOffset;
 	s_string_table_offsets_count += 1;
 
+	// If function token was inside a class, add ClassName_ prefix
+	ui64 classCount = classArr.GetCount();
+	loop i, 0..classCount {
+		ref<CompClass> compClassPtr = classArr.At(i);
+		CompClass compClass = @compClassPtr;
+		ref<Type> typePtr = typeArr.At(compClass.typeIndex);
+		Type type = @typePtr;
+		ref<Struct> classPtr = s_struct_array.At(type.extraIndex);
+		Struct klass = @classPtr;
+
+		ui32 start = compClass.startFunctionIndex;
+		ui32 end = compClass.endFunctionIndex;
+		loop j, start..end {
+			strBytes.AddBytes(klass.name, klass.nameLength);
+			strBytes.AddByte('_');
+			stringTableOffset += ((klass.nameLength) + 1);
+			
+			ui64 tokenIndex = s_token_index_array[j];
+			ref<Token> tokenPtr = tArr.At(tokenIndex);
+			Token token = @tokenPtr;
+			strBytes.AddBytes(token.text, token.textLength);
+			strBytes.AddByte(0);
+			
+			stringTableOffset += ((token.textLength) + 1);
+			
+			s_string_table_offsets[s_string_table_offsets_count] = stringTableOffset;
+			s_string_table_offsets_count += 1;
+
+			// Make sure that we mark this token as handled
+			s_token_index_array[j] = -1;
+		}
+	}
+
+	// Loop through the rest of the function tokens and add their names as well
 	loop i, 0..s_token_index_array_count {
+		ui64 index = s_token_index_array[i];
+		if index == -1 {
+			skip;
+		}
+
 		ui64 tokenIndex = s_token_index_array[i];
 		ref<Token> tokenPtr = tArr.At(tokenIndex);
 		Token token = @tokenPtr;
 		strBytes.AddBytes(token.text, token.textLength);
 		strBytes.AddByte(0);
-
+		
 		stringTableOffset += ((token.textLength) + 1);
+		
 		s_string_table_offsets[s_string_table_offsets_count] = stringTableOffset;
 		s_string_table_offsets_count += 1;
 	}
