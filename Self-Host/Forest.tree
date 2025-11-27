@@ -4352,7 +4352,7 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 			instrArr.Add(\currentInstr);
 			
 		} else if (node.type) == _cPARSER_NODETYPE_ENUM {
-			// TODO: Enums don't have intermediate representation and get replaced at compile time with their value. We shouldn't be dealing with Enums in the Analyse step
+			// NOTE: Enums don't have intermediate representation and get replaced at compile time with their value. We shouldn't be dealing with Enums in the Analyse step
 		} else if (node.type) == _cPARSER_NODETYPE_VARIABLE_DECLARATION_ASSIGNMENT {
 			currentInstr.type = _cANALYSER_INSTRTYPE_DEF_ASSIGN_GLOBAL_VAR;
 			currentInstr.value = i;
@@ -4540,7 +4540,10 @@ void PrintInstr(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr
 	} else if (instruction.valueType) == _cANALYSER_INSTRVALUE_NODE {
 		//ref<Node> nodePtr = nodeArr.At(value);
 		//nodePtr.PrintNode();
-		//stdout.write("\n");
+		stdout.write("node ");
+		stdout.writeln(value);
+	} else if (instruction.valueType) == _cANALYSER_INSTRVALUE_MEMORY {
+		stdout.write("memory ");
 		stdout.writeln(value);
 	} else {
 		stdout.writeln(value);
@@ -5076,11 +5079,19 @@ void MoveRAX(ref<ByteArr> bytes, ui8 reg, bool to) {
 	bytes.AddByte(modRM);
 }
 
-void MoveIntoRAX(ref<ByteArr> bytes, ui8 srcReg) {
+void MoveIntoRAX(ref<ByteArr> bytes, ui8 srcReg, ui8 size) {
 	ui8 rex = GetREX(true, srcReg > 7, false, false);
-	bytes.AddByte(rex);
+	if size >= 8 {
+		bytes.AddByte(rex);
+	}
+	
 	ui8 modRM = 0x00 + ((srcReg % 8) * 8);
-	bytes.AddByte(0x89);
+
+	if size == 1 {
+		bytes.AddByte(0x88);
+	} else {
+		bytes.AddByte(0x89);
+	}
 	bytes.AddByte(modRM);
 }
 
@@ -6585,6 +6596,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				} else if currentMemoryLocation == _cVARIABLE_LOCATION_DATA {
 					MoveToSection(\textBytes, 0, _cCOMPILATION_SECTION_DATA, currentMemOffset, currentType.byteSize);
 				} else if currentMemoryLocation == _cVARIABLE_LOCATION_REGISTER {
+					// TODO: Use currentType.byteSize for this function
 					MoveIntoRAX(\textBytes, 3);
 				} else {
 					stdout.write("[Compiler#CompileToElf64.set_value]: Error: Unknown variable location ");
@@ -6863,6 +6875,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				i += (counter - 1);
 			}
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
+			// NOTE: Idea: Jump to END_FUNCTION instruction, for potential future "defer" calls as well.
 			// TODO: Restore however many stack allocations this block has had
 			// Add 0xC3
 			ui64 totalStackSize = 0;

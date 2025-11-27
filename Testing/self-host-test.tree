@@ -8,6 +8,7 @@ struct Hi {
 	ui8 field;
 	ui8 field2;
 	ui8 field3;
+	TestEnum field4;
 }
 
 class String {
@@ -39,7 +40,7 @@ ui8 main(array<ref<ui8> > argv) {
 	ui16 value = 2 + 3 * 4 * 5 - globalVar;
 	ui8 test = returnSub2(value);
 	array<char> testStr = "Hello, World";
-	Hi hi = { 5, 6, 7 };
+	Hi hi = { 5, 6, 7, TestEnum::Test2 };
 	hi.field = 7;
 
 	ref<Hi> hiPtr = \hi;
@@ -50,7 +51,7 @@ ui8 main(array<ref<ui8> > argv) {
 	String hello = "Hello, World!\n";
 	stdout.Write(hello);
 
-	match t {
+	match hi.field4 {
 		TestEnum::Test1: { return 0; }
 		TestEnum::Test2: { return hi.field - 3; }
 	} else {
