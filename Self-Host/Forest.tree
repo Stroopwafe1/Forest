@@ -7128,7 +7128,15 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			Type fieldType = @fieldTypeRef;
 			
 			if (currentVar.location) == _cVARIABLE_LOCATION_STACK {
-				MoveRBP(\textBytes, memoryOffset, 0, fieldType.byteSize);
+				if (fieldType.byteSize) <= 8 {
+					MoveRBP(\textBytes, memoryOffset, 0, fieldType.byteSize);
+				} else {
+					// NOTE: Only 16 bytes supported
+					MoveRBP(\textBytes, memoryOffset, 0, 8);
+					MoveRBP(\textBytes, memoryOffset + 8, 2, 8);
+					regsInUse[2] = false;
+				}
+				
 			} else if (currentVar.location) == _cVARIABLE_LOCATION_DATA {
 				MoveToSection(\textBytes, 0, _cCOMPILATION_SECTION_DATA, memoryOffset, fieldType.byteSize);
 			} else {
