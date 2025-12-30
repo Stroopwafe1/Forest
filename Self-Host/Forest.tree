@@ -202,6 +202,12 @@ ui8 _cANALYSER_INSTRTYPE_DEF_LABEL = 59;
 ui8 _cANALYSER_INSTRTYPE_LOAD_CLASS = 60;
 ui8 _cANALYSER_INSTRTYPE_SET_SYSCALL_ARG = 61;
 ui8 _cANALYSER_INSTRTYPE_SYSCALL = 62;
+ui8 _cANALYSER_INSTRTYPE_BOOLEAN_NOT = 63;
+ui8 _cANALYSER_INSTRTYPE_BOOLEAN_AND = 64;
+ui8 _cANALYSER_INSTRTYPE_BOOLEAN_OR = 65;
+ui8 _cANALYSER_INSTRTYPE_BITWISE_NOT = 66;
+ui8 _cANALYSER_INSTRTYPE_BITWISE_AND = 67;
+ui8 _cANALYSER_INSTRTYPE_BITWISE_OR = 68;
 
 ui8 _cANALYSER_INSTRTYPE_DEBUG_SPECIAL = 100;
 ui8 _cANALYSER_INSTRTYPE_DEBUG_COPY = 101;
@@ -596,7 +602,7 @@ class DynArray {
 			stdout.write(") of size ");
 			stdout.writeln(count);
 			// Code from DumpContents
-			loop i, 0..count {
+			/*loop i, 0..count {
 				loop j, 0..entrySize {
 					ref<ui8> bytePtr = (data + (entrySize * i)) + j;
 					ui8 byte = @bytePtr;
@@ -604,9 +610,9 @@ class DynArray {
 					stdout.write(" ");
 				}
 				stdout.write("\n");
-			}
-			SYS_WRITE(1, data, count * entrySize);
-			stdout.write("\n");
+			}*/
+			//SYS_WRITE(1, data, count * entrySize);
+			//stdout.write("\n");
 			
 			SYS_KILL(0, 5); //SIGTRAP ourselves so we can inspect the backtrace
 			SYS_EXIT(1);
@@ -627,6 +633,7 @@ class DynArray {
 		memcopy2(offset, src, length);
 	}
 
+	// TODO: Bug: If needle is substring of what we're looking for, it will get matched as well
 	ui64 FindString(ui64 fieldOffset, ref<ui8> needle, ui64 needleSize) {
 		ui64 foundIndex = -1;
 		loop i, 0..count {
@@ -707,6 +714,13 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 	loop i, 0..sourceLength {
 		start += 1;
 		ui8 byte = source[i];
+
+		if byte == 10 {
+			line += 1;
+			currentToken.line = line;
+			start = 0;
+		}
+		
 		if (currentType == _cTOKENTYPE_STRING) & (byte != '"') {
 			textLength += 1;
 			skip;
@@ -1085,9 +1099,6 @@ void Tokenise(ref<DynArray> tokens, ref<ui8> source, ui64 sourceLength, ref<ui8>
 			currentToken.textLength = textLength;
 			EndToken(tokens, \currentToken);
 			currentType = 0;
-			line += 1;
-			currentToken.line = line;
-			start = 0;
 			textLength = 0;
 		} else if ((byte == 'x') | (byte == 'o')) | (((byte >= 'a') & (byte <= 'f')) | ((byte >= 'A') & (byte <= 'F'))) {
 			if currentType == _cTOKENTYPE_INTEGER {
@@ -2043,7 +2054,7 @@ ui64 ParseVarAssignment(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray>
 	// very.nested.array[39 + 30].property.also.should.be.supported = true
 	// VAR_ASSIGN -FC-> EXPR_PROP_CHAIN -NS-> ASSIGNMENT -FC-> EXPR
 	// This tree structure is different in that its next sibling is the assignment.
-	if assignmentIndex > offset {
+	if assignmentIndex > (offset + toSkip) {
 		// set parent node to PROPERTY_ASSIGNMENT
 		ui16 propAssign = _cPARSER_NODETYPE_PROPERTY_ASSIGNMENT;
 		nodeArr.UpdateField(currentNodeState, 8, \propAssign, 2);
@@ -3416,7 +3427,7 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 	loop {
 		ref<Node> exprNodePtr = nodeArr.At(i);
 		Node exprNode = @exprNodePtr;
-		
+
 		ref<Token> tokenPtr = tArr.At(exprNode.tokenIndex);
 		Token token = @tokenPtr;
 		
@@ -3425,6 +3436,7 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			ui64 number = StringToUI64(token.text, token.textLength);
 			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_INTEGER;
 			currentInstr.value = number;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_LITERAL;
 			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_STRING {
 			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_STRING;
@@ -3458,6 +3470,7 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_POWER_OF {
 			currentInstr.type = _cANALYSER_INSTRTYPE_POWER;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 			currentInstr.value = 0;
 			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_REFERENCE_OF {
@@ -3470,6 +3483,11 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 				PrintInstr(tArr, nodeArr, typeArr, \currentInstr);
 				SYS_EXIT(1);
 			}
+		} else if (token.type) == _cTOKENTYPE_NOT {
+			currentInstr.type = _cANALYSER_INSTRTYPE_BOOLEAN_NOT;
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
+			currentInstr.value = 0;
+			instrArr.Add(\currentInstr);
 		} else if (exprNode.type) == _cPARSER_NODETYPE_EXPRESSION_VARIABLE {
 			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
@@ -3619,6 +3637,7 @@ ui64[128] s_ifs;
 ui64 s_ifs_count = 0;
 
 ui64 s_line_number = 1;
+ui64 s_labels_added = 0;
 
 ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, ref<DynArray> instrArr, ui64 offset, ref<ui64> labelCountPtr) {
 	Instr currentInstr = {0, 0, 0}; // type, valueType, value
@@ -3638,6 +3657,7 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 		Node node = @nodePtr;
 		
 		currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
+		currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 		currentInstr.value = node.tokenIndex;
 		instrArr.Add(\currentInstr);
 		
@@ -3718,20 +3738,40 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 			ref<Token> tokenPtr = tArr.At(child.tokenIndex);
 			Token token = @tokenPtr;
 
-			AnalyseExpression(tArr, nodeArr, typeArr, instrArr, child.firstChild);
-
 			// Check type of assignment
 			ui16 assignmentType = (token.type) ^ _cTOKENTYPE_ASSIGNMENT;
-
+			
 			if assignmentType != 0 {
 				// We have an operator assignment instruction (+=, -=, *=, etc...)
 				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 				currentInstr.value = node.tokenIndex;
 				instrArr.Add(\currentInstr);
+				
+				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, child.firstChild);
 
 				if assignmentType == _cTOKENTYPE_PLUS {
 					currentInstr.type = _cANALYSER_INSTRTYPE_ADD;
+					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
+					currentInstr.value = 0;
+					instrArr.Add(\currentInstr);
+				} else if assignmentType == _cTOKENTYPE_MINUS {
+					currentInstr.type = _cANALYSER_INSTRTYPE_SUB;
+					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
+					currentInstr.value = 0;
+					instrArr.Add(\currentInstr);
+				} else if assignmentType == _cTOKENTYPE_MULTIPLY {
+					currentInstr.type = _cANALYSER_INSTRTYPE_MULT;
+					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
+					currentInstr.value = 0;
+					instrArr.Add(\currentInstr);
+				} else if assignmentType == _cTOKENTYPE_DIVIDE {
+					currentInstr.type = _cANALYSER_INSTRTYPE_DIV;
+					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
+					currentInstr.value = 0;
+					instrArr.Add(\currentInstr);
+				} else if assignmentType == _cTOKENTYPE_MODULUS {
+					currentInstr.type = _cANALYSER_INSTRTYPE_MOD;
 					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 					currentInstr.value = 0;
 					instrArr.Add(\currentInstr);
@@ -3740,6 +3780,8 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 					stdout.writeln(assignmentType);
 					SYS_EXIT(1);
 				}
+			} else {
+				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, child.firstChild);
 			}
 
 			currentInstr.type = _cANALYSER_INSTRTYPE_SET_VALUE;
@@ -3769,6 +3811,21 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 
 				if assignmentType == _cTOKENTYPE_PLUS {
 					currentInstr.type = _cANALYSER_INSTRTYPE_ADD;
+					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
+					currentInstr.value = 0;
+					instrArr.Add(\currentInstr);
+				} else if assignmentType == _cTOKENTYPE_DIVIDE {
+					currentInstr.type = _cANALYSER_INSTRTYPE_DIV;
+					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
+					currentInstr.value = 0;
+					instrArr.Add(\currentInstr);
+				} else if assignmentType == _cTOKENTYPE_MODULUS {
+					currentInstr.type = _cANALYSER_INSTRTYPE_MOD;
+					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
+					currentInstr.value = 0;
+					instrArr.Add(\currentInstr);
+				} else if assignmentType == _cTOKENTYPE_MULTIPLY {
+					currentInstr.type = _cANALYSER_INSTRTYPE_MULT;
 					currentInstr.valueType = _cANALYSER_INSTRVALUE_LAST_VALUE;
 					currentInstr.value = 0;
 					instrArr.Add(\currentInstr);
@@ -3932,10 +3989,11 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 				currentInstr.value = 2;
 				instrArr.Add(\currentInstr);
 			} else {
-				stdout.write("[Compiler#AnalayseBody]: Error: Unknown top-level condition type ");
-				ui64 type = token.type;
-				stdout.writeln(type);
-				SYS_EXIT(1);
+				stdout.write("[Compiler#AnalayseBody.if_elseif]: Warning: Unknown top-level condition type. Using JUMP_NZ");
+				currentInstr.type = _cANALYSER_INSTRTYPE_JMP_NONZERO;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_OFFSET;
+				currentInstr.value = 2;
+				instrArr.Add(\currentInstr);
 			}
 			ui64 labelState = instrArr.GetCount();
 			currentInstr.type = _cANALYSER_INSTRTYPE_JMP_LABEL;
@@ -4010,7 +4068,8 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 			ui64 blockOffset = node.firstChild;
 			if hasVariable {
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
+				currentInstr.value = node.tokenIndex;
 				instrArr.Add(\currentInstr);
 				
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEF_VAR;
@@ -4031,7 +4090,8 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 				Node rangeMin = @rangeMinPtr;
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
+				currentInstr.value = rangeMin.tokenIndex;
 				instrArr.Add(\currentInstr);
 				
 				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, rangeMin.firstChild);
@@ -4049,7 +4109,8 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 				ref<Node> rangeMaxPtr = nodeArr.At(rangeMin.nextSibling);
 				Node rangeMax = @rangeMaxPtr;
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
+				currentInstr.value = rangeMax.tokenIndex;
 				instrArr.Add(\currentInstr);
 				AnalyseExpression(tArr, nodeArr, typeArr, instrArr, rangeMax.firstChild);
 				// currentInstr.type = _cANALYSER_INSTRTYPE_SET_RANGE_MAX;
@@ -4087,11 +4148,7 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 			labelCount += 1;
 			instrArr.Add(\currentInstr);
 
-			if hasVariable {
-				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
-				instrArr.Add(\currentInstr);
-				
+			if hasVariable {				
 				currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_VARIABLE;
 				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
 				currentInstr.value = child.tokenIndex;
@@ -4126,10 +4183,6 @@ ui64 AnalyseBody(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeAr
 			instrArr.Add(\currentInstr);
 
 			instrArr.UpdateField(currentState, 2, \localStackSize, 8);
-			
-			currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-			currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
-			instrArr.Add(\currentInstr);
 		} else {
 			stdout.write("[Compiler#AnalyseBody]: ERROR: Unknown node type ");
 			ui64 type = node.type;
@@ -4219,9 +4272,10 @@ void AnalyseFunction(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> ty
 		currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_SET_PROLOGUE_END;
 		instrArr.Add(\currentInstr);
 		
-		ui64 labelCount = 0;
+		ui64 labelCount = s_labels_added;
 		stackSize += AnalyseBody(tArr, nodeArr, typeArr, instrArr, bodyOffset, \labelCount);
 		stackSize = NearestMultipleOf(stackSize, 16);
+		s_labels_added = labelCount;
 
 		instrArr.UpdateField(currentState, 2, \stackSize, 8);
 
@@ -4275,7 +4329,8 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 				}
 				break;
 			}
-			ref<Token> finalNodeTokenPtr = tArr.At(iterPtr.GetTokenIndex() + 2); // skip 'name;'
+			ui64 finalTokenIndex = iterPtr.GetTokenIndex() + 2;
+			ref<Token> finalNodeTokenPtr = tArr.At(finalTokenIndex); // skip 'name;'
 			Token finalNodeToken = @finalNodeTokenPtr;
 			if (finalNodeToken.line) != s_line_number {
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_ADVANCE_LINE;
@@ -4284,7 +4339,8 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 				s_line_number = finalNodeToken.line;
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
+				currentInstr.value = finalTokenIndex;
 				instrArr.Add(\currentInstr);
 				
 			}
@@ -4327,7 +4383,8 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 				s_line_number = finalNodeToken.line;
 
 				currentInstr.type = _cANALYSER_INSTRTYPE_DEBUG_STATEMENT;
-				currentInstr.valueType = _cANALYSER_INSTRVALUE_NONE;
+				currentInstr.valueType = _cANALYSER_INSTRVALUE_TOKEN;
+				currentInstr.value = tokenIndex;
 				instrArr.Add(\currentInstr);
 			}
 
@@ -4449,6 +4506,8 @@ void PrintInstr(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr
 		stdout.write("LOAD_PROPERTY ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_LOAD_VALUE {
 		stdout.write("LOAD_VALUE ");
+	}  else if (instruction.type) == _cANALYSER_INSTRTYPE_SET_INDEX {
+		stdout.write("SET_INDEX ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
 		stdout.write("RETURN ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_ADD {
@@ -4465,6 +4524,8 @@ void PrintInstr(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr
 		stdout.write("POWER ");
 	}  else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP {
 		stdout.write("DEF_LOOP ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_BOOLEAN_NOT {
+		stdout.write("BOOL_NOT ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_LOADED {
 		stdout.write("CMP_LOADED ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_CMP_VARIABLE {
@@ -4489,6 +4550,8 @@ void PrintInstr(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr
 		stdout.write("JMP_LT ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_EQ {
 		stdout.write("JMP_EQ ");
+	} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_NONZERO {
+		stdout.write("JMP_NZ ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_IF {
 		stdout.write("IF ");
 	} else if (instruction.type) == _cANALYSER_INSTRTYPE_END_IF {
@@ -4537,6 +4600,8 @@ void PrintInstr(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr
 	if (instruction.valueType) == _cANALYSER_INSTRVALUE_TOKEN {
 		ref<Token> tPtr = tArr.At(value);
 		PrintToken(tPtr);
+		//stdout.write("token ");
+		//stdout.writeln(value);
 	} else if (instruction.valueType) == _cANALYSER_INSTRVALUE_NODE {
 		//ref<Node> nodePtr = nodeArr.At(value);
 		//nodePtr.PrintNode();
@@ -5312,6 +5377,11 @@ void CompareFromRBP(ref<ByteArr> bytes, i32 offset, ui8 reg, ui8 size) {
 	} else {
 		bytes.AddBytes(\offset, 4);
 	}
+
+	ui8[3] setRax = {
+		0x0F, 0x94, 0xC0
+	};
+	bytes.AddBytes(\setRax, 3);
 }
 
 void CompareFromSection(ref<ByteArr> bytes, ui8 reg, ui8 srcSectionType, ui64 addend, ui8 size) {
@@ -5346,6 +5416,11 @@ void CompareFromSection(ref<ByteArr> bytes, ui8 reg, ui8 srcSectionType, ui64 ad
 	s_comp_rela.Add(\rela);
 
 	bytes.AddUI32(0);
+
+	ui8[3] setRax = {
+		0x0F, 0x94, 0xC0
+	};
+	bytes.AddBytes(\setRax, 3);
 }
 
 ui64[128] s_undefined_jumps;
@@ -5390,10 +5465,13 @@ void AddSymbolTableEntry(ref<ByteArr> bytes, ui32 name, ui8 info, ui16 sectionHe
 	bytes.AddBytes(\entry, 0x18);
 }
 
-ui16 GetLineNumberOpcode(i8 lineIncrement, i8 opcodeAdvance) {
-	i16 lineBase = -5;
-	i16 lineRange = 14;
-	i16 opcodeBase = 13;
+i64 s_line_base = 0;
+i64 s_line_range = 15;
+
+ui32 GetLineNumberOpcode(i64 lineIncrement, i64 opcodeAdvance) {
+	i64 lineBase = s_line_base;
+	i64 lineRange = s_line_range;
+	i64 opcodeBase = 13;
 	return ((lineIncrement - lineBase) + (lineRange * opcodeAdvance)) + opcodeBase;
 }
 
@@ -5979,8 +6057,8 @@ void AddDebugInfo(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeA
 	bytes.AddByte(1); // Minimum instruction length
 	bytes.AddByte(1); // Maximum operations per instruction
 	bytes.AddByte(1); // Default is statement
-	bytes.AddByte(-5); // line base
-	bytes.AddByte(14); // Line range
+	bytes.AddByte(s_line_base); // line base
+	bytes.AddByte(s_line_range); // Line range
 	bytes.AddByte(0x0d); // Opcode base (just a default value for DWARF-3 and higher)
 	bytes.AddByte(0); // Standard opcode lengths. I still don't know what the fuck this is but the following 12 values are required (stolen from a gcc compiled object file
 	bytes.AddByte(1);
@@ -6041,10 +6119,10 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	abbrevBytes.New(1024);
 
 	ByteArr infoBytes = {0, 0, 0};
-	infoBytes.New(1024);
+	infoBytes.New(4096);
 
 	ByteArr arangesBytes = {0, 0, 0};
-	arangesBytes.New(1024);
+	arangesBytes.New(4096);
 
 	ByteArr dataBytes = {0, 0, 0};
 	dataBytes.New(1024);
@@ -6060,7 +6138,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	s_debug_aranges = \arangesBytes;
 
 	ByteArr lineInfoBytes = {0, 0, 0};
-	lineInfoBytes.New(1024);
+	lineInfoBytes.New(2048);
 
 	DynArray sections = {0, 0, 0, 64, "sections", 8};
 	sections.New(20); // Arbitrary choice
@@ -6180,8 +6258,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 		false, false, false, false, false, false, false, false,
 		false, false, false, false, false, false, false
 	};
-	ui8[6] callRegs = { 7, 6, 2, 1, 8, 9 };
-	ui8[6] syscallRegs = { 7, 6, 2, 10, 8, 9 };
+	ui8[7] callRegs = { 7, 6, 2, 1, 8, 9 };
+	ui8[7] syscallRegs = { 7, 6, 2, 10, 8, 9 };
 
 	ui64 stackVariables = 0;
 	ui64 paramCount = 0;
@@ -6292,6 +6370,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			lastFunctionOffset = byteOffset;
 
 			variableState = variables.GetCount();
+			paramCount = 0;
 
 			ref<Node> funcNodePtr = nodeArr.At(instruction.value);
 			Node funcNode = @funcNodePtr;
@@ -6323,7 +6402,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 
 
 			// Reset stack offsets
-			offsets[_cVARIABLE_LOCATION_STACK] = 0;
+			offsets[_cVARIABLE_LOCATION_STACK] = 8;
 			
 			// Add prologue
 			ui8[4] prologue = {
@@ -6391,15 +6470,28 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ref<Token> tokenPtr = tArr.At(instruction.value);
 			Token token = @tokenPtr;
 			
-			bool equals = StrEquals((token.text) + 4, "WRITE", 5);
-			if equals {
-				// mov rax, 1
-				ui8[3] movRax = {
-					0x48, 0xC7, 0xC0
-				};
-				textBytes.AddBytes(\movRax, 3);
-				regsInUse[0] = true;
+			bool isSysWrite = StrEquals((token.text) + 4, "WRITE", 5);
+			bool isSysRead = StrEquals((token.text) + 4, "READ", 4);
+			bool isSysOpen = StrEquals((token.text) + 4, "OPEN", 4);
+			bool isSysClose = StrEquals((token.text) + 4, "CLOSE", 5);
+			bool isSysMmap = StrEquals((token.text) + 4, "MMAP", 4);
+
+			ui8[3] movRax = {
+				0x48, 0xC7, 0xC0
+			};
+			textBytes.AddBytes(\movRax, 3);
+			regsInUse[0] = true;
+			
+			if isSysWrite {
 				textBytes.AddUI32(1);
+			} else if isSysRead {
+				textBytes.AddUI32(0);
+			} else if isSysOpen {
+				textBytes.AddUI32(2);
+			} else if isSysClose {
+				textBytes.AddUI32(3);
+			} else if isSysMmap {
+				textBytes.AddUI32(9);
 			} else {
 				stdout.write("[Compiler#CompileToElf64.call_func]: TODO: Unknown syscall ");
 				PrintToken(tokenPtr);
@@ -6412,12 +6504,12 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ref<Token> tokenPtr = tArr.At(instruction.value);
 			Token token = @tokenPtr;
 
+			argOffset = 0;
 			ui32 start = 0;
 			ui32 end = s_token_index_array_count;
 			if (loadedClass.typeIndex) != 0 {
 				start = loadedClass.startFunctionIndex;
 				end = (loadedClass.endFunctionIndex) + 1;
-				loadedClass = {0, 0, 0};
 			}
 			bool found = false;
 			loop j, start..end {
@@ -6438,8 +6530,14 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			if !found {
 				stdout.write("[Compiler#CompileToElf64.call_func]: Warning: could not find function ");
 				PrintToken(tokenPtr);
+				if (loadedClass.typeIndex) != 0 {
+					stdout.write(" on class type ");
+					ui32 classType = loadedClass.typeIndex;
+					stdout.writeln(classType);
+				}
 				// TODO: Maybe mark this as external
 			}
+			loadedClass = {0, 0, 0};
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_DEF_LOOP {
 			ui64 currentByteCount = textBytes.GetCount();
 			s_label_bytes[instruction.value] = currentByteCount;
@@ -6740,8 +6838,12 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					0x48, 0x3B, 0xC3
 				};
 				textBytes.AddBytes(\cmpRaxRbx, 3);
-				regsInUse[0] = false;
 				regsInUse[3] = false;
+
+				ui8[3] setRax = {
+					0x0F, 0x94, 0xC0
+				};
+				textBytes.AddBytes(\setRax, 3);
 			} else {
 				stdout.write("[Compiler#CompileToELF64.cmp_loaded]: Error: Expected both RAX and RBX to be in use");
 				SYS_EXIT(1);
@@ -6800,6 +6902,37 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			} else {
 				instructionCounter = instruction.value;
 				textBytes.AddByte(0x74); // JE rel8
+				lastJumpState = textBytes.GetCount();
+				textBytes.AddByte(0x0);
+			}
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_JMP_NONZERO {
+			// TODO: Merge with all conditional jumps
+			ui8[2] testRax = {
+				0x48, 0xA9
+			};
+			textBytes.AddBytes(\testRax, 2);
+			textBytes.AddUI32(1);
+			if (instruction.valueType) == _cANALYSER_INSTRVALUE_LABEL {
+				// JNZ rel32
+				textBytes.AddByte(0x0F);
+				textBytes.AddByte(0x85);
+
+				if (instruction.value) >= s_jump_count {
+					stdout.writeln("[Compiler#CompileToELF64.jmp_nz]: Warning: Jumping to unknown label\n");
+					s_undefined_jumps[s_jump_count] = textBytes.GetCount();
+					s_jump_labels[s_jump_count] = instruction.value;
+					s_jump_count += 1;
+
+					textBytes.AddUI32(0);
+				} else {
+					ui64 byteOffsetLabel = s_label_bytes[instruction.value];
+					i64 currentByteCount = textBytes.GetCount();
+					textBytes.AddUI32(byteOffsetLabel - (currentByteCount + 4));
+				}
+
+			} else {
+				instructionCounter = instruction.value;
+				textBytes.AddByte(0x75); // JNZ rel8
 				lastJumpState = textBytes.GetCount();
 				textBytes.AddByte(0x0);
 			}
@@ -6874,6 +7007,12 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				regsInUse[3] = true;
 				i += (counter - 1);
 			}
+		} else if (instruction.type) == _cANALYSER_INSTRTYPE_BOOLEAN_NOT {
+			ui8[2] xorRax1 = {
+				0x48, 0x35
+			};
+			textBytes.AddBytes(\xorRax1, 2);
+			textBytes.AddUI32(1);
 		} else if (instruction.type) == _cANALYSER_INSTRTYPE_RETURN {
 			// NOTE: Idea: Jump to END_FUNCTION instruction, for potential future "defer" calls as well.
 			// TODO: Restore however many stack allocations this block has had
@@ -6909,8 +7048,10 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			Token token = @tokenRef;
 			ui64 stringOffset = dataBytes.GetCount();
 
-			bool escapeSeq = false;
+			ui32 tempOffset = offsets[_cVARIABLE_LOCATION_DATA];
 			ui64 tLength = token.textLength;
+
+			bool escapeSeq = false;
 			loop j, 0..token.textLength {
 				ref<ui8> tText = token.text;
 				ui8 byte = tText[j];
@@ -6933,6 +7074,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 						dataBytes.AddByte('\t');
 					} else if byte == 'r' {
 						dataBytes.AddByte('\r');
+					} else if byte == 48 {
+						dataBytes.AddByte(0);
 					} else {
 						stdout.write("Compiler#CompileToELF64.load_string]: Error: Unknown escape sequence \\");
 						stdout.write(byte);
@@ -6940,6 +7083,9 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					}
 				}
 			}
+			
+			tempOffset += tLength;
+			offsets[_cVARIABLE_LOCATION_DATA] = tempOffset;
 			
 			//dataBytes.AddBytes(token.text, token.textLength);
 
@@ -6964,6 +7110,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				if (currentVar.offset) != dataCount {
 					stdout.write("[Compiler#CompileToElf64.with_value]: Assertion Error: Variable offset did not match data bytes count\n");
 					stdout.writeln(dataCount);
+					PrintVariable(\currentVar);
 					i32 offset = currentVar.offset;
 					stdout.writeln(offset);
 					SYS_EXIT(1);
@@ -7091,7 +7238,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				inUseReg = 3;
 			}
 			if (instruction.valueType) == _cANALYSER_INSTRVALUE_MEMORY {
-				inUseReg = currentMemoryReg;
+				inUseReg = currentMemoryReg; //NOTE: Commenting this out because it was causing issues with ADD/MULT/etc... instructions. I don't remember why this was here
 				if currentMemoryLocation == _cVARIABLE_LOCATION_STACK {
 					MoveFromRBP(\textBytes, currentMemOffset, inUseReg, currentType.byteSize, 8);
 				} else if currentMemoryLocation == _cVARIABLE_LOCATION_DATA {
@@ -7115,7 +7262,14 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			ref<Type> typeRef = typeArr.At(node.typeIndex);
 			Type type = @typeRef;
 
+			if (type.typeType) < _cPARSER_TYPETYPE_REF {
+				skip;
+			}
+			
 			i32 structIndex = type.extraIndex;
+			if structIndex == -1 {
+				PrintVariable(\currentVar);
+			}
 			ref<Struct> structRef = s_struct_array.At(structIndex);
 			Struct strukt = @structRef;
 			
@@ -7181,10 +7335,15 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					SYS_EXIT(1);
 				}
 				
-				if paramCount < 6 {
-					MoveRBP(\textBytes, newOffset, callRegs[paramCount], size);
+				if paramCount <= 6 {
+					ui8 minSize = size;
+					if size == 1 {
+						minSize = 2; // HACK: This is so scuffed, but because the 1-byte version of RDI is BH, it doesn't follow the convention anymore. Or I don't follow the convention for that... Probably the latter, but idc atm. This works
+					}
+					MoveRBP(\textBytes, newOffset, callRegs[paramCount], minSize);
 				} else {
 					stdout.writeln("[Compiler]: TODO: More than 6 parameters for a function is not supported yet");
+					PrintVariable(\currentVar);
 					SYS_EXIT(1);
 				}
 				paramCount += 1;
@@ -7280,6 +7439,30 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 			regsInUse[0] = true;
 			regsInUse[2] = true;
 			regsInUse[3] = false;
+		} else if ((instruction.type) == _cANALYSER_INSTRTYPE_DIV) | ((instruction.type) == _cANALYSER_INSTRTYPE_MOD) {
+			bool hasSecond = regsInUse[3];
+			if !hasSecond {
+				if stackVariables == 0 {
+					stdout.writeln("[Compiler]: Error: No variable available for div");
+					SYS_EXIT(1);
+				}
+				textBytes.AddByte(0x5B); // Pop rbx
+			}
+			ui8[3] div = {
+				0x48, 0xF7, 0xFB
+			}; // div rbx
+			textBytes.AddBytes(\div, 3);
+
+			regsInUse[0] = true;
+			regsInUse[2] = true;
+			regsInUse[3] = false;
+			
+			if (instruction.type) == _cANALYSER_INSTRTYPE_MOD {
+				// mov rdx, rax
+				MoveRAX(\textBytes, 2, 8);
+				regsInUse[2] = false;
+			}
+			
 		} else if (instruction.type) >= 100 {
 			PrintInstr(tArr, nodeArr, typeArr, instrPtr);
 
@@ -7372,6 +7555,7 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 	lineInfoBytes.AddULEB128(1);
 	lineInfoBytes.AddByte(1); // DW_LNE_end_sequence
 
+	// FIXED: Using global label count for analyser
 	loop i, 0..s_jump_count {
 		ui64 byteToUpdate = s_undefined_jumps[i];
 		ui64 labelValue = s_jump_labels[i];
