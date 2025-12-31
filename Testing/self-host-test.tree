@@ -62,7 +62,40 @@ FileDescriptor stdin = 0;
 FileDescriptor stdout = 1;
 FileDescriptor stderr = 2;
 
-ui8[4096] global_buffer;
+ui8[196608] global_buffer; // 192 kB arbitralily chosen
+
+/*
+[0-9kB] - MemoryAllocationRegions
+[9kb-END] - Actual heap
+*/
+
+struct MemoryAllocationRegion {
+	ref<ui8> data;
+	ui64 size;
+	bool isAvailable;
+}
+
+struct MemoryAllocationTable {
+	ui64 size;
+	ui64 capacity;
+	ref<ui8> firstAvailableByte;
+}
+
+MemoryAllocationTable allocTable;
+
+ref<ui8> alloc(ui64 bytes) {
+	ref<MemoryAllocationRegion> headerRegion = \global_buffer + allocTable.size * 9;
+	
+	allocTable.size += 1;
+	ref<ui8> returnValue = allocTable.firstAvailableByte;
+	
+	allocTable.firstAvailableByte += bytes;
+
+	MemoryAllocationRegion region = { 0, bytes, false };
+	headerRegion = region;
+	
+	return returnValue;
+}
 
 
 ui8 returnSub2(ui16 value) {
@@ -81,6 +114,9 @@ ui8 assert(bool assertion, String printIfFalse) {
 ui8 globalVar = 6;
 
 ui8 main(array<ref<ui8> > argv) {
+	allocTable.capacity = 1000;
+	allocTable.firstAvailableByte = \global_buffer + 1024 * 9;
+	
 	ui16 value = 2 + 3 * 4 * 5 - globalVar;
 	ui8 test = returnSub2(value);
 	value -= 2;

@@ -1583,8 +1583,18 @@ ui64 ParseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> ty
 							nodeArr.UpdateField(exprNodeState, 4, \nodeCount, 4);
 						}
 					} else {
-						// Is just a variable
-						currentNode.type = _cPARSER_NODETYPE_EXPRESSION_VARIABLE;
+						ref<Token> currentTokenPtr = tArr.At(i);
+						Token currentToken = @currentTokenPtr;
+						bool isBooleanTrue = StrEquals(currentToken.text, "true", 4);
+						bool isBooleanFalse = StrEquals(currentToken.text, "false", 5);
+						if isBooleanTrue | isBooleanFalse {
+							currentNode.type = _cPARSER_NODETYPE_EXPRESSION;
+							ui16 boolType = _cTOKENTYPE_BOOL;
+							tArr.UpdateField(i, 0, \boolType, 2);
+						} else {
+							// Is just a variable
+							currentNode.type = _cPARSER_NODETYPE_EXPRESSION_VARIABLE;
+						}
 						currentNode.firstChild = -1;
 						if isNextEnd | isNextMax {
 							currentNode.nextSibling = -1;
@@ -3442,6 +3452,16 @@ ui64 AnalyseExpression(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> 
 			currentInstr.value = number;
 			currentInstr.valueType = _cANALYSER_INSTRVALUE_LITERAL;
 			instrArr.Add(\currentInstr);
+		} else if (token.type) == _cTOKENTYPE_BOOL {
+			bool isTrue = StrEquals(token.text, "true", 4);
+			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_INTEGER;
+			if isTrue {
+				currentInstr.value = 1;
+			} else {
+				currentInstr.value = 0;
+			}
+			currentInstr.valueType = _cANALYSER_INSTRVALUE_LITERAL;
+			instrArr.Add(\currentInstr);
 		} else if (token.type) == _cTOKENTYPE_STRING {
 			currentInstr.type = _cANALYSER_INSTRTYPE_LOAD_STRING;
 			currentInstr.value = exprNode.tokenIndex;
@@ -4432,6 +4452,7 @@ void Analyse(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typeArr, r
 
 			ui64 instrState = instrArr.GetCount();
 			AnalyseExpression(tArr, nodeArr, typeArr, instrArr, fc);
+			// TODO: If expression is WITH_LIST, SimulateExpression per entry
 			ui64 nowState = instrArr.GetCount();
 			i64 exprValue = SimulateExpression(instrArr, instrState, nowState);
 			instrArr.DeleteLastN(nowState - instrState);
@@ -6697,6 +6718,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					MoveRBP(\textBytes, currentMemOffset, 3, currentType.byteSize);
 				} else if currentMemoryLocation == _cVARIABLE_LOCATION_DATA {
 					MoveToSection(\textBytes, 0, _cCOMPILATION_SECTION_DATA, currentMemOffset, currentType.byteSize);
+				} else if currentMemoryLocation == _cVARIABLE_LOCATION_BSS {
+					MoveToSection(\textBytes, 0, _cCOMPILATION_SECTION_BSS, currentMemOffset, currentType.byteSize);
 				} else if currentMemoryLocation == _cVARIABLE_LOCATION_REGISTER {
 					// TODO: Use currentType.byteSize for this function
 					MoveIntoRAX(\textBytes, 3);
@@ -7167,6 +7190,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				LoadFromRBP(\textBytes, inUseReg, variable.offset, type.byteSize);
 			} else if (variable.location) == _cVARIABLE_LOCATION_DATA {
 				LoadFromSection(\textBytes, inUseReg, _cCOMPILATION_SECTION_DATA, variable.offset, type.byteSize, 8);
+			} else if (variable.location) == _cVARIABLE_LOCATION_BSS {
+				LoadFromSection(\textBytes, inUseReg, _cCOMPILATION_SECTION_BSS, variable.offset, type.byteSize, 8);
 			} else {
 				stdout.write("[Compiler#CompileToElf64.load_variable_memory]: Error: Unknown variable location ");
 				ui16 location = variable.location;
@@ -7247,12 +7272,13 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 					MoveFromRBP(\textBytes, currentMemOffset, inUseReg, currentType.byteSize, 8);
 				} else if currentMemoryLocation == _cVARIABLE_LOCATION_DATA {
 					MoveFromSection(\textBytes, inUseReg, _cCOMPILATION_SECTION_DATA, currentMemOffset, currentType.byteSize);
+				} else if currentMemoryLocation == _cVARIABLE_LOCATION_BSS {
+					MoveFromSection(\textBytes, inUseReg, _cCOMPILATION_SECTION_BSS, currentMemOffset, currentType.byteSize);
 				} else if currentMemoryLocation == _cVARIABLE_LOCATION_REGISTER {
 					// Do absolutely nothing, we're already loaded
 				} else {
 					stdout.write("[Compiler#CompileToElf64.load_value]: Error: Unknown variable location ");
-					ui16 location = currentVar.location;
-					stdout.writeln(location);
+					stdout.writeln(currentMemoryLocation);
 					SYS_EXIT(1);
 				}
 			}
@@ -7297,6 +7323,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 				
 			} else if (currentVar.location) == _cVARIABLE_LOCATION_DATA {
 				MoveToSection(\textBytes, 0, _cCOMPILATION_SECTION_DATA, memoryOffset, fieldType.byteSize);
+			} else if (currentVar.location) == _cVARIABLE_LOCATION_BSS {
+				MoveToSection(\textBytes, 0, _cCOMPILATION_SECTION_BSS, memoryOffset, fieldType.byteSize);
 			} else {
 				stdout.write("[Compiler#CompileToElf64.set_item]: Error: Unknown variable location ");
 				ui16 location = currentVar.location;
@@ -7768,6 +7796,8 @@ void CompileToELF64(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray> typ
 		
 		if (entry.srcSectionType) == _cCOMPILATION_SECTION_DATA {
 			relaEntry.info = GetRelocationInfo(symbolData, 0xa);
+		} else if (entry.srcSectionType) == _cCOMPILATION_SECTION_BSS {
+			relaEntry.info = GetRelocationInfo(symbolBss, 0xa);
 		} else {
 			ui16 srcSection = entry.srcSectionType;
 			stdout.write("[Compiler#CompileElf64]: Error: Unknown relocation source section ");
