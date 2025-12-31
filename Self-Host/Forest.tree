@@ -1347,7 +1347,10 @@ ui16 ParseType(ref<DynArray> tArr, ref<DynArray> typeArr, ui64 offset) {
 				PrintToken(t);
 				SYS_EXIT(1);
 			}
-			ui64 value = find_ui64_in_string(token.text);
+			ref<Token> litTokenPtr = tArr.At(offset + 2);
+			Token litToken = @litTokenPtr;
+			
+			ui64 value = find_ui64_in_string(litToken.text);
 			typ.byteSize = (childType.byteSize) * value;
 			returnVal += 3;
 		} else {
@@ -2125,11 +2128,12 @@ ui64 ParseVarDeclaration(ref<DynArray> tArr, ref<DynArray> nodeArr, ref<DynArray
 		nodeCount = nodeArr.GetCount();
 		currentNode.nextSibling = nodeCount + 1;
 		nodeArr.Add(\currentNode);
+		toSkip += 1;
 	}
 
 	bool hasSemi = IsTokenSpecifiedType(tArr, offset + toSkip, _cTOKENTYPE_SEMICOLON);
 	if !hasSemi {
-		stdout.write("[Parser]: Expected a ';' to close the statement but got ");
+		stdout.write("[Parser#ParseVarDeclaration]: Expected a ';' to close the statement but got ");
 		ref<Token> notSemi = tArr.At(offset + toSkip);
 		PrintToken(notSemi);
 		SYS_EXIT(1);

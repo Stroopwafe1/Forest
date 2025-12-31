@@ -62,6 +62,8 @@ FileDescriptor stdin = 0;
 FileDescriptor stdout = 1;
 FileDescriptor stderr = 2;
 
+ui8[4096] global_buffer;
+
 
 ui8 returnSub2(ui16 value) {
 	return value - 2;
